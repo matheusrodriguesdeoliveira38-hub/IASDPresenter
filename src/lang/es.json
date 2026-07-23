@@ -1,0 +1,55 @@
+{
+    "app": {
+        "name": "Loor JA"
+    },
+    "sidebar": {
+        "home": "Página de Inicio",
+        "favorites": "Favoritos",
+        "help": "Ayuda y sobre",
+        "settings": "Configuraciones",
+        "close_menu": "Cerrar menú",
+        "local_library": "Biblioteca Local",
+        "update_available": "Actualización Disponible"
+    },
+    "modules": {
+        "invalid": {
+            "title": "#Error#"
+        }
+    },
+    "module_group": {
+        "musics": {
+            "title": "Álbumes y Colecciones"
+        },
+        "bible": {
+            "title": "Biblia"
+        },
+        "utilities": {
+            "title": "Utilidades"
+        }
+    },
+    "components": {
+        "letterpagination": {
+            "all": "Todas"
+        },
+        "datatable": {
+            "alerts": {
+                "not_found": "¡No se pudo encontrar el archivo para mostrar esta información!"
+            }
+        }
+    },
+    "alert": {
+        "close": "Cerrar",
+        "yes": "Sí",
+        "no": "No",
+        "wait": "Espere...",
+        "close_app_title": "¿Cerrar Aplicación?",
+        "close_app_text": "Hay un medio activo o proyección en curso. ¿Desea realmente salir?"
+    },
+    "messages": {
+        "file_database_not_found": "Archivo de datos no encontrado!",
+        "developer_mode_enabled": "Modo DESARROLLADOR activado!",
+        "developer_mode_disabled": "Modo DESARROLLADOR desactivado!",
+        "error_import_module": "Error al importar el módulo",
+        "misconfigured_module": "Este módulo está mal configurado. ¡La identificación ingresada en manifest.json debe tener el mismo nombre que la carpeta donde se encuentra!"
+    }
+}

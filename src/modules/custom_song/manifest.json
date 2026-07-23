@@ -1,0 +1,14 @@
+{
+  "id": "custom_song",
+  "name": "Criador de Musicas",
+  "version": "1.0.0",
+  "description": "Ferramenta para criar letras personalizadas slide por slide e salvar em Coletaneas.",
+  "author": "Codex",
+  "category": "utilities",
+  "icon": "mdi-music-note-plus",
+  "minAppVersion": "1.0.0",
+  "dependencies": [
+    "album"
+  ],
+  "permissions": []
+}

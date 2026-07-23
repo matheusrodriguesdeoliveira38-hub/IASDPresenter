@@ -1,0 +1,21 @@
+{
+  "title": "Presentaciones",
+  "actions": {
+    "select_file": "Seleccionar archivo",
+    "project": "Proyectar",
+    "close_projection": "Cerrar proyeccion",
+    "open_original": "Abrir original"
+  },
+  "status": {
+    "empty": "Selecciona un archivo PDF, PPT o PPTX para presentar.",
+    "loading": "Preparando presentacion...",
+    "converting": "Convirtiendo PowerPoint a PDF...",
+    "unsupported": "No fue posible preparar este archivo."
+  },
+  "labels": {
+    "current": "Diapositiva actual",
+    "next": "Siguiente diapositiva",
+    "slides": "Diapositivas",
+    "slide": "Diapositiva"
+  }
+}

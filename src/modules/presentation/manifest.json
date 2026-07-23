@@ -1,0 +1,16 @@
+{
+  "active": true,
+  "id": "presentation",
+  "name": "Apresentacoes",
+  "version": "1.0.0",
+  "description": "Apresenta arquivos PDF e PowerPoint com tela de operador e projecao.",
+  "author": "elvieira",
+  "category": "utilities",
+  "icon": "mdi-presentation-play",
+  "minAppVersion": "1.0.0",
+  "dependencies": [],
+  "permissions": [],
+  "moduleOptions": {
+    "size": "large"
+  }
+}
