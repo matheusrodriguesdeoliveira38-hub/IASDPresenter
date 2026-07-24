@@ -23,5 +23,7 @@
   "timer_reset": "Limpar",
   "timer_ready": "Defina uma duracao ou um horario de encerramento",
   "timer_running": "Cronometro em andamento",
-  "timer_paused": "Cronometro pausado"
+  "timer_paused": "Cronometro pausado",
+  "timer_alert_5min": "5 Min",
+  "timer_alert_1min": "1 Min"
 }

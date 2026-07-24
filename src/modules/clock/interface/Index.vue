@@ -159,6 +159,27 @@
               {{ t('timer_reset') }}
             </v-btn>
           </div>
+
+          <div class="timer-alerts d-flex align-center flex-wrap mt-4" style="gap: 10px;">
+            <v-switch
+              :model-value="clockTimer.alert5Enabled"
+              color="primary"
+              density="compact"
+              hide-details
+              inset
+              :label="t('timer_alert_5min')"
+              @update:model-value="setTimerAlert('alert5Enabled', $event)"
+            />
+            <v-switch
+              :model-value="clockTimer.alert1Enabled"
+              color="primary"
+              density="compact"
+              hide-details
+              inset
+              :label="t('timer_alert_1min')"
+              @update:model-value="setTimerAlert('alert1Enabled', $event)"
+            />
+          </div>
         </div>
       </div>
 
@@ -189,6 +210,9 @@ export default {
     durationMinutes: 5,
     durationSeconds: 0,
     endTime: "",
+    now: Date.now(),
+    timerAlertInterval: null,
+    previousTimerRemainingMs: null,
   }),
   computed: {
     module_id() {
@@ -204,6 +228,10 @@ export default {
         running: false,
         endsAt: null,
         remainingMs: 0,
+        alert5Enabled: false,
+        alert1Enabled: false,
+        alert5Played: false,
+        alert1Played: false,
         ...state,
       };
     },
@@ -229,6 +257,15 @@ export default {
       if (this.clockTimer.running) return this.t("timer_running");
       return this.t("timer_paused");
     },
+    timerRemainingMs() {
+      if (!this.clockTimer.enabled) return 0;
+
+      if (this.clockTimer.running && this.clockTimer.endsAt) {
+        return Math.max(0, Number(this.clockTimer.endsAt) - this.now);
+      }
+
+      return Math.max(0, Number(this.clockTimer.remainingMs) || 0);
+    },
   },
   mounted() {
     if (!this.$appdata.get("clock_timer")) {
@@ -237,8 +274,20 @@ export default {
         running: false,
         endsAt: null,
         remainingMs: 0,
+        alert5Enabled: false,
+        alert1Enabled: false,
+        alert5Played: false,
+        alert1Played: false,
       });
     }
+
+    this.timerAlertInterval = setInterval(() => {
+      this.now = Date.now();
+      this.checkTimerAlerts();
+    }, 500);
+  },
+  unmounted() {
+    clearInterval(this.timerAlertInterval);
   },
   methods: {
     t(text) {
@@ -283,12 +332,17 @@ export default {
 
       if (remainingMs <= 0) return;
 
+      const isFreshTimer = !this.clockTimer.enabled || Number(this.clockTimer.remainingMs) <= 0;
+
       this.$appdata.set("clock_timer", {
+        ...this.clockTimer,
         enabled: true,
         running: true,
         mode: this.timerInputMode,
         endsAt: Date.now() + remainingMs,
         remainingMs,
+        alert5Played: isFreshTimer ? false : this.clockTimer.alert5Played,
+        alert1Played: isFreshTimer ? false : this.clockTimer.alert1Played,
       });
     },
     pauseTimer() {
@@ -308,7 +362,55 @@ export default {
         mode: this.timerInputMode,
         endsAt: null,
         remainingMs: 0,
+        alert5Enabled: this.clockTimer.alert5Enabled,
+        alert1Enabled: this.clockTimer.alert1Enabled,
+        alert5Played: false,
+        alert1Played: false,
       });
+    },
+    setTimerAlert(field, enabled) {
+      this.$appdata.set("clock_timer", {
+        ...this.clockTimer,
+        [field]: enabled,
+      });
+    },
+    checkTimerAlerts() {
+      if (!this.clockTimer.enabled || !this.clockTimer.running) {
+        this.previousTimerRemainingMs = null;
+        return;
+      }
+
+      const remainingMs = this.timerRemainingMs;
+      const previousMs = this.previousTimerRemainingMs;
+      this.previousTimerRemainingMs = remainingMs;
+
+      if (previousMs === null) return;
+
+      const updates = {};
+      const crossedFiveMinutes = previousMs > 5 * 60 * 1000 && remainingMs <= 5 * 60 * 1000;
+      const crossedOneMinute = previousMs > 60 * 1000 && remainingMs <= 60 * 1000;
+
+      if (this.clockTimer.alert5Enabled && !this.clockTimer.alert5Played && crossedFiveMinutes) {
+        this.playTimerAlert("5min");
+        updates.alert5Played = true;
+      }
+
+      if (this.clockTimer.alert1Enabled && !this.clockTimer.alert1Played && crossedOneMinute) {
+        this.playTimerAlert("1min");
+        updates.alert1Played = true;
+      }
+
+      if (Object.keys(updates).length) {
+        this.$appdata.set("clock_timer", {
+          ...this.clockTimer,
+          ...updates,
+        });
+      }
+    },
+    playTimerAlert(fileName) {
+      const baseUrl = import.meta.env.BASE_URL || "/";
+      const audio = new Audio(`${baseUrl}audio/${fileName}.mp3`);
+      audio.play().catch(() => {});
     },
     toggleSidebar() {
       const mainEl = document.querySelector(".main-container");
@@ -325,5 +427,9 @@ export default {
   border-radius: 16px;
   box-shadow: 0 14px 36px rgba(0,0,0,0.05);
   padding: 16px;
+}
+.timer-alerts {
+  border-top: 1px solid var(--border-color, rgba(0,0,0,0.05));
+  padding-top: 12px;
 }
 </style>
