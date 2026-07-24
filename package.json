@@ -1,6 +1,6 @@
 {
   "name": "iasdpresenter",
-  "version": "1.7.10",
+  "version": "1.7.11",
   "private": true,
   "main": "electron/main.js",
   "scripts": {
