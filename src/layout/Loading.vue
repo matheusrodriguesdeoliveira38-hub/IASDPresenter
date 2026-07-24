@@ -4,7 +4,7 @@
       <v-list-item prepend-icon="$louvorja">
         <template #prepend>
           <div class="pe-4">
-            <img src="/ico/favicon.svg" :width="32" />
+            <img src="/ico/favicon.png" :width="32" />
           </div>
         </template>
 

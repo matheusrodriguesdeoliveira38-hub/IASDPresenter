@@ -34,10 +34,10 @@
                 <v-card class="settings-card rounded-xl pa-2 mb-6" flat style="background: var(--card-bg); box-shadow: var(--shadow);">
                   <v-card-text class="pa-6 d-flex flex-column align-center text-center">
                     <div class="mb-4 rounded-circle d-flex align-center justify-center" style="width: 96px; height: 96px; background: rgba(0, 151, 215, 0.05); border: 1px solid var(--border-color);">
-                      <img src="/ico/favicon.svg" alt="LouvorJA" style="width: 56px; height: 56px;" />
+                      <img src="/ico/favicon.png" alt="IASDPresenter" style="width: 56px; height: 56px;" />
                     </div>
                     <h3 class="font-weight-bold mb-1" style="color: var(--sidebar-text); font-size: 1.5rem; letter-spacing: -0.02em;">
-                      Louvor JA
+                      IASDPresenter
                     </h3>
                     <div class="text-body-2 font-weight-medium mb-6" style="color: var(--sidebar-text-secondary); background: var(--main-bg); padding: 4px 12px; border-radius: 20px; box-shadow: inset 0 0 0 1px var(--border-color);">
                       Versão {{ appVersion }} (Beta)

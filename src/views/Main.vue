@@ -288,6 +288,7 @@ export default {
       this.$vuetify.theme.global.name = theme;
     }
     this.$appdata.set("is_dark", this.$vuetify.theme.global.current.dark);
+    this.$theme.applyAccentColor(this.$vuetify);
 
     const lang = this.$userdata.get("language");
     if (lang !== "") {

@@ -9,6 +9,8 @@
     "tab_projection": "Proyección y Pantallas",
     "system_theme": "Tema del Sistema",
     "system_theme_desc": "Elige el modo de color para la aplicación",
+    "accent_color": "Color principal",
+    "accent_color_desc": "Elige el color predeterminado de botones, pestañas y destacados",
     "light_mode": "Modo Claro",
     "dark_mode": "Modo Oscuro",
     "language": "Idioma",

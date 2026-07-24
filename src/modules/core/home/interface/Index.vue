@@ -7,7 +7,7 @@
         </div>
         
         <div v-if="!searchQuery && !shouldShowHistory" class="hero-content d-flex flex-column align-center w-100" style="animation: fadeIn 0.5s ease;">
-          <img src="/ico/favicon.svg" alt="LouvorJA" style="width: 80px; height: 80px; margin-bottom: 24px;" />
+          <img src="/ico/favicon.png" alt="IASDPresenter" style="width: 80px; height: 80px; margin-bottom: 24px;" />
           <h1 class="hero-title mb-8" style="font-size: 2.5rem; font-weight: 700; color: var(--sidebar-text);">
             O que vamos cantar?
           </h1>

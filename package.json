@@ -1,5 +1,5 @@
 {
-  "name": "louvorja",
+  "name": "iasdpresenter",
   "version": "1.7.5",
   "private": true,
   "main": "electron/main.js",
@@ -70,7 +70,7 @@
   ],
   "build": {
     "appId": "com.louvorja.app",
-    "productName": "Louvor JA",
+    "productName": "IASDPresenter",
     "directories": {
       "output": "dist-electron"
     },

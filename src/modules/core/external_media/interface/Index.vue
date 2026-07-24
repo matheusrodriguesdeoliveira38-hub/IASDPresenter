@@ -145,7 +145,7 @@
                   {{ mediaTitle }}
                 </div>
                 <div class="text-body-2" style="opacity: 0.75;">
-                  Arquivos PowerPoint nao possuem visualizador nativo no Chromium. Abra pelo aplicativo padrao ou exporte para PDF para projetar dentro do Louvor JA.
+                  Arquivos PowerPoint nao possuem visualizador nativo no Chromium. Abra pelo aplicativo padrao ou exporte para PDF para projetar dentro do IASDPresenter.
                 </div>
                 <v-btn
                   v-if="windowHasOpenPath"

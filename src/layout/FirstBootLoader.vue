@@ -3,9 +3,9 @@
     <div v-if="isOpen" class="first-boot-overlay d-flex flex-column align-center justify-center bg-main">
       <transition name="fade-transition">
         <div v-if="showContent" class="text-center" style="max-width: 500px; width: 100%;">
-          <img src="/ico/favicon.svg" width="80" class="mb-6 pulse-anim" />
+          <img src="/ico/favicon.png" width="80" class="mb-6 pulse-anim" />
           <h2 class="text-h4 font-weight-bold mb-2" style="color: var(--sidebar-text);">
-            {{ isFirstBoot ? 'Preparando o Louvor JA' : 'Iniciando o Louvor JA' }}
+            {{ isFirstBoot ? 'Preparando o IASDPresenter' : 'Iniciando o IASDPresenter' }}
           </h2>
           <p class="text-subtitle-1 mb-8" style="color: var(--sidebar-text-secondary);">
             Aguarde instantes enquanto organizamos tudo para você.

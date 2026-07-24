@@ -8,6 +8,7 @@
 :root {
     --accent-blue: #0097d7;
     --accent-blue-dark: #0077b3;
+    --accent-blue-rgb: 0, 151, 215;
     --accent-yellow: #ffc107;
     
     --main-bg: #f5f7fb;
@@ -19,7 +20,8 @@
     --sidebar-text: #333333;
     --sidebar-text-secondary: #666666;
     
-    --sidebar-hover: rgba(0, 151, 215, 0.08);
+    --sidebar-hover: rgba(var(--accent-blue-rgb), 0.08);
+    --accent-soft: rgba(var(--accent-blue-rgb), 0.08);
     --sidebar-active: linear-gradient(135deg, var(--accent-blue) 0%, var(--accent-blue-dark) 100%);
     
     --shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
@@ -43,12 +45,13 @@
     --border-color: rgba(255, 255, 255, 0.12);
     --sidebar-text: #ffffff;
     --sidebar-text-secondary: #8b8e9b;
-    --sidebar-hover: rgba(0, 151, 215, 0.15);
+    --sidebar-hover: rgba(var(--accent-blue-rgb), 0.15);
     --shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
     --shadow-hover: 0 12px 32px rgba(0, 0, 0, 0.5);
     
     --accent-blue: #0097d7; 
     --accent-blue-dark: #0077b3; 
+    --accent-blue-rgb: 0, 151, 215;
     
     --glass-bg: rgba(43, 47, 66, 0.85);
     --glass-border: rgba(255, 255, 255, 0.08);

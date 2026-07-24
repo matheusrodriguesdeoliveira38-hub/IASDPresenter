@@ -43,7 +43,7 @@ function decryptData(text) {
   }
 }
 
-app.setName('Louvor JA');
+app.setName('IASDPresenter');
 app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required');
 app.commandLine.appendSwitch('disable-popup-blocking');
 
@@ -700,7 +700,7 @@ function getRemoteControlHtml() {
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Controle Louvor JA</title>
+  <title>Controle IASDPresenter</title>
   <style>
     :root {
       color-scheme: light;
@@ -1148,7 +1148,7 @@ function getRemoteControlHtml() {
       statusEl.textContent = data.count ? data.count + ' resultado(s)' : 'Nenhum resultado';
 
       if (!data.ready) {
-        results.innerHTML = '<div class="empty">Biblioteca local nao encontrada. Baixe/sincronize a biblioteca no Louvor JA neste computador.</div>';
+        results.innerHTML = '<div class="empty">Biblioteca local nao encontrada. Baixe/sincronize a biblioteca no IASDPresenter neste computador.</div>';
         return;
       }
 
@@ -1221,7 +1221,7 @@ function getRemoteControlHtml() {
       const data = await response.json();
       if (!data.ready) {
         bibleStatus.textContent = 'Biblioteca nao encontrada';
-        bibleResults.innerHTML = '<div class="empty">B&iacute;blia local nao encontrada. Abra/sincronize a B&iacute;blia no Louvor JA neste computador.</div>';
+        bibleResults.innerHTML = '<div class="empty">B&iacute;blia local nao encontrada. Abra/sincronize a B&iacute;blia no IASDPresenter neste computador.</div>';
         return;
       }
 
@@ -2398,7 +2398,7 @@ function createWindow() {
     height: 900,
     minWidth: 920,
     minHeight: 760,
-    title: 'Louvor JA',
+    title: 'IASDPresenter',
     icon: path.join(__dirname, '../public/ico/favicon.png'),
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
@@ -2424,7 +2424,7 @@ function createWindow() {
   const menuTemplate = [
     // macOS: menu com nome do app
     ...(process.platform === 'darwin' ? [{
-      label: 'Louvor JA',
+      label: 'IASDPresenter',
       submenu: [
         { role: 'about' },
         { type: 'separator' },

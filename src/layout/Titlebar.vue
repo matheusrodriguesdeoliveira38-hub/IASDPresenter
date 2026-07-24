@@ -29,7 +29,7 @@
     <template v-else>
       <div class="d-flex align-center titlebar-drag-area flex-grow-1 h-100 pl-3">
         <img
-          src="/ico/favicon.svg"
+          src="/ico/favicon.png"
           width="16"
           height="16"
           class="mr-2"

@@ -74,6 +74,30 @@
                         </v-icon> {{ t('dark_mode') }}
                       </v-btn>
                     </v-btn-toggle>
+
+                    <v-divider class="my-8" style="opacity: 0.1;" />
+
+                    <div class="d-flex align-center justify-space-between">
+                      <div class="d-flex align-center mr-4">
+                        <v-icon color="primary" class="mr-3" size="24">
+                          mdi-format-color-fill
+                        </v-icon>
+                        <div>
+                          <h3 class="font-weight-bold" style="color: var(--sidebar-text); font-size: 1.1rem; line-height: 1.2;">
+                            {{ t('accent_color') }}
+                          </h3>
+                          <div class="text-caption" style="color: var(--sidebar-text-secondary);">
+                            {{ t('accent_color_desc') }}
+                          </div>
+                        </div>
+                      </div>
+                      <div class="d-flex align-center" style="gap: 12px;">
+                        <span class="text-caption font-weight-bold" style="color: var(--sidebar-text-secondary); min-width: 72px; text-align: right;">
+                          {{ accent_color.toUpperCase() }}
+                        </span>
+                        <ModernColorPicker v-model="accent_color" />
+                      </div>
+                    </div>
                   </v-card-text>
                 </v-card>
               </div>
@@ -302,7 +326,7 @@
                                     flat
                                     class="rounded-xl border cursor-pointer"
                                     :class="media_slide_monitor.includes(monitor.value) ? 'elevation-2' : ''"
-                                    :style="media_slide_monitor.includes(monitor.value) ? 'background: rgba(0,151,215,0.08); border: 2px solid var(--accent-blue) !important; transition: all 0.2s;' : 'background: var(--main-bg); border: 2px solid transparent !important; transition: all 0.2s; box-shadow: inset 0 0 0 1px var(--border-color);'"
+                                    :style="media_slide_monitor.includes(monitor.value) ? 'background: var(--accent-soft); border: 2px solid var(--accent-blue) !important; transition: all 0.2s;' : 'background: var(--main-bg); border: 2px solid transparent !important; transition: all 0.2s; box-shadow: inset 0 0 0 1px var(--border-color);'"
                                     width="160"
                                     @click="toggleMediaSlideMonitor(monitor.value)"
                                   >
@@ -424,7 +448,7 @@
                             background: ${display.isPrimary ? 'linear-gradient(135deg, var(--accent-blue) 0%, #0077b6 100%)' : 'var(--main-bg)'}; 
                             color: ${display.isPrimary ? '#fff' : 'var(--sidebar-text)'};
                             border: ${display.isPrimary ? '2px solid transparent' : '2px solid rgba(150,150,150,0.2)'};
-                            box-shadow: ${display.isPrimary ? '0 10px 25px rgba(0,151,215,0.4)' : '0 8px 20px rgba(0,0,0,0.06)'};
+                            box-shadow: ${display.isPrimary ? '0 10px 25px rgba(var(--accent-blue-rgb), 0.4)' : '0 8px 20px rgba(0,0,0,0.06)'};
                             z-index: 2;
                           `"
                         >
@@ -532,7 +556,7 @@
                           flat
                           class="rounded-xl border cursor-pointer"
                           :class="slide_monitor.includes(monitor.value) ? 'elevation-2' : ''"
-                          :style="slide_monitor.includes(monitor.value) ? 'background: rgba(0,151,215,0.08); border: 2px solid var(--accent-blue) !important; transition: all 0.2s;' : 'background: var(--main-bg); border: 2px solid transparent !important; transition: all 0.2s; box-shadow: inset 0 0 0 1px var(--border-color);'"
+                          :style="slide_monitor.includes(monitor.value) ? 'background: var(--accent-soft); border: 2px solid var(--accent-blue) !important; transition: all 0.2s;' : 'background: var(--main-bg); border: 2px solid transparent !important; transition: all 0.2s; box-shadow: inset 0 0 0 1px var(--border-color);'"
                           width="160"
                           @click="toggleSlideMonitor(monitor.value)"
                         >
@@ -1171,7 +1195,7 @@
                           </v-icon>
                           <div>
                             <div class="font-weight-bold" style="color: var(--sidebar-text);">
-                              Iniciar servidor ao abrir o Louvor JA
+                              Iniciar servidor ao abrir o IASDPresenter
                             </div>
                             <div class="text-caption" style="color: var(--sidebar-text-secondary);">
                               Mantém o controle disponível automaticamente.
@@ -1333,6 +1357,7 @@ export default {
   data: () => ({
     tab: 1,
     language: "pt",
+    accent_color: "#0097d7",
     show_home_history: true,
     hardware_accel: true,
     fullscreen_mode: false,
@@ -1466,6 +1491,13 @@ export default {
     show_home_history(val) {
       this.$userdata.set("show_home_history", val);
     },
+    accent_color(val) {
+      const color = this.$theme.applyAccentColor(this.$vuetify, val);
+      this.$userdata.set("modules.config.accent_color", color);
+      if (this.accent_color !== color) {
+        this.accent_color = color;
+      }
+    },
     media_use_internal_player(val) {
       this.$userdata.set("modules.config.media_use_internal_player", val);
     },
@@ -1595,6 +1627,9 @@ export default {
     if(this.$userdata.get("theme")){
       this.$vuetify.theme.global.name = this.$userdata.get("theme");
     }
+
+    this.accent_color = this.$theme.getAccentColor();
+    this.$theme.applyAccentColor(this.$vuetify, this.accent_color);
     
     const saved_home_history = this.$userdata.get("show_home_history");
     if (saved_home_history !== undefined && saved_home_history !== null) {
@@ -1840,6 +1875,7 @@ export default {
       this.return_monitor_show_clock = false;
       this.return_monitor_show_counter = true;
       this.return_monitor_ratio = 75;
+      this.accent_color = this.$theme.defaultPrimary;
     },
     resetMediaConfigs() {
       this.media_use_internal_player = false;
@@ -1861,6 +1897,7 @@ export default {
       this.$vuetify.theme.global.name = theme_id;
       this.$userdata.set("theme", theme_id);
       this.$appdata.set("is_dark", this.$vuetify.theme.global.current.dark);
+      this.$theme.applyAccentColor(this.$vuetify, this.accent_color);
     },
     resetHistory() {
       this.$alert.yesno(

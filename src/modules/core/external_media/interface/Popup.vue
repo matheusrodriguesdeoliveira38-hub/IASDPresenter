@@ -39,7 +39,7 @@
         {{ mediaTitle }}
       </div>
       <div class="text-body-2" style="opacity: 0.75;">
-        PowerPoint nao possui visualizador nativo embutido neste runtime. Exporte para PDF para projetar dentro do Louvor JA.
+        PowerPoint nao possui visualizador nativo embutido neste runtime. Exporte para PDF para projetar dentro do IASDPresenter.
       </div>
     </div>
     <div v-else />

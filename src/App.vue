@@ -31,6 +31,7 @@ export default {
     if (theme !== "") {
       this.$vuetify.theme.global.name = theme;
     }
+    this.$theme.applyAccentColor(this.$vuetify);
   },
   mounted() {
     window.addEventListener("keydown", this.handleGlobalKeydown);

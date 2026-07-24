@@ -8,10 +8,7 @@
   <div class="dashboard-sidebar" :class="{ open: isOpen }">
     <div class="sidebar-header">
       <div class="logo-container">
-        <img src="/ico/favicon.svg" alt="LouvorJA" class="logo-svg" />
-        <div class="logo-text">
-          <span class="logo-title">{{ $t("app.name").toUpperCase() }}</span>
-        </div>
+        <img src="/ico/logo-horizontal.png" alt="IASDPresenter" class="logo-horizontal" />
       </div>
     </div>
 

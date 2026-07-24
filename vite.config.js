@@ -26,8 +26,8 @@ export default defineConfig(({ mode }) => {
           globPatterns: ["**/*.{html,js,css,svg,png}"],
         },
         manifest: {
-          name: "LouvorJA",
-          short_name: "LouvorJA",
+          name: "IASDPresenter",
+          short_name: "IASDPresenter",
           description: "Software de músicas para Louvor e Adoração",
           start_url: env.VITE_BASE_URL ?? "/",
           display: "standalone",
