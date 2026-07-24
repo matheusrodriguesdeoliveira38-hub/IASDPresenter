@@ -187,13 +187,17 @@ export default {
           
           this.statusText = "Baixando banco de dados...";
           this.progress = 0;
-          await window.electronAPI.downloadDatabase();
+          const downloadResult = await window.electronAPI.downloadDatabase();
+          if (!downloadResult || downloadResult.ok === false) {
+            const details = downloadResult && downloadResult.error ? ` ${downloadResult.error}` : "";
+            throw new Error(`Erro ao baixar banco de dados.${details}`);
+          }
           
           this.statusText = "Extraindo dados locais...";
           this.progress = 0;
           
-          const success = await window.electronAPI.extractLocalDb();
-          if (success) {
+          const extractResult = await window.electronAPI.extractLocalDb();
+          if (extractResult === true || (extractResult && extractResult.ok)) {
             this.progress = 100;
             await window.electronAPI.saveLocalDb("system_first_boot_complete", { complete: true });
             this.progress = 100;
@@ -207,12 +211,15 @@ export default {
             }, 1000);
             return;
           }
+
+          const details = extractResult && extractResult.error ? ` ${extractResult.error}` : "";
+          throw new Error(`Falha ao extrair banco de dados local.${details}`);
         }
         
         throw new Error("Falha ao extrair banco de dados local.");
       } catch (err) {
         console.error("Erro na sincronização inicial:", err);
-        this.statusText = "Erro na extração. Tente novamente.";
+        this.statusText = err && err.message ? err.message : "Erro na extração. Tente novamente.";
         this.hasError = true;
       }
     },

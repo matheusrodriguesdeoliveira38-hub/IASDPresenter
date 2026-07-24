@@ -67,6 +67,7 @@ let remoteControlServer = null;
 let productionAppServer = null;
 let productionAppUrl = null;
 const remoteControlConfigPath = path.join(userDataPath, 'remote-control.json');
+const firstBootLogPath = path.join(userDataPath, 'first-boot-error.log');
 const defaultRemoteControlConfig = {
   enabled: true,
   host: '0.0.0.0',
@@ -75,6 +76,19 @@ const defaultRemoteControlConfig = {
   requirePassword: false,
 };
 let remoteControlConfig = loadRemoteControlConfig();
+
+function writeFirstBootErrorLog(context, error) {
+  try {
+    const details = [
+      `[${new Date().toISOString()}] ${context}`,
+      error && error.stack ? error.stack : String(error),
+      '',
+    ].join('\n');
+    fs.appendFileSync(firstBootLogPath, details, 'utf8');
+  } catch (e) {
+    console.error('Erro ao gravar log de inicialização:', e);
+  }
+}
 
 function sendPresentationShortcut(action) {
   const mainWindow = mainAppWindow && !mainAppWindow.isDestroyed()
@@ -1966,6 +1980,11 @@ ipcMain.handle('extract-local-db', async (event) => {
     if (!fs.existsSync(finalDbPath)) {
       throw new Error(`Arquivo não encontrado em: ${finalDbPath}`);
     }
+
+    const stat = fs.statSync(finalDbPath);
+    if (!stat.size) {
+      throw new Error(`Arquivo baixado está vazio: ${finalDbPath}`);
+    }
     
     const extractor = new DbExtractor(finalDbPath);
     await extractor.extract((data) => {
@@ -1979,10 +1998,11 @@ ipcMain.handle('extract-local-db', async (event) => {
       console.error('Erro ao excluir database.db após extração:', e);
     }
     
-    return true;
+    return { ok: true };
   } catch (error) {
     console.error('Erro na extração do banco:', error);
-    return false;
+    writeFirstBootErrorLog('extract-local-db', error);
+    return { ok: false, error: error.message || String(error) };
   }
 });
 
@@ -2027,10 +2047,11 @@ async function getFtpParams() {
 }
 
 ipcMain.handle('download-database', async (event) => {
+  let client = null;
   try {
     const ftpParams = await getFtpParams();
     
-    const client = new ftp.Client();
+    client = new ftp.Client();
     
     await client.access({
       host: ftpParams['host'],
@@ -2058,13 +2079,26 @@ ipcMain.handle('download-database', async (event) => {
       }
     });
     
-    await client.downloadTo(finalDbPath, remotePath);
-    client.close();
+    const tempDbPath = `${finalDbPath}.download`;
+    if (fs.existsSync(tempDbPath)) fs.unlinkSync(tempDbPath);
+    await client.downloadTo(tempDbPath, remotePath);
+
+    const stat = fs.statSync(tempDbPath);
+    if (!stat.size) {
+      throw new Error(`Banco baixado vazio de ${remotePath}`);
+    }
+
+    fs.renameSync(tempDbPath, finalDbPath);
     
-    return true;
+    return { ok: true };
   } catch (error) {
     console.error('Erro no download do banco:', error);
-    return false;
+    writeFirstBootErrorLog('download-database', error);
+    return { ok: false, error: error.message || String(error) };
+  } finally {
+    if (client) {
+      try { client.close(); } catch (e) { /* ignore */ }
+    }
   }
 });
 
