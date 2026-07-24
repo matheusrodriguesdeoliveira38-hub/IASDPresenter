@@ -45,6 +45,14 @@ jobs:
         run: npx vite build --base=./
 
       - name: Build Electron
+        run: npx electron-builder --${{ matrix.platform }} --publish never
+
+      - name: Upload Release Assets
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            dist-electron/*.exe
+            dist-electron/*.yml
+            dist-electron/*.blockmap
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: npx electron-builder --${{ matrix.platform }} --publish always
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
