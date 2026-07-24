@@ -8,6 +8,7 @@
       :title="mediaTitle"
       allow="autoplay; encrypted-media; picture-in-picture"
       allowfullscreen
+      referrerpolicy="strict-origin-when-cross-origin"
       @load="onYouTubeLoad"
     />
     <video

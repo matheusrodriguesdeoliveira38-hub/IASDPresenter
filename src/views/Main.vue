@@ -130,6 +130,7 @@
                 style="border: 0; pointer-events: none;"
                 allow="autoplay; encrypted-media; picture-in-picture"
                 allowfullscreen
+                referrerpolicy="strict-origin-when-cross-origin"
               />
               <video
                 v-else-if="externalFilePath"

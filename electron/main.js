@@ -64,6 +64,8 @@ const mediaFolders = {
 let presentationShortcutsEnabled = false;
 let mainAppWindow = null;
 let remoteControlServer = null;
+let productionAppServer = null;
+let productionAppUrl = null;
 const remoteControlConfigPath = path.join(userDataPath, 'remote-control.json');
 const defaultRemoteControlConfig = {
   enabled: true,
@@ -2397,6 +2399,115 @@ const youtubeEmbedUrlFilter = {
     'https://www.youtube-nocookie.com/embed/*',
   ],
 };
+const staticMimeTypes = {
+  '.html': 'text/html; charset=utf-8',
+  '.js': 'text/javascript; charset=utf-8',
+  '.mjs': 'text/javascript; charset=utf-8',
+  '.css': 'text/css; charset=utf-8',
+  '.json': 'application/json; charset=utf-8',
+  '.webmanifest': 'application/manifest+json; charset=utf-8',
+  '.svg': 'image/svg+xml',
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.ico': 'image/x-icon',
+  '.woff': 'font/woff',
+  '.woff2': 'font/woff2',
+  '.ttf': 'font/ttf',
+  '.eot': 'application/vnd.ms-fontobject',
+};
+
+function getStaticMimeType(filePath) {
+  return staticMimeTypes[path.extname(filePath).toLowerCase()] || 'application/octet-stream';
+}
+
+function sendStaticFile(response, filePath) {
+  fs.readFile(filePath, (error, data) => {
+    if (error) {
+      response.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
+      response.end('Not found');
+      return;
+    }
+
+    const extension = path.extname(filePath).toLowerCase();
+    response.writeHead(200, {
+      'Content-Type': getStaticMimeType(filePath),
+      'Referrer-Policy': 'strict-origin-when-cross-origin',
+      'Cache-Control': extension === '.html' ? 'no-store' : 'public, max-age=31536000, immutable',
+    });
+    response.end(data);
+  });
+}
+
+function resolveDistFile(urlPath) {
+  const distPath = path.join(__dirname, '..', 'dist');
+  let pathname = '/';
+  try {
+    pathname = decodeURIComponent(urlPath.split('?')[0].split('#')[0] || '/');
+  } catch (error) {
+    pathname = '/';
+  }
+
+  const relativePath = pathname === '/'
+    ? 'index.html'
+    : pathname.replace(/^\/+/, '');
+  const resolvedPath = path.resolve(distPath, relativePath);
+  const resolvedDist = path.resolve(distPath);
+
+  if (resolvedPath !== resolvedDist && !resolvedPath.startsWith(resolvedDist + path.sep)) {
+    return path.join(distPath, 'index.html');
+  }
+
+  if (fs.existsSync(resolvedPath) && fs.statSync(resolvedPath).isFile()) {
+    return resolvedPath;
+  }
+
+  return path.join(distPath, 'index.html');
+}
+
+function startProductionAppServer() {
+  return new Promise((resolve, reject) => {
+    if (productionAppUrl) {
+      resolve(productionAppUrl);
+      return;
+    }
+
+    productionAppServer = http.createServer((request, response) => {
+      if (!['GET', 'HEAD'].includes(request.method)) {
+        response.writeHead(405, { 'Content-Type': 'text/plain; charset=utf-8' });
+        response.end('Method not allowed');
+        return;
+      }
+
+      const filePath = resolveDistFile(request.url || '/');
+      if (request.method === 'HEAD') {
+        response.writeHead(200, {
+          'Content-Type': getStaticMimeType(filePath),
+          'Referrer-Policy': 'strict-origin-when-cross-origin',
+        });
+        response.end();
+        return;
+      }
+
+      sendStaticFile(response, filePath);
+    });
+
+    productionAppServer.once('error', reject);
+    productionAppServer.listen(0, '127.0.0.1', () => {
+      const address = productionAppServer.address();
+      productionAppUrl = `http://127.0.0.1:${address.port}`;
+      productionAppServer.removeListener('error', reject);
+      resolve(productionAppUrl);
+    });
+  });
+}
+
+function stopProductionAppServer() {
+  if (!productionAppServer) return;
+  productionAppServer.close();
+  productionAppServer = null;
+  productionAppUrl = null;
+}
 
 function setupYouTubeEmbedHeaders() {
   session.defaultSession.webRequest.onBeforeSendHeaders(youtubeEmbedUrlFilter, (details, callback) => {
@@ -2406,18 +2517,19 @@ function setupYouTubeEmbedHeaders() {
     const currentReferer = refererKey ? String(requestHeaders[refererKey] || '') : '';
     const currentOrigin = originKey ? String(requestHeaders[originKey] || '') : '';
 
+    const fallbackOrigin = productionAppUrl || 'http://127.0.0.1';
     requestHeaders[refererKey || 'Referer'] = /^https?:\/\//i.test(currentReferer)
       ? currentReferer
-      : 'https://www.youtube.com/';
-    requestHeaders[originKey || 'Origin'] = /^https?:\/\//i.test(currentOrigin)
-      ? currentOrigin
-      : 'https://www.youtube.com';
+      : `${fallbackOrigin}/`;
+    if (originKey && !/^https?:\/\//i.test(currentOrigin)) {
+      requestHeaders[originKey] = fallbackOrigin;
+    }
 
     callback({ requestHeaders });
   });
 }
 
-function createWindow() {
+async function createWindow() {
   const mainWindow = new BrowserWindow({
     width: 1300,
     height: 900,
@@ -2646,8 +2758,9 @@ function createWindow() {
     mainWindow.loadURL('http://localhost:5173');
     // mainWindow.webContents.openDevTools();
   } else {
-    // Em produção, carrega o build estático
-    mainWindow.loadFile(path.join(__dirname, '..', 'dist', 'index.html'));
+    // Em produção, carrega o build estático por HTTP local para fornecer Referer válido a embeds externos.
+    const appUrl = await startProductionAppServer();
+    mainWindow.loadURL(appUrl);
   }
 
   // Intercepta o evento de fechar para perguntar ao usuário
@@ -2666,7 +2779,7 @@ protocol.registerSchemesAsPrivileged([
   { scheme: 'local', privileges: { standard: true, bypassCSP: true, supportFetchAPI: true, secure: true, corsEnabled: true, stream: true } }
 ]);
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   // Bloqueios de Segurança para Produção (Impede DevTools e Reload)
   if (!isDev) {
     app.on('browser-window-created', (event, window) => {
@@ -2748,7 +2861,7 @@ app.whenReady().then(() => {
 
   startRemoteControlServer();
   setupYouTubeEmbedHeaders();
-  createWindow();
+  await createWindow();
 
   const { screen } = require('electron');
   const notifyDisplaysChanged = () => {
@@ -2765,7 +2878,9 @@ app.whenReady().then(() => {
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
-      createWindow();
+      createWindow().catch(error => {
+        console.error('Erro ao criar janela:', error);
+      });
     }
   });
 });
@@ -2808,6 +2923,7 @@ app.on('window-all-closed', () => {
 
 app.on('will-quit', () => {
   globalShortcut.unregisterAll();
+  stopProductionAppServer();
   if (remoteControlServer) {
     remoteControlServer.close();
     remoteControlServer = null;
