@@ -127,7 +127,7 @@
                 ref="externalMiniPlayerYouTube"
                 :src="externalYouTubeEmbedUrl"
                 class="w-100 h-100"
-                style="border: 0;"
+                style="border: 0; pointer-events: none;"
                 allow="autoplay; encrypted-media; picture-in-picture"
                 allowfullscreen
               />

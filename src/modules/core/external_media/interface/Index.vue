@@ -1157,6 +1157,7 @@ export default {
   height: 100%;
   border: 0;
   background: #000;
+  pointer-events: none;
 }
 
 .slide-up-enter-active,

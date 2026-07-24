@@ -4,7 +4,8 @@ export const YOUTUBE_PLAYER_ORIGIN = "https://www.youtube.com";
 
 function getCurrentOrigin() {
   if (typeof window === "undefined" || !window.location?.origin) return "";
-  return window.location.origin === "null" ? "" : window.location.origin;
+  const origin = window.location.origin;
+  return /^https?:\/\//i.test(origin) ? origin : "";
 }
 
 function parseTimeValue(value) {
@@ -67,7 +68,7 @@ export function getYouTubeStartSeconds(value) {
     || parseTimeValue(url.searchParams.get("start"));
 }
 
-export function getYouTubeEmbedUrl(value, { autoplay = true, muted = false } = {}) {
+export function getYouTubeEmbedUrl(value, { autoplay = true, muted = false, controls = false } = {}) {
   const videoId = getYouTubeVideoId(value);
   if (!videoId) return "";
   const start = getYouTubeStartSeconds(value);
@@ -76,7 +77,10 @@ export function getYouTubeEmbedUrl(value, { autoplay = true, muted = false } = {
   const params = new URLSearchParams({
     enablejsapi: "1",
     autoplay: autoplay ? "1" : "0",
-    controls: "1",
+    controls: controls ? "1" : "0",
+    disablekb: "1",
+    fs: "0",
+    iv_load_policy: "3",
     rel: "0",
     modestbranding: "1",
     playsinline: "1",

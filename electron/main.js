@@ -1,4 +1,4 @@
-const { app, BrowserWindow, Menu, ipcMain, protocol, net, dialog, shell, globalShortcut } = require('electron');
+const { app, BrowserWindow, Menu, ipcMain, protocol, net, dialog, shell, globalShortcut, session } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const fsExtra = require('fs-extra');
@@ -2391,6 +2391,31 @@ ipcMain.handle('stop-remote-control-server', async () => {
 });
 
 const isDev = !app.isPackaged;
+const youtubeEmbedUrlFilter = {
+  urls: [
+    'https://www.youtube.com/embed/*',
+    'https://www.youtube-nocookie.com/embed/*',
+  ],
+};
+
+function setupYouTubeEmbedHeaders() {
+  session.defaultSession.webRequest.onBeforeSendHeaders(youtubeEmbedUrlFilter, (details, callback) => {
+    const requestHeaders = { ...details.requestHeaders };
+    const refererKey = Object.keys(requestHeaders).find(key => key.toLowerCase() === 'referer');
+    const originKey = Object.keys(requestHeaders).find(key => key.toLowerCase() === 'origin');
+    const currentReferer = refererKey ? String(requestHeaders[refererKey] || '') : '';
+    const currentOrigin = originKey ? String(requestHeaders[originKey] || '') : '';
+
+    requestHeaders[refererKey || 'Referer'] = /^https?:\/\//i.test(currentReferer)
+      ? currentReferer
+      : 'https://www.youtube.com/';
+    requestHeaders[originKey || 'Origin'] = /^https?:\/\//i.test(currentOrigin)
+      ? currentOrigin
+      : 'https://www.youtube.com';
+
+    callback({ requestHeaders });
+  });
+}
 
 function createWindow() {
   const mainWindow = new BrowserWindow({
@@ -2722,6 +2747,7 @@ app.whenReady().then(() => {
   });
 
   startRemoteControlServer();
+  setupYouTubeEmbedHeaders();
   createWindow();
 
   const { screen } = require('electron');

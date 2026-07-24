@@ -103,7 +103,7 @@
           ]
         }
       ],
-      "icon": "public/ico/favicon.png"
+      "icon": "public/ico/favicon-256x256.png"
     },
     "win": {
       "target": [
@@ -114,7 +114,7 @@
           ]
         }
       ],
-      "icon": "public/ico/favicon.png"
+      "icon": "public/ico/favicon-256x256.png"
     },
     "nsis": {
       "oneClick": false,
