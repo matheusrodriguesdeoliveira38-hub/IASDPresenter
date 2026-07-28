@@ -11,6 +11,7 @@
 import * as pdfjsLib from "pdfjs-dist/legacy/build/pdf.mjs";
 import pdfWorkerUrl from "pdfjs-dist/legacy/build/pdf.worker.mjs?url";
 import { markRaw } from "vue";
+import $performance from "@/helpers/Performance";
 import manifest from "../manifest.json";
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
@@ -78,14 +79,15 @@ export default {
       const token = ++this.renderToken;
       const pageNumber = Math.min(Math.max(this.slideIndex + 1, 1), this.pdfDoc.numPages);
       const page = await this.pdfDoc.getPage(pageNumber);
-      const viewport = page.getViewport({ scale: 1.8 });
+      const optimized = $performance.optimizePresentations();
+      const viewport = page.getViewport({ scale: optimized ? 1.2 : 1.8 });
       const canvas = document.createElement("canvas");
       const context = canvas.getContext("2d", { alpha: false });
       canvas.width = Math.ceil(viewport.width);
       canvas.height = Math.ceil(viewport.height);
       await page.render({ canvasContext: context, viewport }).promise;
       if (token !== this.renderToken) return;
-      this.currentImage = canvas.toDataURL("image/jpeg", 0.92);
+      this.currentImage = canvas.toDataURL("image/jpeg", optimized ? 0.84 : 0.92);
     },
   },
 };

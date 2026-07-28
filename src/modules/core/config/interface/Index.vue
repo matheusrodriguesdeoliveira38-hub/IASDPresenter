@@ -187,6 +187,73 @@
                         class="font-weight-medium"
                       />
                     </div>
+
+                    <v-divider class="my-8" style="opacity: 0.1;" />
+
+                    <div>
+                      <div class="d-flex align-center justify-space-between">
+                        <div class="d-flex align-center mr-4">
+                          <v-icon color="primary" class="mr-3" size="24">
+                            mdi-speedometer-slow
+                          </v-icon>
+                          <div>
+                            <h3 class="font-weight-bold" style="color: var(--sidebar-text); font-size: 1.1rem; line-height: 1.2;">
+                              Modo leve
+                            </h3>
+                            <div class="text-caption" style="color: var(--sidebar-text-secondary); line-height: 1.3;">
+                              Reduz processamento para computadores mais fracos.
+                            </div>
+                          </div>
+                        </div>
+                        <v-switch
+                          v-model="light_mode"
+                          color="primary"
+                          inset
+                          hide-details
+                          class="font-weight-medium"
+                        />
+                      </div>
+
+                      <v-expand-transition>
+                        <div v-show="light_mode" class="pl-4 mt-4" style="border-left: 2px solid var(--border-color);">
+                          <v-switch
+                            v-model="light_optimize_presentations"
+                            label="Otimizar PDF e apresentações"
+                            color="primary"
+                            inset
+                            hide-details
+                            density="compact"
+                            class="mb-2"
+                          />
+                          <v-switch
+                            v-model="light_limit_projection_windows"
+                            label="Reduzir janelas simultâneas"
+                            color="primary"
+                            inset
+                            hide-details
+                            density="compact"
+                            class="mb-2"
+                          />
+                          <v-switch
+                            v-model="light_disable_hardware_acceleration"
+                            label="Testar sem aceleração de hardware"
+                            color="primary"
+                            inset
+                            hide-details
+                            density="compact"
+                          />
+                          <v-alert
+                            v-if="light_disable_hardware_acceleration"
+                            type="info"
+                            variant="tonal"
+                            density="compact"
+                            class="mt-3 rounded-lg"
+                          >
+                            Essa alteração passa a valer depois de reiniciar o aplicativo.
+                          </v-alert>
+                        </div>
+                      </v-expand-transition>
+                    </div>
                   </v-card-text>
                 </v-card>
 
@@ -1360,6 +1427,10 @@ export default {
     accent_color: "#0097d7",
     show_home_history: true,
     hardware_accel: true,
+    light_mode: false,
+    light_optimize_presentations: true,
+    light_limit_projection_windows: true,
+    light_disable_hardware_acceleration: false,
     fullscreen_mode: false,
     
     fade_effect: false,
@@ -1490,6 +1561,22 @@ export default {
     },
     show_home_history(val) {
       this.$userdata.set("show_home_history", val);
+    },
+    light_mode(val) {
+      this.$userdata.set("modules.config.light_mode", val);
+      this.applyLightModeRuntimeEffects();
+      this.syncElectronPerformanceConfig();
+    },
+    light_optimize_presentations(val) {
+      this.$userdata.set("modules.config.light_optimize_presentations", val);
+    },
+    light_limit_projection_windows(val) {
+      this.$userdata.set("modules.config.light_limit_projection_windows", val);
+      this.applyLightModeRuntimeEffects();
+    },
+    light_disable_hardware_acceleration(val) {
+      this.$userdata.set("modules.config.light_disable_hardware_acceleration", val);
+      this.syncElectronPerformanceConfig();
     },
     accent_color(val) {
       const color = this.$theme.applyAccentColor(this.$vuetify, val);
@@ -1668,6 +1755,7 @@ export default {
     }
     
     const fields = [
+      "light_mode", "light_optimize_presentations", "light_limit_projection_windows", "light_disable_hardware_acceleration",
       "media_use_internal_player", "media_sync_projection_settings", "media_auto_project_video", "media_pause_on_minimize",
       "media_slide_monitor", "media_slide_fullscreen", "media_slide_disable_main_if_extended", "media_slide_minimize_player",
       "slide_custom_text_format", "slide_font_size", "slide_font_color", "slide_font_weight",
@@ -1689,6 +1777,19 @@ export default {
   methods: {
     t(text) {
       return this.$t(`modules.${this.module_id}.${text}`);
+    },
+    applyLightModeRuntimeEffects() {
+      if (this.light_mode && this.light_limit_projection_windows) {
+        this.return_monitor_enabled = false;
+        this.$popup.closeReturnMonitor();
+      }
+    },
+    async syncElectronPerformanceConfig() {
+      if (!window.electronAPI?.savePerformanceConfig) return;
+      await window.electronAPI.savePerformanceConfig({
+        lightMode: this.light_mode,
+        disableHardwareAcceleration: this.light_mode && this.light_disable_hardware_acceleration,
+      });
     },
     applyRemoteControlStatus(status) {
       if (!status) return;

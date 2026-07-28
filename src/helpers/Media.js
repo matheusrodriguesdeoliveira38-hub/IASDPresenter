@@ -7,6 +7,7 @@ import $alert from "@/helpers/Alert";
 import $modules from "@/helpers/Modules";
 import $database from "@/helpers/Database";
 import $history from "@/helpers/History";
+import $performance from "@/helpers/Performance";
 
 export default {
   async open(params) {
@@ -270,6 +271,12 @@ export default {
   },
 
   async syncReturnMonitor(forceOpen = false) {
+    if ($performance.limitProjectionWindows()) {
+      const { default: $popup } = await import("@/helpers/Popup");
+      $popup.closeReturnMonitor();
+      return;
+    }
+
     const enabled = $userdata.get("modules.config.return_monitor_enabled") === true;
     const returnMonitor = $userdata.get("modules.config.return_monitor");
     const allowSame = $userdata.get("modules.config.return_monitor_allow_same") === true;

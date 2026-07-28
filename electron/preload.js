@@ -60,6 +60,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   saveRemoteControlConfig: (config) => ipcRenderer.invoke('save-remote-control-config', config),
   startRemoteControlServer: () => ipcRenderer.invoke('start-remote-control-server'),
   stopRemoteControlServer: () => ipcRenderer.invoke('stop-remote-control-server'),
+  getPerformanceConfig: () => ipcRenderer.invoke('get-performance-config'),
+  savePerformanceConfig: (config) => ipcRenderer.invoke('save-performance-config', config),
   
   // Auto-Update
   checkForUpdates: () => ipcRenderer.invoke('check-for-updates'),

@@ -231,7 +231,10 @@
             type="button"
             @click="goToSlide(slide.pageNumber - 1)"
           >
-            <img :src="slide.thumbnail" :alt="`${t('labels.slide')} ${slide.pageNumber}`" />
+            <img v-if="slide.thumbnail" :src="slide.thumbnail" :alt="`${t('labels.slide')} ${slide.pageNumber}`" />
+            <div v-else class="thumbnail-placeholder">
+              {{ slide.pageNumber }}
+            </div>
             <span>{{ slide.pageNumber }}</span>
           </button>
         </div>
@@ -245,6 +248,7 @@ import * as pdfjsLib from "pdfjs-dist/legacy/build/pdf.mjs";
 import pdfWorkerUrl from "pdfjs-dist/legacy/build/pdf.worker.mjs?url";
 import { markRaw } from "vue";
 import ModuleContainer from "@/layout/ModuleContainer.vue";
+import $performance from "@/helpers/Performance";
 import manifest from "../manifest.json";
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
@@ -268,6 +272,7 @@ export default {
       title: "",
       pdfDoc: null,
       slides: [],
+      thumbnailCache: {},
       currentImage: "",
       nextImage: "",
       slideIndex: 0,
@@ -281,7 +286,7 @@ export default {
       return this.slideIndex + 1;
     },
     totalSlides() {
-      return this.slides.length;
+      return this.pdfDoc?.numPages || this.slides.length;
     },
     isPowerPointSource() {
       return ["ppt", "pptx"].includes(this.sourceType);
@@ -310,6 +315,7 @@ export default {
     slideIndex() {
       this.syncState();
       this.renderCurrentSlides();
+      this.renderVisibleThumbnails();
       this.scrollActiveThumb();
     },
   },
@@ -366,6 +372,7 @@ export default {
       this.errorDetails = "";
       this.needsConversion = false;
       this.slides = [];
+      this.thumbnailCache = {};
       this.currentImage = "";
       this.nextImage = "";
       this.slideIndex = 0;
@@ -426,25 +433,60 @@ export default {
       throw new Error("Formato de dados do PDF invalido.");
     },
     async renderThumbnails() {
+      if ($performance.optimizePresentations()) {
+        this.slides = Array.from({ length: this.pdfDoc.numPages }, (_, index) => ({
+          pageNumber: index + 1,
+          thumbnail: "",
+        }));
+        await this.renderVisibleThumbnails();
+        return;
+      }
+
       const rendered = [];
       for (let pageNumber = 1; pageNumber <= this.pdfDoc.numPages; pageNumber++) {
         const thumbnail = await this.renderPageToDataUrl(pageNumber, 0.22);
+        this.thumbnailCache[pageNumber] = thumbnail;
         rendered.push({ pageNumber, thumbnail });
       }
       this.slides = rendered;
+    },
+    async renderVisibleThumbnails() {
+      if (!$performance.optimizePresentations() || !this.pdfDoc) return;
+
+      const token = this.renderToken;
+      const pageNumbers = [
+        this.slideIndex - 1,
+        this.slideIndex,
+        this.slideIndex + 1,
+        this.slideIndex + 2,
+      ]
+        .map(index => index + 1)
+        .filter(pageNumber => pageNumber >= 1 && pageNumber <= this.pdfDoc.numPages && !this.thumbnailCache[pageNumber]);
+
+      for (const pageNumber of pageNumbers) {
+        const thumbnail = await this.renderPageToDataUrl(pageNumber, 0.16);
+        if (token !== this.renderToken && pageNumber !== this.slideIndex + 1) return;
+        this.thumbnailCache[pageNumber] = thumbnail;
+        this.slides = this.slides.map(slide => (
+          slide.pageNumber === pageNumber ? { ...slide, thumbnail } : slide
+        ));
+      }
     },
     async renderCurrentSlides() {
       if (!this.pdfDoc) return;
       const token = ++this.renderToken;
       const currentPage = this.slideIndex + 1;
       const nextPage = this.slideIndex + 2;
-      const current = await this.renderPageToDataUrl(currentPage, 1.25);
-      const next = nextPage <= this.pdfDoc.numPages ? await this.renderPageToDataUrl(nextPage, 0.55) : "";
+      const optimized = $performance.optimizePresentations();
+      const current = await this.renderPageToDataUrl(currentPage, optimized ? 0.9 : 1.25, optimized ? 0.82 : 0.9);
+      const next = nextPage <= this.pdfDoc.numPages
+        ? await this.renderPageToDataUrl(nextPage, optimized ? 0.32 : 0.55, optimized ? 0.75 : 0.9)
+        : "";
       if (token !== this.renderToken) return;
       this.currentImage = current;
       this.nextImage = next;
     },
-    async renderPageToDataUrl(pageNumber, scale) {
+    async renderPageToDataUrl(pageNumber, scale, quality = 0.9) {
       const page = await this.pdfDoc.getPage(pageNumber);
       const viewport = page.getViewport({ scale });
       const canvas = document.createElement("canvas");
@@ -452,7 +494,7 @@ export default {
       canvas.width = Math.ceil(viewport.width);
       canvas.height = Math.ceil(viewport.height);
       await page.render({ canvasContext: context, viewport }).promise;
-      return canvas.toDataURL("image/jpeg", 0.9);
+      return canvas.toDataURL("image/jpeg", quality);
     },
     syncState() {
       this.$appdata.set("modules.presentation.sourcePath", this.sourcePath);
@@ -512,6 +554,9 @@ export default {
       }
 
       if (selectedMonitors.length > 0) {
+        if ($performance.limitProjectionWindows()) {
+          selectedMonitors = selectedMonitors.slice(0, 1);
+        }
         await this.$popup.syncMonitors(selectedMonitors, "presentation", true, fullscreen);
       } else {
         this.$popup.open({ module: "presentation", popupModule: "presentation", fullscreen });
@@ -840,6 +885,18 @@ export default {
   border-top: 1px solid rgba(128, 128, 128, 0.14);
   background: rgba(255, 255, 255, 0.54);
   backdrop-filter: blur(16px);
+}
+
+.thumbnail-placeholder {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.18);
+  color: var(--sidebar-text-secondary);
+  font-size: 18px;
+  font-weight: 800;
 }
 
 .thumbnail-row {

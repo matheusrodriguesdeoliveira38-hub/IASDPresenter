@@ -1,5 +1,6 @@
 import $appdata from "@/helpers/AppData";
 import $window from "@/helpers/Window";
+import $performance from "@/helpers/Performance";
 import { markRaw } from "vue";
 
 export default {
@@ -79,10 +80,13 @@ export default {
   async syncMonitors(monitors, moduleName = "media", forceOpen = false, fullscreen = true) {
     let popups = $appdata.get("popups") || [];
     popups = popups.filter(p => !p.closed);
+    const targetMonitors = $performance.limitProjectionWindows()
+      ? (monitors || []).slice(0, 1)
+      : (monitors || []);
     const projectionPopups = popups.filter(p => (p.popupRole || this.projectionRole) === this.projectionRole);
 
     projectionPopups.forEach(popup => {
-      if (popup.monitorId && (!monitors.includes(popup.monitorId) || popup.popupFullscreen !== !!fullscreen)) {
+      if (popup.monitorId && (!targetMonitors.includes(popup.monitorId) || popup.popupFullscreen !== !!fullscreen)) {
         popup.close();
       }
     });
@@ -91,7 +95,7 @@ export default {
 
     if ($appdata.get("popup_module") === moduleName || forceOpen) {
       $appdata.set("popup_module", moduleName);
-      for (const monitorId of monitors) {
+      for (const monitorId of targetMonitors) {
         const existing = popups.find(p => p.monitorId === monitorId && (p.popupRole || this.projectionRole) === this.projectionRole);
         if (!existing || existing.closed) {
           const features = `width=800,height=600,monitor=${monitorId},fullscreen=yes`;
@@ -104,7 +108,7 @@ export default {
           popups.push(markRaw(newPopup));
         }
       }
-      if (monitors.length > 0) {
+      if (targetMonitors.length > 0) {
         $appdata.set("popup_module", moduleName);
       } else if (popups.length === 0) {
         $appdata.set("popup_module", "");
@@ -118,6 +122,11 @@ export default {
   },
 
   async syncReturnMonitor(monitorId, forceOpen = false) {
+    if ($performance.limitProjectionWindows()) {
+      this.closeReturnMonitor();
+      return;
+    }
+
     let popups = $appdata.get("popups") || [];
     popups = popups.filter(p => !p.closed);
 

@@ -12,6 +12,7 @@ import Popup from "@/helpers/Popup";
 import Database from "@/helpers/Database";
 import History from "@/helpers/History";
 import LocalFile from "@/helpers/LocalFile";
+import Performance from "@/helpers/Performance";
 
 export const HelpersSymbol = Symbol("helpers");
 
@@ -32,6 +33,7 @@ export default {
       database: Database,
       history: History,
       localFile: LocalFile,
+      performance: Performance,
     };
 
     app.provide(HelpersSymbol, helpers);
@@ -51,5 +53,6 @@ export default {
     app.config.globalProperties.$database = Database;
     app.config.globalProperties.$history = History;
     app.config.globalProperties.$localFile = LocalFile;
+    app.config.globalProperties.$performance = Performance;
   },
 };

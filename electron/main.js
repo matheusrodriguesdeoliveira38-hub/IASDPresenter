@@ -67,6 +67,7 @@ let remoteControlServer = null;
 let productionAppServer = null;
 let productionAppUrl = null;
 const remoteControlConfigPath = path.join(userDataPath, 'remote-control.json');
+const performanceConfigPath = path.join(userDataPath, 'performance-config.json');
 const firstBootLogPath = path.join(userDataPath, 'first-boot-error.log');
 const defaultRemoteControlConfig = {
   enabled: true,
@@ -76,6 +77,37 @@ const defaultRemoteControlConfig = {
   requirePassword: false,
 };
 let remoteControlConfig = loadRemoteControlConfig();
+let performanceConfig = loadPerformanceConfig();
+
+function sanitizePerformanceConfig(config = {}) {
+  return {
+    lightMode: config.lightMode === true,
+    disableHardwareAcceleration: config.disableHardwareAcceleration === true,
+  };
+}
+
+function loadPerformanceConfig() {
+  try {
+    if (fs.existsSync(performanceConfigPath)) {
+      return sanitizePerformanceConfig(JSON.parse(fs.readFileSync(performanceConfigPath, 'utf8')));
+    }
+  } catch (error) {
+    console.error('[Performance] Erro lendo configuracoes:', error.message);
+  }
+
+  return sanitizePerformanceConfig();
+}
+
+function savePerformanceConfig(config = {}) {
+  performanceConfig = sanitizePerformanceConfig({ ...performanceConfig, ...config });
+  fs.writeFileSync(performanceConfigPath, JSON.stringify(performanceConfig, null, 2), 'utf8');
+  return performanceConfig;
+}
+
+if (performanceConfig.disableHardwareAcceleration) {
+  app.disableHardwareAcceleration();
+  app.commandLine.appendSwitch('disable-gpu');
+}
 
 function writeFirstBootErrorLog(context, error) {
   try {
@@ -2393,6 +2425,10 @@ ipcMain.handle('identify-displays', () => {
 });
 
 ipcMain.handle('get-remote-control-status', () => getRemoteControlStatus());
+
+ipcMain.handle('get-performance-config', () => performanceConfig);
+
+ipcMain.handle('save-performance-config', (event, config) => savePerformanceConfig(config));
 
 ipcMain.handle('save-remote-control-config', async (event, config) => {
   const nextConfig = { ...config };
