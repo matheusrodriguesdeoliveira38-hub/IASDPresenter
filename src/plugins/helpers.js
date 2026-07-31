@@ -13,6 +13,7 @@ import Database from "@/helpers/Database";
 import History from "@/helpers/History";
 import LocalFile from "@/helpers/LocalFile";
 import Performance from "@/helpers/Performance";
+import Automation from "@/helpers/Automation";
 
 export const HelpersSymbol = Symbol("helpers");
 
@@ -34,6 +35,7 @@ export default {
       history: History,
       localFile: LocalFile,
       performance: Performance,
+      automation: Automation,
     };
 
     app.provide(HelpersSymbol, helpers);
@@ -54,5 +56,6 @@ export default {
     app.config.globalProperties.$history = History;
     app.config.globalProperties.$localFile = LocalFile;
     app.config.globalProperties.$performance = Performance;
+    app.config.globalProperties.$automation = Automation;
   },
 };

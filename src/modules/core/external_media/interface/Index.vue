@@ -943,11 +943,12 @@ export default {
       }
     },
 
-    onEnded() {
+    async onEnded() {
       this.isPaused = true;
       this.progress = 0;
       this.currentTime = 0;
       this.$appdata.set("modules.external_media.config.is_paused", true);
+      await this.$automation.restore("external_media_ended");
     },
 
     onPlay() {
@@ -1023,6 +1024,7 @@ export default {
         return;
       }
       this.stopPlayback();
+      this.$automation.restore("external_media_closed");
       this.isFullscreen = false;
       this.fullscreenControlsVisible = false;
       clearTimeout(this.fullscreenTimer);

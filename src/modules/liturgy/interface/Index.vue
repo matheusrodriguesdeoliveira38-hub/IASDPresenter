@@ -600,6 +600,19 @@
                   hide-details
                   placeholder="https://..."
                 />
+
+                <v-select
+                  v-model="addForm.automationTriggerId"
+                  :items="automationTriggerOptions"
+                  label="Gatilho de automação"
+                  variant="outlined"
+                  rounded="lg"
+                  density="comfortable"
+                  hide-details
+                  clearable
+                  class="modern-input-no-thick mb-4"
+                  prepend-inner-icon="mdi-lightning-bolt"
+                />
               </v-card-text>
 
               <v-card-actions class="px-6 pb-6 pt-2 d-flex justify-end" style="gap: 12px;">
@@ -738,6 +751,7 @@ export default {
       verseNumbers: "",
       filePath: "",
       url: "",
+      automationTriggerId: null,
     },
 
     // Custom liturgy dialog
@@ -857,6 +871,12 @@ export default {
         { value: "verse", icon: "mdi-book-open-variant", color: "purple", label: this.t("types.verse"), description: this.t("type_descriptions.verse") },
         { value: "media", icon: "mdi-file-presentation-box", color: "orange", label: this.t("types.media"), description: this.t("type_descriptions.media") },
         { value: "link", icon: "mdi-link", color: "cyan", label: this.t("types.link"), description: this.t("type_descriptions.link") },
+      ];
+    },
+    automationTriggerOptions() {
+      return [
+        { title: "Nenhum", value: null },
+        ...this.$automation.getTriggerOptions(),
       ];
     },
     isFormValid() {
@@ -1016,6 +1036,7 @@ export default {
         verseNumbers: "",
         filePath: "",
         url: "",
+        automationTriggerId: null,
       };
       this.addStep = 2;
     },
@@ -1061,6 +1082,10 @@ export default {
         name: this.addForm.name.trim(),
         subtitle: this.addForm.subtitle?.trim() || "",
       };
+
+      if (this.addForm.automationTriggerId) {
+        item.automationTriggerId = this.addForm.automationTriggerId;
+      }
 
       if (this.addForm.type === "music") {
         item.musicId = this.addForm.musicId;
@@ -1133,6 +1158,7 @@ export default {
         verseNumbers: item.verseNumbers || "",
         filePath: item.filePath || "",
         url: item.url || "",
+        automationTriggerId: item.automationTriggerId || null,
       };
       this.addStep = 2;
       this.showAddMenu = true;
@@ -1167,7 +1193,7 @@ export default {
         },
       );
     },
-    selectItem(index) {
+    async selectItem(index) {
       this.selectedItemIndex = index;
       const item = this.currentItems[index];
 
@@ -1178,7 +1204,9 @@ export default {
       }
 
       if (this.isExecutable(item)) {
-        this.executeItem(item);
+        await this.executeItem(item);
+      } else {
+        this.runAutomationForItem(item);
       }
 
       if (changed) {
@@ -1338,6 +1366,28 @@ export default {
           } else {
             this.$popup.open({ module: targetModule, fullscreen: true });
           }
+        }
+      }
+
+      this.runAutomationForItem(item);
+    },
+
+    async runAutomationForItem(item) {
+      if (!item?.automationTriggerId) return;
+
+      try {
+        const result = await this.$automation.runItemTrigger(item, {
+          selectedDay: this.selectedDay,
+          selectedIndex: this.selectedItemIndex,
+        });
+        const config = this.$automation.getConfig();
+        if (!config.showStatus || result?.skipped || result?.ok) return;
+
+        this.$alert.error({ text: result?.error || "Falha ao executar gatilho de automação.", translate: false });
+      } catch (error) {
+        const config = this.$automation.getConfig();
+        if (config.showStatus) {
+          this.$alert.error({ text: "Falha ao executar gatilho de automação.", error, translate: false });
         }
       }
     },

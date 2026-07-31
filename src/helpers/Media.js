@@ -8,6 +8,7 @@ import $modules from "@/helpers/Modules";
 import $database from "@/helpers/Database";
 import $history from "@/helpers/History";
 import $performance from "@/helpers/Performance";
+import $automation from "@/helpers/Automation";
 
 export default {
   async open(params) {
@@ -325,6 +326,7 @@ export default {
       return;
     }
 
+    $automation.restore("media_closed");
     this.stopAudio();
     this.clearVariables();
     $appdata.set("modules.media.show", false);

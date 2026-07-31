@@ -60,6 +60,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
   saveRemoteControlConfig: (config) => ipcRenderer.invoke('save-remote-control-config', config),
   startRemoteControlServer: () => ipcRenderer.invoke('start-remote-control-server'),
   stopRemoteControlServer: () => ipcRenderer.invoke('stop-remote-control-server'),
+  getAutomationConfig: () => ipcRenderer.invoke('get-automation-config'),
+  saveAutomationConfig: (config) => ipcRenderer.invoke('save-automation-config', config),
+  testAutomationDevice: (device) => ipcRenderer.invoke('test-automation-device', device),
+  testAutomationTrigger: (trigger) => ipcRenderer.invoke('test-automation-trigger', trigger),
+  runAutomationTrigger: (triggerId, context) => ipcRenderer.invoke('run-automation-trigger', triggerId, context),
+  restoreAutomation: (reason) => ipcRenderer.invoke('restore-automation', reason),
   getPerformanceConfig: () => ipcRenderer.invoke('get-performance-config'),
   savePerformanceConfig: (config) => ipcRenderer.invoke('save-performance-config', config),
   

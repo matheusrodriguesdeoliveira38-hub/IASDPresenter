@@ -30,6 +30,9 @@
             <v-tab :value="5">
               Controle remoto
             </v-tab>
+            <v-tab :value="6">
+              Automação
+            </v-tab>
           </v-tabs>
         </div>
       </div>
@@ -1403,6 +1406,285 @@
               </div>
             </div>
           </v-tabs-window-item>
+
+          <v-tabs-window-item :value="6" class="h-100">
+            <div class="h-100 overflow-auto px-6 pb-6">
+              <div class="settings-container mx-auto d-flex flex-column" style="max-width: 760px; gap: 24px;">
+                <v-card class="settings-card rounded-xl pa-2 mt-6" flat style="background: var(--card-bg); box-shadow: var(--shadow);">
+                  <v-card-text class="pa-6">
+                    <div class="d-flex align-center justify-space-between mb-6" style="gap: 16px; flex-wrap: wrap;">
+                      <div class="d-flex align-center">
+                        <v-icon color="primary" class="mr-3" size="28">
+                          mdi-lightning-bolt
+                        </v-icon>
+                        <div>
+                          <h3 class="font-weight-bold" style="color: var(--sidebar-text); font-size: 1.1rem; line-height: 1.2;">
+                            Gatilhos de automação
+                          </h3>
+                          <div class="text-caption" style="color: var(--sidebar-text-secondary);">
+                            Dispare comandos na mesa Soundcraft Ui16 junto da liturgia.
+                          </div>
+                        </div>
+                      </div>
+                      <v-switch
+                        v-model="automation_config.enabled"
+                        label="Ativar"
+                        color="primary"
+                        inset
+                        hide-details
+                      />
+                    </div>
+
+                    <div class="d-flex flex-column" style="gap: 14px;">
+                      <v-switch
+                        v-model="automation_config.simulationMode"
+                        label="Modo simulação"
+                        color="primary"
+                        inset
+                        hide-details
+                        density="compact"
+                      />
+                      <v-switch
+                        v-model="automation_config.showStatus"
+                        label="Mostrar status dos gatilhos durante a liturgia"
+                        color="primary"
+                        inset
+                        hide-details
+                        density="compact"
+                      />
+                    </div>
+                  </v-card-text>
+                </v-card>
+
+                <v-card class="settings-card rounded-xl pa-2" flat style="background: var(--card-bg); box-shadow: var(--shadow);">
+                  <v-card-text class="pa-6">
+                    <div class="d-flex align-center justify-space-between mb-5" style="gap: 16px; flex-wrap: wrap;">
+                      <div class="d-flex align-center">
+                        <v-icon color="primary" class="mr-3" size="28">
+                          mdi-mixer
+                        </v-icon>
+                        <div>
+                          <h3 class="font-weight-bold" style="color: var(--sidebar-text); font-size: 1.1rem; line-height: 1.2;">
+                            Dispositivo Soundcraft Ui
+                          </h3>
+                          <div class="text-caption" style="color: var(--sidebar-text-secondary);">
+                            Cadastre o IP da mesa na mesma rede deste computador.
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div class="d-flex" style="gap: 16px; flex-wrap: wrap;">
+                      <v-text-field
+                        v-model="automation_device.name"
+                        label="Nome"
+                        variant="outlined"
+                        density="comfortable"
+                        hide-details
+                        style="min-width: 220px; flex: 1;"
+                      />
+                      <v-text-field
+                        v-model="automation_device.ip"
+                        label="IP da Ui16"
+                        placeholder="192.168.0.80"
+                        variant="outlined"
+                        density="comfortable"
+                        hide-details
+                        style="min-width: 180px; flex: 1;"
+                      />
+                    </div>
+
+                    <div class="d-flex justify-end mt-4" style="gap: 8px; flex-wrap: wrap;">
+                      <v-btn
+                        color="primary"
+                        variant="tonal"
+                        class="text-none rounded-lg font-weight-bold"
+                        :loading="automation_loading"
+                        @click="testAutomationDevice"
+                      >
+                        Testar conexão
+                      </v-btn>
+                      <v-btn
+                        color="primary"
+                        variant="flat"
+                        class="text-none rounded-lg font-weight-bold"
+                        :loading="automation_loading"
+                        @click="saveAutomationConfig"
+                      >
+                        Salvar automação
+                      </v-btn>
+                    </div>
+                  </v-card-text>
+                </v-card>
+
+                <v-card class="settings-card rounded-xl pa-2" flat style="background: var(--card-bg); box-shadow: var(--shadow);">
+                  <v-card-text class="pa-6">
+                    <div class="d-flex align-center justify-space-between mb-5" style="gap: 16px; flex-wrap: wrap;">
+                      <div class="d-flex align-center">
+                        <v-icon color="primary" class="mr-3" size="28">
+                          mdi-playlist-check
+                        </v-icon>
+                        <div>
+                          <h3 class="font-weight-bold" style="color: var(--sidebar-text); font-size: 1.1rem; line-height: 1.2;">
+                            Gatilhos
+                          </h3>
+                          <div class="text-caption" style="color: var(--sidebar-text-secondary);">
+                            Crie cenas reutilizáveis para escolher nos itens da liturgia.
+                          </div>
+                        </div>
+                      </div>
+                      <v-btn
+                        color="primary"
+                        variant="tonal"
+                        class="text-none rounded-lg font-weight-bold"
+                        prepend-icon="mdi-plus"
+                        @click="addAutomationTrigger"
+                      >
+                        Novo gatilho
+                      </v-btn>
+                    </div>
+
+                    <div v-if="automation_config.triggers.length === 0" class="text-body-2 py-6 text-center" style="color: var(--sidebar-text-secondary);">
+                      Nenhum gatilho configurado.
+                    </div>
+
+                    <div
+                      v-for="(trigger, index) in automation_config.triggers"
+                      :key="trigger.id"
+                      class="rounded-xl pa-4 mb-4"
+                      style="border: 1px solid var(--border-color); background: rgba(var(--v-theme-surface), 0.08);"
+                    >
+                      <div class="d-flex align-center mb-4" style="gap: 12px;">
+                        <v-text-field
+                          v-model="trigger.name"
+                          label="Nome do gatilho"
+                          variant="outlined"
+                          density="comfortable"
+                          hide-details
+                          style="flex: 1;"
+                        />
+                        <v-switch
+                          v-model="trigger.enabled"
+                          color="primary"
+                          inset
+                          hide-details
+                        />
+                        <v-btn icon size="small" variant="text" color="error" @click="removeAutomationTrigger(index)">
+                          <v-icon>mdi-delete</v-icon>
+                        </v-btn>
+                      </div>
+
+                      <div
+                        v-for="action in trigger.actions"
+                        :key="action.id"
+                        class="d-flex align-center"
+                        style="gap: 12px; flex-wrap: wrap;"
+                      >
+                        <v-select
+                          v-model="action.operation"
+                          :items="automationOperationOptions"
+                          label="Ação"
+                          variant="outlined"
+                          density="comfortable"
+                          hide-details
+                          style="min-width: 170px; flex: 1;"
+                        />
+                        <v-select
+                          v-model="action.target"
+                          :items="automationTargetOptions"
+                          label="Alvo"
+                          variant="outlined"
+                          density="comfortable"
+                          hide-details
+                          style="min-width: 150px; flex: 1;"
+                        />
+                        <v-text-field
+                          v-if="action.target === 'input'"
+                          v-model.number="action.channel"
+                          type="number"
+                          label="Canal"
+                          min="1"
+                          max="16"
+                          variant="outlined"
+                          density="comfortable"
+                          hide-details
+                          style="max-width: 110px;"
+                        />
+                        <v-text-field
+                          v-if="['setFaderLevelDB', 'fadeToDB'].includes(action.operation)"
+                          v-model.number="action.valueDB"
+                          type="number"
+                          label="Volume dB"
+                          min="-90"
+                          max="10"
+                          variant="outlined"
+                          density="comfortable"
+                          hide-details
+                          style="max-width: 130px;"
+                        />
+                        <v-text-field
+                          v-if="action.operation === 'fadeToDB'"
+                          v-model.number="action.fadeMs"
+                          type="number"
+                          label="Fade ms"
+                          min="0"
+                          variant="outlined"
+                          density="comfortable"
+                          hide-details
+                          style="max-width: 130px;"
+                        />
+                        <v-switch
+                          v-if="['setFaderLevelDB', 'fadeToDB'].includes(action.operation)"
+                          v-model="action.restoreOnMediaEnd"
+                          label="Definir volume ao encerrar"
+                          color="primary"
+                          inset
+                          hide-details
+                          density="compact"
+                          style="min-width: 250px;"
+                        />
+                        <v-text-field
+                          v-if="action.restoreOnMediaEnd && ['setFaderLevelDB', 'fadeToDB'].includes(action.operation)"
+                          v-model.number="action.endValueDB"
+                          type="number"
+                          label="Volume final dB"
+                          min="-90"
+                          max="10"
+                          variant="outlined"
+                          density="comfortable"
+                          hide-details
+                          style="max-width: 150px;"
+                        />
+                        <v-text-field
+                          v-if="action.restoreOnMediaEnd && ['setFaderLevelDB', 'fadeToDB'].includes(action.operation)"
+                          v-model.number="action.endFadeMs"
+                          type="number"
+                          label="Fade final ms"
+                          min="0"
+                          variant="outlined"
+                          density="comfortable"
+                          hide-details
+                          style="max-width: 150px;"
+                        />
+                      </div>
+
+                      <div class="d-flex justify-end mt-4" style="gap: 8px;">
+                        <v-btn
+                          color="primary"
+                          variant="tonal"
+                          class="text-none rounded-lg font-weight-bold"
+                          :loading="automation_loading"
+                          @click="testAutomationTrigger(trigger)"
+                        >
+                          Testar gatilho
+                        </v-btn>
+                      </div>
+                    </div>
+                  </v-card-text>
+                </v-card>
+              </div>
+            </div>
+          </v-tabs-window-item>
         </v-tabs-window>
       </div>
     </div>
@@ -1495,6 +1777,30 @@ export default {
       password: "",
       requirePassword: false,
     },
+    automation_loading: false,
+    automation_device: {
+      id: "soundcraft_ui16",
+      name: "Soundcraft Ui16",
+      type: "soundcraft-ui",
+      ip: "",
+    },
+    automation_config: {
+      enabled: false,
+      simulationMode: false,
+      showStatus: true,
+      devices: [],
+      triggers: [],
+    },
+    automationOperationOptions: [
+      { title: "Fade para volume", value: "fadeToDB" },
+      { title: "Definir volume", value: "setFaderLevelDB" },
+      { title: "Mutar", value: "mute" },
+      { title: "Desmutar", value: "unmute" },
+    ],
+    automationTargetOptions: [
+      { title: "Canal de entrada", value: "input" },
+      { title: "Master", value: "master" },
+    ],
     
     manifest,
   }),
@@ -1773,6 +2079,7 @@ export default {
     });
 
     this.loadRemoteControlStatus();
+    this.loadAutomationConfig();
   },
   methods: {
     t(text) {
@@ -1849,6 +2156,158 @@ export default {
         this.applyRemoteControlStatus(status);
       } finally {
         this.remote_control_loading = false;
+      }
+    },
+    newAutomationId(prefix) {
+      return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    },
+    normalizeAutomationTarget(value) {
+      return String(value || "")
+        .trim()
+        .replace(/^https?:\/\//i, "")
+        .replace(/^wss?:\/\//i, "")
+        .split("/")[0]
+        .trim();
+    },
+    normalizeAutomationConfig(config = this.automation_config) {
+      const device = {
+        ...this.automation_device,
+        id: this.automation_device.id || "soundcraft_ui16",
+        type: "soundcraft-ui",
+        ip: this.normalizeAutomationTarget(this.automation_device.ip),
+      };
+
+      return {
+        enabled: config.enabled === true,
+        simulationMode: config.simulationMode === true,
+        showStatus: config.showStatus !== false,
+        devices: device.ip ? [device] : [],
+        triggers: (config.triggers || []).map(trigger => ({
+          ...trigger,
+          actions: (trigger.actions || []).map(action => ({
+            ...action,
+            deviceId: device.id,
+            channel: Number(action.channel) || 1,
+            valueDB: Number(action.valueDB),
+            fadeMs: Number(action.fadeMs) || 0,
+            restoreOnMediaEnd: action.restoreOnMediaEnd === true,
+            endValueDB: Number.isFinite(Number(action.endValueDB)) ? Number(action.endValueDB) : Number(action.valueDB),
+            endFadeMs: Number(action.endFadeMs ?? action.fadeMs) || 0,
+          })),
+        })),
+      };
+    },
+    applyAutomationConfig(config) {
+      if (!config) return;
+      this.automation_config = {
+        ...this.automation_config,
+        ...config,
+        devices: Array.isArray(config.devices) ? config.devices : [],
+        triggers: Array.isArray(config.triggers) ? config.triggers.map(trigger => ({
+          ...trigger,
+          actions: Array.isArray(trigger.actions) ? trigger.actions.map(action => ({
+            ...action,
+            endValueDB: Number.isFinite(Number(action.endValueDB)) ? Number(action.endValueDB) : Number(action.valueDB),
+            endFadeMs: Number(action.endFadeMs ?? action.fadeMs) || 0,
+          })) : [],
+        })) : [],
+      };
+
+      const device = this.automation_config.devices.find(item => item.type === "soundcraft-ui");
+      if (device) {
+        this.automation_device = {
+          ...this.automation_device,
+          ...device,
+        };
+      }
+    },
+    async loadAutomationConfig() {
+      const saved = this.$userdata.get("modules.config.automation");
+      if (saved) this.applyAutomationConfig(saved);
+
+      if (!window.electronAPI?.getAutomationConfig) return;
+      try {
+        const config = await window.electronAPI.getAutomationConfig();
+        this.applyAutomationConfig(config);
+        this.$userdata.set("modules.config.automation", this.normalizeAutomationConfig(config));
+      } catch (error) {
+        console.error("Failed to load automation config", error);
+      }
+    },
+    async saveAutomationConfig() {
+      const config = this.normalizeAutomationConfig();
+      this.automation_loading = true;
+      try {
+        let saved = config;
+        if (window.electronAPI?.saveAutomationConfig) {
+          saved = await window.electronAPI.saveAutomationConfig(config);
+        }
+        this.applyAutomationConfig(saved);
+        this.$userdata.set("modules.config.automation", saved);
+        this.$alert.info({ text: "Configurações de automação salvas.", translate: false });
+      } catch (error) {
+        this.$alert.error({ text: "Não foi possível salvar a automação.", error, translate: false });
+      } finally {
+        this.automation_loading = false;
+      }
+    },
+    addAutomationTrigger() {
+      const deviceId = this.automation_device.id || "soundcraft_ui16";
+      this.automation_config.triggers.push({
+        id: this.newAutomationId("trigger"),
+        name: "Vídeo",
+        enabled: true,
+        actions: [{
+          id: this.newAutomationId("action"),
+          deviceId,
+          target: "input",
+          channel: 9,
+          operation: "fadeToDB",
+          valueDB: -18,
+          fadeMs: 800,
+          restoreOnMediaEnd: false,
+          endValueDB: 0,
+          endFadeMs: 800,
+        }],
+      });
+    },
+    removeAutomationTrigger(index) {
+      this.automation_config.triggers.splice(index, 1);
+    },
+    async testAutomationDevice() {
+      if (!window.electronAPI?.testAutomationDevice) {
+        this.$alert.error({ text: "Teste disponível apenas na versão desktop.", translate: false });
+        return;
+      }
+      this.automation_loading = true;
+      try {
+        const result = await window.electronAPI.testAutomationDevice({
+          ...this.automation_device,
+          ip: this.normalizeAutomationTarget(this.automation_device.ip),
+        });
+        if (result.ok) {
+          this.$alert.info({ text: "Conexão com a Soundcraft Ui realizada.", translate: false });
+        } else {
+          this.$alert.error({ text: result.error || "Não foi possível conectar na mesa.", translate: false });
+        }
+      } finally {
+        this.automation_loading = false;
+      }
+    },
+    async testAutomationTrigger(trigger) {
+      await this.saveAutomationConfig();
+      if (!window.electronAPI?.testAutomationTrigger) return;
+      this.automation_loading = true;
+      try {
+        const prepared = this.normalizeAutomationConfig({ ...this.automation_config, triggers: [trigger] }).triggers[0];
+        const result = await window.electronAPI.testAutomationTrigger(prepared);
+        if (result.ok) {
+          this.$alert.info({ text: "Gatilho executado com sucesso.", translate: false });
+        } else {
+          this.$alert.error({ text: result.error || "Não foi possível executar o gatilho.", translate: false });
+        }
+      } finally {
+        this.automation_loading = false;
       }
     },
     async syncExternalMediaMonitors() {

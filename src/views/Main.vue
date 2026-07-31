@@ -140,6 +140,7 @@
                 style="object-fit: contain;"
                 muted
                 @loadedmetadata="syncMiniPlayer"
+                @ended="onExternalMiniPlayerEnded"
               />
               <div v-else class="w-100 h-100 d-flex align-center justify-center text-grey">
                 Sem mídia
@@ -781,6 +782,10 @@ export default {
           video.play().catch(e => console.log("MiniPlayer play error:", e));
         }
       }
+    },
+    async onExternalMiniPlayerEnded() {
+      this.$appdata.set("modules.external_media.config.is_paused", true);
+      await this.$automation.restore("external_media_miniplayer_ended");
     },
     closeAllModules() {
       const modules = this.$appdata.get("modules") || {};

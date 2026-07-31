@@ -67,6 +67,7 @@ let remoteControlServer = null;
 let productionAppServer = null;
 let productionAppUrl = null;
 const remoteControlConfigPath = path.join(userDataPath, 'remote-control.json');
+const automationConfigPath = path.join(userDataPath, 'automation-config.json');
 const performanceConfigPath = path.join(userDataPath, 'performance-config.json');
 const firstBootLogPath = path.join(userDataPath, 'first-boot-error.log');
 const defaultRemoteControlConfig = {
@@ -78,6 +79,9 @@ const defaultRemoteControlConfig = {
 };
 let remoteControlConfig = loadRemoteControlConfig();
 let performanceConfig = loadPerformanceConfig();
+let automationConfig = loadAutomationConfig();
+const soundcraftConnections = new Map();
+const pendingAutomationRestores = [];
 
 function sanitizePerformanceConfig(config = {}) {
   return {
@@ -185,6 +189,200 @@ function saveRemoteControlConfig(config) {
   remoteControlConfig = sanitizeRemoteControlConfig({ ...remoteControlConfig, ...config });
   fs.writeFileSync(remoteControlConfigPath, JSON.stringify(remoteControlConfig, null, 2), 'utf8');
   return remoteControlConfig;
+}
+
+function sanitizeAutomationConfig(config = {}) {
+  const devices = Array.isArray(config.devices) ? config.devices : [];
+  const triggers = Array.isArray(config.triggers) ? config.triggers : [];
+
+  return {
+    enabled: config.enabled === true,
+    simulationMode: config.simulationMode === true,
+    showStatus: config.showStatus !== false,
+    devices: devices.map(device => ({
+      id: String(device.id || ''),
+      name: String(device.name || ''),
+      type: device.type === 'soundcraft-ui' ? 'soundcraft-ui' : 'soundcraft-ui',
+      ip: normalizeSoundcraftTarget(device.ip),
+    })).filter(device => device.id && device.name && device.ip),
+    triggers: triggers.map(trigger => ({
+      id: String(trigger.id || ''),
+      name: String(trigger.name || ''),
+      enabled: trigger.enabled !== false,
+      actions: Array.isArray(trigger.actions) ? trigger.actions.map(action => ({
+        id: String(action.id || ''),
+        deviceId: String(action.deviceId || ''),
+        target: ['input', 'master'].includes(action.target) ? action.target : 'input',
+        channel: Number(action.channel) || 1,
+        operation: ['setFaderLevelDB', 'fadeToDB', 'mute', 'unmute'].includes(action.operation) ? action.operation : 'fadeToDB',
+        valueDB: Number(action.valueDB),
+        fadeMs: Math.max(0, Number(action.fadeMs) || 0),
+        restoreOnMediaEnd: action.restoreOnMediaEnd === true,
+        endValueDB: Number.isFinite(Number(action.endValueDB)) ? Number(action.endValueDB) : Number(action.valueDB),
+        endFadeMs: Math.max(0, Number(action.endFadeMs ?? action.fadeMs) || 0),
+      })).filter(action => action.id && action.deviceId) : [],
+    })).filter(trigger => trigger.id && trigger.name),
+  };
+}
+
+function loadAutomationConfig() {
+  try {
+    if (fs.existsSync(automationConfigPath)) {
+      return sanitizeAutomationConfig(JSON.parse(fs.readFileSync(automationConfigPath, 'utf8')));
+    }
+  } catch (error) {
+    console.error('[Automation] Erro lendo configuracoes:', error.message);
+  }
+
+  return sanitizeAutomationConfig();
+}
+
+function saveAutomationConfig(config = {}) {
+  automationConfig = sanitizeAutomationConfig({ ...automationConfig, ...config });
+  fs.writeFileSync(automationConfigPath, JSON.stringify(automationConfig, null, 2), 'utf8');
+  return automationConfig;
+}
+
+function wait(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+function normalizeSoundcraftTarget(value) {
+  return String(value || '')
+    .trim()
+    .replace(/^https?:\/\//i, '')
+    .replace(/^wss?:\/\//i, '')
+    .split('/')[0]
+    .trim();
+}
+
+async function probeSoundcraftHttp(targetIP) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 3500);
+  try {
+    const response = await net.fetch(`http://${targetIP}/`, { signal: controller.signal });
+    return { ok: true, status: response.status };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function getSoundcraftConnection(device) {
+  const ip = normalizeSoundcraftTarget(device?.ip);
+  if (!ip) throw new Error('IP da mesa nao configurado.');
+
+  const cacheKey = `${device.id || ip}:${ip}`;
+  const cached = soundcraftConnections.get(cacheKey);
+  if (cached) return cached;
+
+  let SoundcraftUI;
+  try {
+    ({ SoundcraftUI } = require('soundcraft-ui-connection'));
+  } catch (error) {
+    throw new Error('Dependencia soundcraft-ui-connection nao instalada.');
+  }
+
+  const conn = new SoundcraftUI(ip);
+  try {
+    await Promise.race([
+      conn.connect(),
+      wait(8500).then(() => {
+        throw new Error('Tempo limite ao conectar na Soundcraft Ui.');
+      }),
+    ]);
+    soundcraftConnections.set(cacheKey, conn);
+    return conn;
+  } catch (error) {
+    try {
+      await conn.disconnect();
+    } catch (e) {
+      // ignore cleanup failures
+    }
+    soundcraftConnections.delete(cacheKey);
+    throw error;
+  }
+}
+
+function getSoundcraftTarget(conn, action) {
+  if (action.target === 'master') return conn.master;
+  return conn.master.input(Number(action.channel) || 1);
+}
+
+async function executeAutomationAction(action, context = {}) {
+  const device = automationConfig.devices.find(item => item.id === action.deviceId);
+  if (!device) throw new Error('Dispositivo de automacao nao encontrado.');
+  if (device.type !== 'soundcraft-ui') throw new Error('Tipo de dispositivo nao suportado.');
+
+  if (automationConfig.simulationMode || context.simulationMode) {
+    return { ok: true, simulated: true, action };
+  }
+
+  const conn = await getSoundcraftConnection(device);
+  const target = getSoundcraftTarget(conn, action);
+
+  if (action.restoreOnMediaEnd && ['setFaderLevelDB', 'fadeToDB'].includes(action.operation)) {
+    pendingAutomationRestores.push({
+      deviceId: device.id,
+      target: action.target,
+      channel: action.channel,
+      valueDB: Number(action.endValueDB),
+      fadeMs: Number(action.endFadeMs) || 0,
+      createdAt: Date.now(),
+    });
+  }
+
+  if (action.operation === 'mute') target.mute();
+  else if (action.operation === 'unmute') target.unmute();
+  else if (action.operation === 'setFaderLevelDB') target.setFaderLevelDB(Number(action.valueDB));
+  else await target.fadeToDB(Number(action.valueDB), Number(action.fadeMs) || 0);
+
+  return { ok: true };
+}
+
+async function executeAutomationTrigger(trigger, context = {}) {
+  if (!trigger || trigger.enabled === false) {
+    return { ok: true, skipped: true };
+  }
+
+  const results = [];
+  for (const action of trigger.actions || []) {
+    results.push(await executeAutomationAction(action, context));
+  }
+
+  return { ok: true, results };
+}
+
+async function restorePendingAutomation(reason = '') {
+  if (pendingAutomationRestores.length === 0) {
+    return { ok: true, restored: 0 };
+  }
+
+  const restores = pendingAutomationRestores.splice(0, pendingAutomationRestores.length).reverse();
+  const results = [];
+
+  for (const restore of restores) {
+    const device = automationConfig.devices.find(item => item.id === restore.deviceId);
+    if (!device) {
+      results.push({ ok: false, error: 'Dispositivo de automacao nao encontrado.' });
+      continue;
+    }
+
+    try {
+      const conn = await getSoundcraftConnection(device);
+      const target = getSoundcraftTarget(conn, restore);
+      await target.fadeToDB(Number(restore.valueDB), Number(restore.fadeMs) || 0);
+      results.push({ ok: true });
+    } catch (error) {
+      results.push({ ok: false, error: error.message });
+    }
+  }
+
+  return {
+    ok: results.every(result => result.ok),
+    restored: results.filter(result => result.ok).length,
+    reason,
+    results,
+  };
 }
 
 function getRemoteControlPort() {
@@ -2425,6 +2623,75 @@ ipcMain.handle('identify-displays', () => {
 });
 
 ipcMain.handle('get-remote-control-status', () => getRemoteControlStatus());
+
+ipcMain.handle('get-automation-config', () => automationConfig);
+
+ipcMain.handle('save-automation-config', (event, config) => saveAutomationConfig(config));
+
+ipcMain.handle('test-automation-device', async (event, device) => {
+  if (!device || device.type !== 'soundcraft-ui') {
+    return { ok: false, error: 'Dispositivo invalido.' };
+  }
+
+  const targetIP = normalizeSoundcraftTarget(device.ip);
+  if (!targetIP) {
+    return { ok: false, error: 'Informe o IP da Soundcraft Ui16.' };
+  }
+
+  try {
+    await probeSoundcraftHttp(targetIP);
+  } catch (error) {
+    return {
+      ok: false,
+      error: `Nao foi possivel acessar http://${targetIP}. Confirme se o computador esta na mesma rede da Ui16 e se o IP esta correto.`,
+    };
+  }
+
+  try {
+    const conn = await getSoundcraftConnection({ ...device, ip: targetIP });
+    await wait(250);
+    return { ok: Boolean(conn) };
+  } catch (error) {
+    return {
+      ok: false,
+      error: `${error.message} A pagina da mesa respondeu em http://${targetIP}, mas o canal de controle WebSocket nao abriu.`,
+    };
+  }
+});
+
+ipcMain.handle('test-automation-trigger', async (event, trigger) => {
+  const previousConfig = automationConfig;
+  try {
+    const sanitized = sanitizeAutomationConfig({
+      ...automationConfig,
+      triggers: [trigger],
+    });
+    automationConfig = {
+      ...automationConfig,
+      triggers: sanitized.triggers,
+    };
+    return await executeAutomationTrigger(sanitized.triggers[0], { test: true });
+  } catch (error) {
+    return { ok: false, error: error.message };
+  } finally {
+    automationConfig = previousConfig;
+  }
+});
+
+ipcMain.handle('run-automation-trigger', async (event, triggerId, context = {}) => {
+  if (!automationConfig.enabled) return { ok: true, skipped: true };
+
+  const trigger = automationConfig.triggers.find(item => item.id === triggerId);
+  if (!trigger) return { ok: false, error: 'Gatilho nao encontrado.' };
+
+  try {
+    return await executeAutomationTrigger(trigger, context);
+  } catch (error) {
+    return { ok: false, error: error.message };
+  }
+});
+
+ipcMain.handle('restore-automation', async (event, reason = '') => restorePendingAutomation(reason));
 
 ipcMain.handle('get-performance-config', () => performanceConfig);
 
