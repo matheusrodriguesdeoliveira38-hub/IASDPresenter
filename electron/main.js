@@ -70,6 +70,7 @@ const remoteControlConfigPath = path.join(userDataPath, 'remote-control.json');
 const automationConfigPath = path.join(userDataPath, 'automation-config.json');
 const performanceConfigPath = path.join(userDataPath, 'performance-config.json');
 const firstBootLogPath = path.join(userDataPath, 'first-boot-error.log');
+const requiredLocalDbFiles = ['config', 'pt_musics', 'pt_bible_book'];
 const defaultRemoteControlConfig = {
   enabled: true,
   host: '0.0.0.0',
@@ -457,6 +458,37 @@ function readRemoteDbFile(filename) {
   }
 
   return null;
+}
+
+function getLocalDbFilePath(filename) {
+  return path.join(sysDbPath, `${filename}.bin`);
+}
+
+function getPlainLocalDbFilePath(filename) {
+  return path.join(sysDbPath, filename);
+}
+
+function hasLocalDbFile(filename) {
+  return fs.existsSync(getLocalDbFilePath(filename)) || fs.existsSync(getPlainLocalDbFilePath(filename));
+}
+
+function hasRequiredLocalDbFiles(files = requiredLocalDbFiles) {
+  return files.every(file => hasLocalDbFile(file));
+}
+
+function getBundledDatabasePath() {
+  const candidates = [
+    path.join(process.resourcesPath || '', 'database.db'),
+    path.join(process.resourcesPath || '', 'resources', 'database.db'),
+    path.join(app.getAppPath(), 'resources', 'database.db'),
+  ];
+
+  return candidates.find(candidate => candidate && fs.existsSync(candidate)) || null;
+}
+
+async function extractDatabaseFromPath(dbPath, progressCallback = null) {
+  const extractor = new DbExtractor(dbPath);
+  await extractor.extract(progressCallback || (() => {}));
 }
 
 function cleanRemoteSearchText(value) {
@@ -2153,7 +2185,7 @@ ipcMain.handle('save-custom-music', async (event, sourcePath) => {
 
 ipcMain.handle('get-local-db', async (event, filename) => {
   try {
-    const filePath = path.join(sysDbPath, `${filename}.bin`);
+    const filePath = getLocalDbFilePath(filename);
     if (fs.existsSync(filePath)) {
       const encryptedContent = fs.readFileSync(filePath, 'utf8');
       const decryptedString = decryptData(encryptedContent);
@@ -2163,7 +2195,7 @@ ipcMain.handle('get-local-db', async (event, filename) => {
     }
     
     // Fallback: busca versão não criptografada/sem extensão (ex: do DbExtractor)
-    const plainFilePath = path.join(sysDbPath, filename);
+    const plainFilePath = getPlainLocalDbFilePath(filename);
     if (fs.existsSync(plainFilePath)) {
       const content = fs.readFileSync(plainFilePath, 'utf8');
       const data = JSON.parse(content);
@@ -2188,9 +2220,33 @@ ipcMain.handle('get-local-db', async (event, filename) => {
   }
 });
 
+ipcMain.handle('has-local-db-files', async (event, filenames = requiredLocalDbFiles) => {
+  const files = Array.isArray(filenames) && filenames.length ? filenames : requiredLocalDbFiles;
+  return hasRequiredLocalDbFiles(files);
+});
+
+ipcMain.handle('extract-bundled-database', async (event) => {
+  try {
+    const bundledDbPath = getBundledDatabasePath();
+    if (!bundledDbPath) {
+      return { ok: false, error: 'Banco de dados local empacotado nao encontrado.' };
+    }
+
+    await extractDatabaseFromPath(bundledDbPath, (data) => {
+      event.sender.send('extract-progress', data);
+    });
+
+    return { ok: true };
+  } catch (error) {
+    console.error('Erro ao extrair banco empacotado:', error);
+    writeFirstBootErrorLog('extract-bundled-database', error);
+    return { ok: false, error: error.message || String(error) };
+  }
+});
+
 ipcMain.handle('save-local-db', async (event, filename, data) => {
   try {
-    const filePath = path.join(sysDbPath, `${filename}.bin`);
+    const filePath = getLocalDbFilePath(filename);
     const jsonString = JSON.stringify(data);
     const encryptedContent = encryptData(jsonString);
     if (encryptedContent) {
@@ -2216,8 +2272,7 @@ ipcMain.handle('extract-local-db', async (event) => {
       throw new Error(`Arquivo baixado está vazio: ${finalDbPath}`);
     }
     
-    const extractor = new DbExtractor(finalDbPath);
-    await extractor.extract((data) => {
+    await extractDatabaseFromPath(finalDbPath, (data) => {
       event.sender.send('extract-progress', data);
     });
     

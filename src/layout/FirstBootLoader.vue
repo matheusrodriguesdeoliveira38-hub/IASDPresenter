@@ -44,6 +44,8 @@
 <script>
 import $path from "@/helpers/Path";
 
+const REQUIRED_LOCAL_DB_FILES = ["config", "pt_musics", "pt_bible_book"];
+
 export default {
   name: "FirstBootLoader",
   data() {
@@ -97,11 +99,15 @@ export default {
       this.isOpen = true;
       
       const isComplete = await window.electronAPI.getLocalDb("system_first_boot_complete");
-      if (!isComplete || !isComplete.complete) {
-        this.isFirstBoot = true;
+      const hasRequiredData = window.electronAPI.hasLocalDbFiles
+        ? await window.electronAPI.hasLocalDbFiles(REQUIRED_LOCAL_DB_FILES)
+        : true;
+
+      if (!isComplete || !isComplete.complete || !hasRequiredData) {
+        this.isFirstBoot = !isComplete || !isComplete.complete;
         
         this.statusText = "Preparando nova instalação...";
-        if (window.electronAPI.clearAllData) {
+        if (this.isFirstBoot && window.electronAPI.clearAllData) {
           await window.electronAPI.clearAllData();
         }
         
@@ -145,7 +151,12 @@ export default {
           }
           throw new Error(`Servidor retornou erro ${response.status}`);
         }
-        return await response.json();
+        const contentType = response.headers.get("content-type") || "";
+        const text = await response.text();
+        if (!contentType.includes("application/json") && text.trim().startsWith("<")) {
+          throw new Error(`Servidor retornou HTML ao buscar ${file}.`);
+        }
+        return JSON.parse(text);
       } catch (error) {
         if (retries > 0 && (error.message.includes("Failed to fetch") || error.message.includes("NetworkError"))) {
           await new Promise(resolve => setTimeout(resolve, delayMs));
@@ -183,6 +194,28 @@ export default {
             });
           }
           
+          if (window.electronAPI.extractBundledDatabase) {
+            this.statusText = "Verificando banco local...";
+            this.progress = 0;
+            const bundledResult = await window.electronAPI.extractBundledDatabase();
+            if (bundledResult && bundledResult.ok) {
+              await window.electronAPI.saveLocalDb("system_first_boot_complete", { complete: true });
+              this.progress = 100;
+              this.statusText = "Sincronização Concluída!";
+
+              setTimeout(() => {
+                this.isOpen = false;
+                this.$emit("boot-complete");
+                window.location.reload();
+              }, 1000);
+              return;
+            }
+          }
+
+          if (navigator.onLine === false) {
+            throw new Error("Este computador esta offline e a instalacao nao contem banco local empacotado.");
+          }
+
           await this.fetchAndSave("config");
           
           this.statusText = "Baixando banco de dados...";

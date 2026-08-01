@@ -1472,7 +1472,7 @@ export default {
 
       // Load music list
       try {
-        const musicData = await this.$database.get(`${this.$i18n.locale}_musics`);
+        const musicData = await this.$database.get(`${this.$i18n.locale}_musics`, { silent: true });
         if (musicData && Array.isArray(musicData)) {
           this.musicList = musicData.map(m => {
             const hymnalAlbum = m.albums ? m.albums.find(a => a.type === "hymnal") : null;
@@ -1492,7 +1492,7 @@ export default {
 
       // Load bible books
       try {
-        const books = await this.$database.get(`${this.$i18n.locale}_bible_book`);
+        const books = await this.$database.get(`${this.$i18n.locale}_bible_book`, { silent: true });
         if (books && Array.isArray(books)) {
           this.bibleBooks = books;
         }

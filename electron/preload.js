@@ -23,6 +23,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     return () => ipcRenderer.removeListener('presentation-shortcut', listener);
   },
   clearAllData: () => ipcRenderer.invoke('clear-all-data'),
+  hasLocalDbFiles: (filenames) => ipcRenderer.invoke('has-local-db-files', filenames),
+  extractBundledDatabase: () => ipcRenderer.invoke('extract-bundled-database'),
   extractLocalDb: () => ipcRenderer.invoke('extract-local-db'),
   downloadDatabase: () => ipcRenderer.invoke('download-database'),
   

@@ -5,8 +5,23 @@ import $storage from "@/helpers/Storage";
 
 const isDesktop = !!(window.electronAPI && window.electronAPI.isElectron);
 
+async function parseJsonResponse(response, file) {
+  const contentType = response.headers.get("content-type") || "";
+  const text = await response.text();
+
+  if (!contentType.includes("application/json") && text.trim().startsWith("<")) {
+    throw new Error(`Servidor retornou HTML ao buscar ${file}. Verifique a conexao ou a URL do banco de dados.`);
+  }
+
+  try {
+    return JSON.parse(text);
+  } catch (error) {
+    throw new Error(`Resposta invalida ao buscar ${file}: ${error.message}`);
+  }
+}
+
 export default {
-  async get(file) {
+  async get(file, options = {}) {
     try {
       const cache_name = `db:${file}`;
       const cache = $storage.get(cache_name, null, "session");
@@ -23,6 +38,10 @@ export default {
           $storage.set(cache_name, localData, "session");
           return localData;
         }
+        if (navigator.onLine === false) {
+          throw new Error(`Banco local "${file}" nao encontrado e o computador esta offline.`);
+        }
+
         $dev.write("BD local não encontrado, baixando e salvando:", file);
       }
 
@@ -60,7 +79,7 @@ export default {
             throw new Error(`Status ${response.status}`);
           }
           
-          data = await response.json();
+          data = await parseJsonResponse(response, file);
           break; // Sucesso
         } catch (error) {
           if (retries > 1 && (error.message.includes("Failed to fetch") || error.message.includes("NetworkError"))) {
@@ -85,7 +104,9 @@ export default {
 
       return data;
     } catch (error) {
-      $alert.error({ text: "messages.file_database_not_found", error });
+      if (!options.silent) {
+        $alert.error({ text: "messages.file_database_not_found", error });
+      }
       return null;
     }
   },
