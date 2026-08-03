@@ -1,5 +1,10 @@
 <template>
-  <ModuleContainer ref="moduleContainer" :manifest="manifest" class="presentation-module" @close="disableGlobalShortcuts">
+  <ModuleContainer
+    ref="moduleContainer"
+    :manifest="manifest"
+    class="presentation-module"
+    @close="disableGlobalShortcuts"
+  >
     <template #header>
       <div class="presentation-header d-flex align-center px-4 py-2">
         <div class="presentation-tool-group d-flex align-center">
@@ -110,13 +115,26 @@
         <div class="presentation-empty-text mb-6">
           {{ t('status.empty') }}
         </div>
-        <v-btn color="primary" variant="flat" rounded="lg" prepend-icon="mdi-upload" class="text-none font-weight-bold px-5" @click="selectFile">
+        <v-btn
+          color="primary"
+          variant="flat"
+          rounded="lg"
+          prepend-icon="mdi-upload"
+          class="text-none font-weight-bold px-5"
+          @click="selectFile"
+        >
           {{ t('actions.select_file') }}
         </v-btn>
       </div>
 
       <div v-else-if="loading" class="presentation-empty flex-grow-1 d-flex flex-column align-center justify-center text-center">
-        <v-progress-circular indeterminate color="primary" size="46" width="4" class="mb-5" />
+        <v-progress-circular
+          indeterminate
+          color="primary"
+          size="46"
+          width="4"
+          class="mb-5"
+        />
         <div class="presentation-empty-title">
           {{ loadingText }}
         </div>
@@ -138,13 +156,35 @@
           {{ error }}
         </div>
         <div class="d-flex align-center justify-center mt-5" style="gap: 10px;">
-          <v-btn color="primary" variant="flat" rounded="lg" prepend-icon="mdi-upload" class="text-none font-weight-bold px-5" @click="selectFile">
+          <v-btn
+            color="primary"
+            variant="flat"
+            rounded="lg"
+            prepend-icon="mdi-upload"
+            class="text-none font-weight-bold px-5"
+            @click="selectFile"
+          >
             {{ t('actions.select_file') }}
           </v-btn>
-          <v-btn v-if="canProject" color="primary" variant="tonal" rounded="lg" prepend-icon="mdi-presentation-play" class="text-none font-weight-bold px-5" @click="openProjection">
+          <v-btn
+            v-if="canProject"
+            color="primary"
+            variant="tonal"
+            rounded="lg"
+            prepend-icon="mdi-presentation-play"
+            class="text-none font-weight-bold px-5"
+            @click="openProjection"
+          >
             {{ t('actions.project') }}
           </v-btn>
-          <v-btn v-if="sourcePath" variant="tonal" rounded="lg" prepend-icon="mdi-open-in-app" class="text-none font-weight-bold px-5" @click="openOriginal">
+          <v-btn
+            v-if="sourcePath"
+            variant="tonal"
+            rounded="lg"
+            prepend-icon="mdi-open-in-app"
+            class="text-none font-weight-bold px-5"
+            @click="openOriginal"
+          >
             {{ t('actions.open_original') }}
           </v-btn>
         </div>
@@ -170,13 +210,25 @@
           </button>
 
           <div class="presentation-controls d-flex align-center justify-center">
-            <v-btn icon variant="text" size="small" :disabled="slideIndex <= 0" @click="firstSlide">
+            <v-btn
+              icon
+              variant="text"
+              size="small"
+              :disabled="slideIndex <= 0"
+              @click="firstSlide"
+            >
               <v-icon>mdi-skip-previous</v-icon>
               <v-tooltip activator="parent" location="top" open-delay="300">
                 Primeiro slide
               </v-tooltip>
             </v-btn>
-            <v-btn icon variant="tonal" size="small" :disabled="slideIndex <= 0" @click="prevSlide">
+            <v-btn
+              icon
+              variant="tonal"
+              size="small"
+              :disabled="slideIndex <= 0"
+              @click="prevSlide"
+            >
               <v-icon>mdi-chevron-left</v-icon>
               <v-tooltip activator="parent" location="top" open-delay="300">
                 Slide anterior
@@ -185,13 +237,25 @@
             <div class="slide-counter mx-4">
               {{ currentSlideNumber }} / {{ totalSlides }}
             </div>
-            <v-btn icon variant="tonal" size="small" :disabled="slideIndex >= totalSlides - 1" @click="nextSlide">
+            <v-btn
+              icon
+              variant="tonal"
+              size="small"
+              :disabled="slideIndex >= totalSlides - 1"
+              @click="nextSlide"
+            >
               <v-icon>mdi-chevron-right</v-icon>
               <v-tooltip activator="parent" location="top" open-delay="300">
                 Proximo slide
               </v-tooltip>
             </v-btn>
-            <v-btn icon variant="text" size="small" :disabled="slideIndex >= totalSlides - 1" @click="lastSlide">
+            <v-btn
+              icon
+              variant="text"
+              size="small"
+              :disabled="slideIndex >= totalSlides - 1"
+              @click="lastSlide"
+            >
               <v-icon>mdi-skip-next</v-icon>
               <v-tooltip activator="parent" location="top" open-delay="300">
                 Ultimo slide
@@ -208,7 +272,12 @@
               </div>
             </div>
           </div>
-          <button class="next-slide-frame" type="button" :disabled="!nextImage" @click="nextSlide">
+          <button
+            class="next-slide-frame"
+            type="button"
+            :disabled="!nextImage"
+            @click="nextSlide"
+          >
             <img v-if="nextImage" :src="nextImage" :alt="`${t('labels.slide')} ${currentSlideNumber + 1}`" />
             <div v-else class="next-empty">
               Fim

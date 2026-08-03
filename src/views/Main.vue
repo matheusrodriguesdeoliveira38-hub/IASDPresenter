@@ -138,6 +138,7 @@
                 :src="externalFilePath"
                 class="w-100 h-100"
                 style="object-fit: contain;"
+                preload="auto"
                 muted
                 @loadedmetadata="syncMiniPlayer"
                 @ended="onExternalMiniPlayerEnded"
@@ -244,7 +245,7 @@ export default {
     externalMediaCurrentTime(val) {
       if (this.showExternalMiniPlayer && this.$refs.externalMiniPlayerVideo) {
         const video = this.$refs.externalMiniPlayerVideo;
-        if (!video.seeking && Math.abs(video.currentTime - val) > 0.5) {
+        if (!video.seeking && Number.isFinite(val) && Math.abs(video.currentTime - val) > 2) {
           video.currentTime = val;
         }
       }
@@ -786,6 +787,23 @@ export default {
     async onExternalMiniPlayerEnded() {
       this.$appdata.set("modules.external_media.config.is_paused", true);
       await this.$automation.restore("external_media_miniplayer_ended");
+      this.$appdata.set("modules.external_media.show", false);
+      this.$appdata.set("modules.external_media.minimized", false);
+      this.$appdata.set("modules.external_media.filePath", "");
+      this.$appdata.set("modules.external_media.title", "");
+      this.$appdata.set("modules.external_media.subtitle", "");
+      this.$appdata.set("modules.external_media.config", {
+        is_paused: true,
+        current_time: 0,
+        progress: 0,
+        duration: 0,
+        volume: this.$appdata.get("modules.external_media.config.volume") || 100,
+        document_page: 1,
+        request_action: null,
+      });
+      if (this.$appdata.get("popup_module") === "external_media") {
+        this.$popup.exit();
+      }
     },
     closeAllModules() {
       const modules = this.$appdata.get("modules") || {};

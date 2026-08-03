@@ -1569,7 +1569,13 @@
                           inset
                           hide-details
                         />
-                        <v-btn icon size="small" variant="text" color="error" @click="removeAutomationTrigger(index)">
+                        <v-btn
+                          icon
+                          size="small"
+                          variant="text"
+                          color="error"
+                          @click="removeAutomationTrigger(index)"
+                        >
                           <v-icon>mdi-delete</v-icon>
                         </v-btn>
                       </div>
@@ -2329,8 +2335,7 @@ export default {
           const primary = displays.find(d => d.isPrimary) || displays[0];
           selectedMonitors = selectedMonitors.filter(m => m !== primary.id);
           
-          const { default: $popup } = await import("@/helpers/Popup");
-          await $popup.syncMonitors(selectedMonitors, "external_media", isExternalMediaActive);
+          await this.$popup.syncMonitors(selectedMonitors, "external_media", isExternalMediaActive);
         }
       }
     },
@@ -2354,8 +2359,7 @@ export default {
       this.validateReturnMonitorSelection();
       if (!this.return_monitor) return;
       this.return_monitor_enabled = true;
-      const { default: $popup } = await import("@/helpers/Popup");
-      await $popup.syncReturnMonitor(this.return_monitor, true);
+      await this.$popup.syncReturnMonitor(this.return_monitor, true);
     },
     toggleSlideMonitor(val) {
       let unselected = this.$userdata.get("modules.config.unselected_slide_monitors") || [];

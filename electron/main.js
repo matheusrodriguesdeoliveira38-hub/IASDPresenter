@@ -112,6 +112,11 @@ function savePerformanceConfig(config = {}) {
 if (performanceConfig.disableHardwareAcceleration) {
   app.disableHardwareAcceleration();
   app.commandLine.appendSwitch('disable-gpu');
+} else {
+  app.commandLine.appendSwitch('ignore-gpu-blocklist');
+  app.commandLine.appendSwitch('enable-gpu-rasterization');
+  app.commandLine.appendSwitch('enable-zero-copy');
+  app.commandLine.appendSwitch('disable-renderer-backgrounding');
 }
 
 function writeFirstBootErrorLog(context, error) {
@@ -2092,6 +2097,47 @@ ipcMain.handle('open-file-dialog', async (event, options) => {
   return result.filePaths[0];
 });
 
+ipcMain.handle('save-file-dialog', async (event, options) => {
+  const win = BrowserWindow.fromWebContents(event.sender);
+  const result = await dialog.showSaveDialog(win, {
+    title: options?.title || 'Salvar Arquivo',
+    defaultPath: options?.defaultPath,
+    filters: options?.filters || [
+      { name: 'Arquivos JSON', extensions: ['json'] },
+    ],
+  });
+  if (result.canceled) return null;
+  return result.filePath;
+});
+
+ipcMain.handle('read-text-file', async (event, filePath) => {
+  if (typeof filePath !== 'string' || !path.isAbsolute(filePath) || !fs.existsSync(filePath)) {
+    return { ok: false, error: 'Arquivo nao encontrado.' };
+  }
+
+  try {
+    return { ok: true, content: fs.readFileSync(filePath, 'utf8') };
+  } catch (error) {
+    return { ok: false, error: error.message || 'Nao foi possivel ler o arquivo.' };
+  }
+});
+
+ipcMain.handle('write-text-file', async (event, filePath, content) => {
+  if (typeof filePath !== 'string' || !path.isAbsolute(filePath)) {
+    return { ok: false, error: 'Caminho invalido.' };
+  }
+  if (typeof content !== 'string') {
+    return { ok: false, error: 'Conteudo invalido.' };
+  }
+
+  try {
+    fs.writeFileSync(filePath, content, 'utf8');
+    return { ok: true };
+  } catch (error) {
+    return { ok: false, error: error.message || 'Nao foi possivel salvar o arquivo.' };
+  }
+});
+
 ipcMain.handle('open-external', async (event, url) => {
   if (isAllowedExternalUrl(url)) await shell.openExternal(url);
 });
@@ -2933,6 +2979,7 @@ async function createWindow() {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
+      backgroundThrottling: false,
     },
     frame: false
   });
@@ -3083,10 +3130,13 @@ async function createWindow() {
     let windowConfig = {
       width: 800,
       height: 600,
+      backgroundColor: '#000000',
+      show: false,
       webPreferences: {
         preload: path.join(__dirname, 'preload.js'),
         contextIsolation: true,
         nodeIntegration: false,
+        backgroundThrottling: false,
       }
     };
 
@@ -3128,8 +3178,8 @@ async function createWindow() {
   });
 
   mainWindow.webContents.on('did-create-window', (childWindow) => {
-    if (!childWindow.isResizable()) {
-      childWindow.once('ready-to-show', () => {
+    childWindow.once('ready-to-show', () => {
+      if (!childWindow.isResizable()) {
         if (process.platform === 'win32') {
           const { screen } = require('electron');
           const bounds = childWindow.getBounds();
@@ -3141,8 +3191,9 @@ async function createWindow() {
         } else {
           childWindow.setFullScreen(true);
         }
-      });
-    }
+      }
+      childWindow.show();
+    });
   });
 
   if (isDev) {

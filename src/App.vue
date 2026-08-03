@@ -52,8 +52,7 @@ export default {
           this.$appdata.set("system_displays", displays);
           
           if (displays.length === 1) {
-            const { default: $popup } = await import("@/helpers/Popup");
-            $popup.exit();
+            this.$popup.exit();
           } else {
             this.$media.syncMonitors();
           }

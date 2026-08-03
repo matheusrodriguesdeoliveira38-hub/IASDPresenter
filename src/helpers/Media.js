@@ -9,6 +9,7 @@ import $database from "@/helpers/Database";
 import $history from "@/helpers/History";
 import $performance from "@/helpers/Performance";
 import $automation from "@/helpers/Automation";
+import $popup from "@/helpers/Popup";
 
 export default {
   async open(params) {
@@ -44,7 +45,6 @@ export default {
     let savedTime = 0;
 
     let audio = this.getElement();
-    const volume = $appdata.get("modules.media.config.volume") / 100;
     const fadeAudioEnabled = $userdata.get("modules.media.fade_audio") !== false;
 
     if (isSameSong) {
@@ -237,7 +237,6 @@ export default {
         selectedMonitors = selectedMonitors.filter(m => m !== primary.id);
 
         if (selectedMonitors.length > 0) {
-          const { default: $popup } = await import("@/helpers/Popup");
           await $popup.syncMonitors(selectedMonitors, "media", true);
         }
       }
@@ -260,7 +259,6 @@ export default {
     const primary = displays.find(d => d.isPrimary) || displays[0];
     selectedMonitors = selectedMonitors.filter(m => m !== primary.id);
 
-    const { default: $popup } = await import("@/helpers/Popup");
     await $popup.syncMonitors(selectedMonitors, "media", forceOpen);
   },
 
@@ -273,7 +271,6 @@ export default {
 
   async syncReturnMonitor(forceOpen = false) {
     if ($performance.limitProjectionWindows()) {
-      const { default: $popup } = await import("@/helpers/Popup");
       $popup.closeReturnMonitor();
       return;
     }
@@ -282,7 +279,6 @@ export default {
     const returnMonitor = $userdata.get("modules.config.return_monitor");
     const allowSame = $userdata.get("modules.config.return_monitor_allow_same") === true;
     const isMediaActive = $appdata.get("modules.media.id_music") != null;
-    const { default: $popup } = await import("@/helpers/Popup");
 
     if (!enabled || (!isMediaActive && !forceOpen)) {
       $popup.closeReturnMonitor();
@@ -333,7 +329,6 @@ export default {
     $appdata.set("modules.media.minimized", false);
 
     // Fechar a projeção se estiver aberta
-    const { default: $popup } = await import("@/helpers/Popup");
     if ($appdata.get("popup_module") === "media") {
       await $popup.exit();
     } else {

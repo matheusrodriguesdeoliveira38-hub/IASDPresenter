@@ -1,7 +1,6 @@
 import $dev from "@/helpers/Dev";
 import $appdata from "@/helpers/AppData";
 import $media from "@/helpers/Media";
-import $history from "@/helpers/History";
 
 export default {
   open(id) {

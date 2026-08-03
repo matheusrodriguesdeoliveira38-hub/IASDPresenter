@@ -17,8 +17,13 @@
       class="w-100 h-100"
       style="object-fit: contain;"
       :src="filePath"
+      preload="auto"
+      autoplay
       muted
+      playsinline
+      disablepictureinpicture
       @canplay="onCanPlay"
+      @ended="onEnded"
       @error="onError"
     />
     <iframe
@@ -54,6 +59,11 @@ import { getYouTubeEmbedUrl, isYouTubeUrl, YOUTUBE_PLAYER_ORIGIN } from "@/helpe
 
 export default {
   name: "PopupExternalMediaPage",
+  data() {
+    return {
+      hasSyncedInitialTime: false,
+    };
+  },
   computed: {
     module_id() {
       return manifest.id;
@@ -115,22 +125,16 @@ export default {
   },
   watch: {
     requestAction(req) {
-      if (!this.isYouTube || !req) return;
+      if (!req) return;
       if (req.action === "seek") {
         const duration = this.$appdata.get("modules.external_media.config.duration") || 0;
-        if (duration) {
+        if (this.isYouTube && duration) {
           this.sendYouTubeCommand("seekTo", [(duration * req.value) / 100, true]);
+          return;
         }
-      }
-    },
-    currentTime(val) {
-      if (this.isYouTube) {
-        return;
-      }
-      const video = this.$refs.popupVideo;
-      if (video && !video.seeking) {
-        if (Math.abs(video.currentTime - val) > 0.5) {
-          video.currentTime = val;
+        const video = this.$refs.popupVideo;
+        if (video && duration) {
+          video.currentTime = (duration * req.value) / 100;
         }
       }
     },
@@ -161,6 +165,7 @@ export default {
       const video = this.$refs.popupVideo;
       if (video) {
         video.currentTime = this.currentTime || 0;
+        this.hasSyncedInitialTime = true;
         if (!this.isPaused) {
           video.play().catch((err) => {
             console.warn("Erro ao iniciar mídia no popup:", err);
@@ -186,13 +191,28 @@ export default {
       }), YOUTUBE_PLAYER_ORIGIN);
     },
     onCanPlay() {
+      if (this.hasSyncedInitialTime) {
+        this.playProjectedVideo();
+        return;
+      }
       const video = this.$refs.popupVideo;
       if (video && !this.isPaused) {
         video.currentTime = this.currentTime || 0;
+        this.hasSyncedInitialTime = true;
         video.play().catch((err) => {
           console.warn("Erro ao iniciar mídia no popup:", err);
         });
       }
+    },
+    playProjectedVideo() {
+      const video = this.$refs.popupVideo;
+      if (!video || this.isPaused) return;
+      video.play().catch((err) => {
+        console.warn("Erro ao iniciar midia no popup:", err);
+      });
+    },
+    onEnded() {
+      this.$appdata.set("modules.external_media.config.is_paused", true);
     },
     onError(event) {
       const el = event.target;

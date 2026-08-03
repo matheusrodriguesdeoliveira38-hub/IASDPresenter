@@ -228,43 +228,7 @@
             <h3 class="scriptural-reference-title" style="font-size: 1.3rem; color: var(--sidebar-text); font-weight: 600; line-height: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
               {{ scripturalReference(bible) }}
             </h3>
-            <div v-if="false" class="flex-grow-1 mr-4" style="min-width: 0;">
-              <v-text-field
-                v-model="verseSearchQuery"
-                placeholder="Pesquisar versículo"
-                variant="solo"
-                flat
-                bg-color="rgba(150, 150, 150, 0.1)"
-                style="border: 1px solid var(--border-color, rgba(0,0,0,0.05)); border-radius: 24px;"
-                density="compact"
-                hide-details
-                autofocus
-                clearable
-                rounded
-                @keydown.enter="applyVerseSearch"
-                @keydown.esc="showVerseSearch = false"
-              />
-            </div>
-            
             <div class="d-flex align-center ml-auto flex-shrink-0" style="gap: 8px;">
-              <v-btn
-                v-if="false"
-                variant="tonal"
-                size="small"
-                icon
-                :color="showVerseSearch ? 'primary' : 'default'"
-                @click="showVerseSearch = !showVerseSearch"
-              >
-                <v-icon>{{ showVerseSearch ? 'mdi-close' : 'mdi-magnify' }}</v-icon>
-                <v-tooltip
-                  activator="parent"
-                  location="top"
-                  open-delay="300"
-                  content-class="modern-glass-menu elevation-0 font-weight-medium text-white"
-                >
-                  {{ showVerseSearch ? 'Fechar pesquisa' : 'Pesquisar versículo' }}
-                </v-tooltip>
-              </v-btn>
               <v-btn
                 v-shortkey="['arrowleft']"
                 :disabled="!(select_bible?.verses && select_bible.verses.length > 0)"
@@ -504,11 +468,7 @@ export default {
       const query = String(this.verseSearchQuery || "").trim();
       if (!query || query.length < 1 || this.selectedSearchBook) return [];
 
-      const normalizedQuery = this.normalizeBibleSearchText(query);
-      const bookPart = normalizedQuery
-        .replace(/\s*\d.*$/, "")
-        .replace(/\s*:.*$/, "")
-        .trim();
+      const bookPart = this.extractBookSearchPart(query);
       const compactBookPart = bookPart.replace(/\s+/g, "");
       if (!bookPart) return [];
 
@@ -810,6 +770,30 @@ export default {
         .replace(/\s+/g, " ")
         .trim()
         .toLowerCase();
+    },
+    extractBookSearchPart(input) {
+      const normalizedQuery = this.normalizeBibleSearchText(input);
+      const compactQuery = normalizedQuery.replace(/\s+/g, "");
+      const knownBook = this.findBookInSearch(input);
+
+      if (knownBook?.book) {
+        const bookNames = [knownBook.book.name, knownBook.book.abbreviation]
+          .filter(Boolean)
+          .flatMap((name) => {
+            const normalizedName = this.normalizeBibleSearchText(name);
+            return [normalizedName, normalizedName.replace(/\s+/g, "")];
+          });
+
+        return bookNames.find((name) => (
+          normalizedQuery.startsWith(name) ||
+          compactQuery.startsWith(name.replace(/\s+/g, ""))
+        )) || normalizedQuery;
+      }
+
+      return normalizedQuery
+        .replace(/\s+\d.*$/, "")
+        .replace(/\s*:.*$/, "")
+        .trim();
     },
     findBookInSearch(input) {
       const normalizedInput = this.normalizeBibleSearchText(input);

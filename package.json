@@ -1,6 +1,6 @@
 {
   "name": "iasdpresenter",
-  "version": "1.7.16",
+  "version": "1.7.17",
   "private": true,
   "main": "electron/main.js",
   "scripts": {
@@ -12,7 +12,8 @@
     "version:bug": "npm version patch",
     "serve": "vite preview",
     "build": "vite build",
-    "lint": "eslint src --ext .vue,.js --fix",
+    "lint": "eslint src --ext .vue,.js",
+    "lint:fix": "eslint src --ext .vue,.js --fix",
     "dev": "vite",
     "host": "vite --host",
     "files": "node node/server.js",

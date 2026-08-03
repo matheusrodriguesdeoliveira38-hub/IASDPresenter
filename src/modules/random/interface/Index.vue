@@ -595,7 +595,7 @@ export default {
     isDrawing(val) {
       this.$appdata.set(`modules.${this.module_id}.data.isDrawing`, val);
     },
-    drawMode(val) {
+    drawMode() {
       this.resetAll();
     },
   },

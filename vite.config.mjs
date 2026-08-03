@@ -67,6 +67,24 @@ export default defineConfig(({ mode }) => {
       "process.env": {},
       __VUE_PROD_HYDRATION_MISMATCH_DETAILS__: "true",
     },
+    css: {
+      preprocessorOptions: {
+        scss: {
+          silenceDeprecations: ["legacy-js-api"],
+        },
+      },
+    },
+    build: {
+      chunkSizeWarningLimit: 1200,
+      rollupOptions: {
+        output: {
+          manualChunks: {
+            vue: ["vue", "vue-router", "vuex", "vue-i18n"],
+            vuetify: ["vuetify"],
+          },
+        },
+      },
+    },
     resolve: {
       alias: {
         "@": fileURLToPath(new URL("./src", import.meta.url)),

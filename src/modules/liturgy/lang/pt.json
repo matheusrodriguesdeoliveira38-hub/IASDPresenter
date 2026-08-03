@@ -53,6 +53,12 @@
     "delete": "Remover",
     "duplicate": "Duplicar",
     "clear_all": "Limpar Tudo",
+    "import": "Importar",
+    "export": "Exportar",
+    "import_all": "Importar tudo",
+    "export_all": "Exportar tudo",
+    "import_liturgy": "Importar Liturgia",
+    "export_liturgy": "Exportar Liturgia",
     "project": "Projetar",
     "play": "Reproduzir",
     "open": "Abrir",
@@ -61,12 +67,20 @@
   "messages": {
     "confirm_delete": "Deseja remover este item da liturgia?",
     "confirm_clear": "Deseja limpar todos os itens desta liturgia?",
+    "confirm_import": "Importar este arquivo substituirÃ¡ todas as liturgias salvas. Deseja continuar?",
     "item_added": "Item adicionado com sucesso!",
-    "liturgy_saved": "Liturgia salva com sucesso!"
+    "liturgy_saved": "Liturgia salva com sucesso!",
+    "import_success": "Liturgia importada com sucesso!",
+    "export_success": "Liturgia exportada com sucesso!",
+    "import_error": "NÃ£o foi possÃ­vel importar a liturgia.",
+    "export_error": "NÃ£o foi possÃ­vel exportar a liturgia.",
+    "import_invalid": "O arquivo selecionado nÃ£o possui uma liturgia vÃ¡lida.",
+    "desktop_only": "ImportaÃ§Ã£o e exportaÃ§Ã£o estÃ£o disponÃ­veis apenas na versÃ£o desktop."
   },
   "custom_liturgy": {
     "title": "Liturgias Avulsas",
     "new": "Nova Liturgia Avulsa",
+    "imported_name": "Liturgia Importada",
     "name_placeholder": "Nome da liturgia (ex: Culto Jovem 12/07)"
   }
 }

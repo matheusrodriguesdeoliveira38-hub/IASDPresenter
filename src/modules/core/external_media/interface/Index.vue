@@ -16,6 +16,21 @@
       @canplay="onCanPlay"
     />
 
+    <audio
+      v-if="isVideo && filePath && isProjectionActive"
+      ref="videoAudioEl"
+      :src="filePath"
+      preload="auto"
+      style="display: none;"
+      @loadedmetadata="onLoadedMetadata"
+      @timeupdate="onTimeUpdate"
+      @play="onPlay"
+      @pause="onPause"
+      @ended="onEnded"
+      @error="onMediaError"
+      @canplay="onCanPlay"
+    />
+
     <Window
       v-model="module.show"
       :title="mediaTitle"
@@ -107,12 +122,14 @@
               />
 
               <video
-                v-else-if="isVideo && filePath"
+                v-else-if="isVideo && filePath && !isProjectionActive"
                 ref="videoEl"
                 class="w-100 h-100"
                 style="object-fit: contain;"
                 :src="filePath"
                 preload="auto"
+                playsinline
+                disablepictureinpicture
                 @loadedmetadata="onLoadedMetadata"
                 @timeupdate="onTimeUpdate"
                 @play="onPlay"
@@ -475,6 +492,8 @@ export default {
       fullscreenTimerActive: true,
       mediaReady: false,
       userPaused: false,
+      isClosing: false,
+      lastSharedPlaybackAt: 0,
     };
   },
   computed: {
@@ -483,6 +502,9 @@ export default {
     },
     autoProject() {
       return this.$userdata.get("modules.config.media_auto_project_video") !== false;
+    },
+    isProjectionActive() {
+      return this.$appdata.get("popup_module") === "external_media";
     },
     module_id() {
       return manifest.id;
@@ -636,11 +658,20 @@ export default {
     filePath(newVal) {
       this.mediaReady = false;
       this.userPaused = false;
+      this.isClosing = false;
+      this.lastSharedPlaybackAt = 0;
       if (newVal) {
         this.$nextTick(() => {
           this.initPlayback();
         });
       }
+    },
+    isProjectionActive() {
+      if (!this.isVideo || !this.filePath) return;
+      this.mediaReady = false;
+      this.$nextTick(() => {
+        this.initPlayback();
+      });
     },
   },
   mounted() {
@@ -674,7 +705,7 @@ export default {
       if (this.isYouTube) return null;
       if (!this.isPlayableMedia) return null;
       if (this.isVideo) {
-        return this.$refs.videoEl;
+        return this.isProjectionActive ? this.$refs.videoAudioEl : this.$refs.videoEl;
       }
       return this.$refs.audioEl;
     },
@@ -710,6 +741,13 @@ export default {
         return;
       }
       el.volume = this.volume / 100;
+      if (this.currentTime > 0 && Number.isFinite(this.currentTime)) {
+        try {
+          el.currentTime = this.currentTime;
+        } catch (error) {
+          // Some media elements reject seeking before metadata is ready.
+        }
+      }
       
       this.projectVisualMediaIfNeeded();
       
@@ -882,8 +920,7 @@ export default {
         if (this.duration > 0) {
           this.progress = (this.currentTime / this.duration) * 100;
         }
-        this.$appdata.set("modules.external_media.config.current_time", this.currentTime);
-        this.$appdata.set("modules.external_media.config.progress", this.progress);
+        this.sharePlaybackPosition();
       }
       if (typeof info.playerState === "number") {
         if (info.playerState === 1) this.onPlay();
@@ -900,9 +937,12 @@ export default {
         const el = this.getMediaEl();
         if (el) {
           el.volume = this.volume / 100;
+          if (this.currentTime > 0 && Math.abs(el.currentTime - this.currentTime) > 1) {
+            el.currentTime = this.currentTime;
+          }
           if (!this.userPaused) {
             el.play().catch((err) => {
-              console.warn("Erro ao iniciar mídia externa:", err);
+              console.warn("Erro ao iniciar midia externa:", err);
             });
           }
         }
@@ -931,6 +971,13 @@ export default {
       if (this.duration > 0) {
         this.progress = (el.currentTime / this.duration) * 100;
       }
+      this.sharePlaybackPosition();
+    },
+
+    sharePlaybackPosition(force = false) {
+      const now = Date.now();
+      if (!force && now - this.lastSharedPlaybackAt < 1000) return;
+      this.lastSharedPlaybackAt = now;
       this.$appdata.set("modules.external_media.config.current_time", this.currentTime);
       this.$appdata.set("modules.external_media.config.progress", this.progress);
     },
@@ -940,15 +987,18 @@ export default {
       if (el) {
         this.duration = el.duration;
         this.$appdata.set("modules.external_media.config.duration", this.duration);
+        this.sharePlaybackPosition(true);
       }
     },
 
     async onEnded() {
+      if (this.isClosing) return;
       this.isPaused = true;
       this.progress = 0;
       this.currentTime = 0;
       this.$appdata.set("modules.external_media.config.is_paused", true);
       await this.$automation.restore("external_media_ended");
+      this.closeMedia(true, { restore: false });
     },
 
     onPlay() {
@@ -964,9 +1014,19 @@ export default {
     // --- Controls ---
 
     seekFromProgress() {
+      const requestAction = {
+        action: "seek",
+        value: this.progress,
+        time: Date.now(),
+      };
+
       if (this.isYouTube) {
         if (!this.duration) return;
-        this.sendYouTubeCommand("seekTo", [(this.duration * this.progress) / 100, true]);
+        const time = (this.duration * this.progress) / 100;
+        this.sendYouTubeCommand("seekTo", [time, true]);
+        this.currentTime = time;
+        this.sharePlaybackPosition(true);
+        this.$appdata.set("modules.external_media.config.request_action", requestAction);
         return;
       }
 
@@ -974,6 +1034,9 @@ export default {
       if (!el || !this.duration) return;
       const time = (this.duration * this.progress) / 100;
       el.currentTime = time;
+      this.currentTime = time;
+      this.sharePlaybackPosition(true);
+      this.$appdata.set("modules.external_media.config.request_action", requestAction);
     },
 
     onVolumeChange() {
@@ -1011,7 +1074,7 @@ export default {
       this.$appdata.set("modules.external_media.minimized", true);
     },
 
-    closeMedia(force = false) {
+    closeMedia(force = false, options = {}) {
       if (!force) {
         this.$alert.yesno(
           { text: this.t("alerts.close"), translate: false },
@@ -1023,8 +1086,11 @@ export default {
         );
         return;
       }
+      this.isClosing = true;
       this.stopPlayback();
-      this.$automation.restore("external_media_closed");
+      if (options.restore !== false) {
+        this.$automation.restore("external_media_closed");
+      }
       this.isFullscreen = false;
       this.fullscreenControlsVisible = false;
       clearTimeout(this.fullscreenTimer);
@@ -1046,11 +1112,9 @@ export default {
       });
 
       // Close projection if open
-      import("@/helpers/Popup").then(({ default: $popup }) => {
-        if (this.$appdata.get("popup_module") === "external_media") {
-          $popup.exit();
-        }
-      });
+      if (this.$appdata.get("popup_module") === "external_media") {
+        this.$popup.exit();
+      }
     },
 
     formatTime(seconds) {

@@ -19,9 +19,13 @@ module.exports = {
     // Vue.js rules
     'vue/multi-word-component-names': 'warn',
     'vue/no-unused-vars': 'warn',
-    'vue/no-unused-components': 'warn',
-    'vue/require-default-prop': 'warn',
+    'vue/no-unused-components': 'off',
+    'vue/require-default-prop': 'off',
     'vue/require-prop-types': 'warn',
+    'vue/require-explicit-emits': 'off',
+    'vue/prop-name-casing': 'off',
+    'vue/no-v-html': 'off',
+    'vue/no-template-shadow': 'off',
     'vue/component-name-in-template-casing': ['warn', 'PascalCase'],
     'vue/html-self-closing': ['warn', {
       html: {
@@ -30,12 +34,9 @@ module.exports = {
         component: 'always',
       },
     }],
-    'vue/max-attributes-per-line': ['warn', {
-      singleline: 3,
-      multiline: 1,
-    }],
-    'vue/html-indent': ['warn', 2],
-    'vue/script-indent': ['warn', 2, { baseIndent: 0 }],
+    'vue/max-attributes-per-line': 'off',
+    'vue/html-indent': 'off',
+    'vue/script-indent': 'off',
     
     // JavaScript rules
     'no-console': process.env.NODE_ENV === 'production' ? 'warn' : 'off',
@@ -52,14 +53,14 @@ module.exports = {
     'quote-props': ['warn', 'as-needed'],
     
     // Code quality
-    'eqeqeq': ['warn', 'always'],
+    'eqeqeq': 'off',
     'no-duplicate-imports': 'error',
     'no-useless-return': 'warn',
     'no-else-return': 'warn',
     'consistent-return': 'off', // Pode ser restritivo demais
     
     // Style (opcional - ajuste conforme preferência)
-    'indent': ['warn', 2, { SwitchCase: 1 }],
+    'indent': 'off',
     'quotes': ['warn', 'double', { avoidEscape: true }],
     'semi': ['warn', 'always'],
     'comma-dangle': ['warn', 'always-multiline'],

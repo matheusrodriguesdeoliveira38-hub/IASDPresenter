@@ -12,6 +12,46 @@
             {{ t('title') }}
           </h2>
         </div>
+        <div class="d-flex align-center flex-shrink-0" style="gap: 8px;">
+          <v-btn
+            icon
+            variant="tonal"
+            color="primary"
+            size="small"
+            @click="importLiturgy"
+          >
+            <v-icon size="20">
+              mdi-import
+            </v-icon>
+            <v-tooltip
+              activator="parent"
+              location="bottom"
+              open-delay="300"
+              content-class="modern-glass-menu elevation-0 font-weight-medium text-white"
+            >
+              {{ t('actions.import_all') }}
+            </v-tooltip>
+          </v-btn>
+          <v-btn
+            icon
+            variant="tonal"
+            color="primary"
+            size="small"
+            @click="exportLiturgy"
+          >
+            <v-icon size="20">
+              mdi-export
+            </v-icon>
+            <v-tooltip
+              activator="parent"
+              location="bottom"
+              open-delay="300"
+              content-class="modern-glass-menu elevation-0 font-weight-medium text-white"
+            >
+              {{ t('actions.export_all') }}
+            </v-tooltip>
+          </v-btn>
+        </div>
       </div>
 
       <!-- Segmented Control for Days -->
@@ -964,6 +1004,160 @@ export default {
         return this.customLiturgies.flatMap(l => l.items);
       }
       return this.liturgies[day] || [];
+    },
+
+    // ====== IMPORT/EXPORT ======
+    getDefaultLiturgies() {
+      return {
+        sunday: [],
+        monday: [],
+        tuesday: [],
+        wednesday: [],
+        thursday: [],
+        friday: [],
+        saturday: [],
+      };
+    },
+    getDefaultDayNotes() {
+      return {
+        sunday: "",
+        monday: "",
+        tuesday: "",
+        wednesday: "",
+        thursday: "",
+        friday: "",
+        saturday: "",
+      };
+    },
+    cloneData(value) {
+      return JSON.parse(JSON.stringify(value));
+    },
+    createExportPayload() {
+      return {
+        format: "iasdpresenter.liturgy",
+        version: 1,
+        exportedAt: new Date().toISOString(),
+        liturgies: this.cloneData(this.liturgies),
+        dayNotes: this.cloneData(this.dayNotes),
+        customLiturgies: this.cloneData(this.customLiturgies),
+      };
+    },
+    normalizeImportedLiturgies(data) {
+      if (!data || typeof data !== "object") return null;
+
+      const source = data.format === "iasdpresenter.liturgy" ? data : {
+        liturgies: data.liturgies,
+        dayNotes: data.dayNotes,
+        customLiturgies: data.customLiturgies,
+      };
+
+      const dayKeys = Object.keys(this.getDefaultLiturgies());
+      const importedLiturgies = source.liturgies && typeof source.liturgies === "object" ? source.liturgies : {};
+      const importedNotes = source.dayNotes && typeof source.dayNotes === "object" ? source.dayNotes : {};
+      const liturgies = this.getDefaultLiturgies();
+      const dayNotes = this.getDefaultDayNotes();
+
+      dayKeys.forEach(day => {
+        if (Array.isArray(importedLiturgies[day])) {
+          liturgies[day] = importedLiturgies[day];
+        }
+        if (typeof importedNotes[day] === "string") {
+          dayNotes[day] = importedNotes[day];
+        }
+      });
+
+      const customLiturgies = Array.isArray(source.customLiturgies)
+        ? source.customLiturgies
+          .filter(liturgy => liturgy && typeof liturgy === "object")
+          .map(liturgy => ({
+            name: String(liturgy.name || this.t("custom_liturgy.imported_name")),
+            items: Array.isArray(liturgy.items) ? liturgy.items : [],
+            notes: typeof liturgy.notes === "string" ? liturgy.notes : "",
+          }))
+        : [];
+
+      const hasFixedItems = dayKeys.some(day => liturgies[day].length > 0 || dayNotes[day]);
+      if (!hasFixedItems && customLiturgies.length === 0) return null;
+
+      return { liturgies, dayNotes, customLiturgies };
+    },
+    async exportLiturgy() {
+      if (!window.electronAPI?.saveFileDialog || !window.electronAPI?.writeTextFile) {
+        this.$alert.error({ text: this.t("messages.desktop_only"), translate: false });
+        return;
+      }
+
+      try {
+        const filePath = await window.electronAPI.saveFileDialog({
+          title: this.t("actions.export_liturgy"),
+          defaultPath: "liturgia-iasdpresenter.json",
+          filters: [
+            { name: "Liturgia IASDPresenter", extensions: ["json"] },
+          ],
+        });
+        if (!filePath) return;
+
+        const result = await window.electronAPI.writeTextFile(
+          filePath,
+          `${JSON.stringify(this.createExportPayload(), null, 2)}\n`,
+        );
+        if (!result?.ok) {
+          this.$alert.error({ text: result?.error || this.t("messages.export_error"), translate: false });
+          return;
+        }
+
+        this.$alert.success({ text: this.t("messages.export_success"), translate: false });
+      } catch (error) {
+        this.$alert.error({ text: this.t("messages.export_error"), error, translate: false });
+      }
+    },
+    async importLiturgy() {
+      if (!window.electronAPI?.openFileDialog || !window.electronAPI?.readTextFile) {
+        this.$alert.error({ text: this.t("messages.desktop_only"), translate: false });
+        return;
+      }
+
+      try {
+        const filePath = await window.electronAPI.openFileDialog({
+          title: this.t("actions.import_liturgy"),
+          filters: [
+            { name: "Liturgia IASDPresenter", extensions: ["json"] },
+            { name: "Todos", extensions: ["*"] },
+          ],
+        });
+        if (!filePath) return;
+
+        const file = await window.electronAPI.readTextFile(filePath);
+        if (!file?.ok) {
+          this.$alert.error({ text: file?.error || this.t("messages.import_error"), translate: false });
+          return;
+        }
+
+        const imported = this.normalizeImportedLiturgies(JSON.parse(file.content));
+        if (!imported) {
+          this.$alert.error({ text: this.t("messages.import_invalid"), translate: false });
+          return;
+        }
+
+        this.$alert.yesno(
+          { text: this.t("messages.confirm_import"), translate: false },
+          (resp) => {
+            if (resp !== "yes") return;
+            this.liturgies = this.cloneData(imported.liturgies);
+            this.dayNotes = this.cloneData(imported.dayNotes);
+            this.customLiturgies = this.cloneData(imported.customLiturgies);
+            this.selectedItemIndex = null;
+            if (this.selectedDay === "custom" && this.customLiturgies.length === 0) {
+              this.setTodayAsDefault();
+            }
+            this.selectedCustomIndex = Math.min(this.selectedCustomIndex, Math.max(this.customLiturgies.length - 1, 0));
+            this.saveLiturgy();
+            this.$alert.success({ text: this.t("messages.import_success"), translate: false });
+          },
+        );
+      } catch (error) {
+        this.$alert.error({ text: this.t("messages.import_error"), error, translate: false });
+      }
     },
 
     // ====== ITEM TYPE HELPERS ======

@@ -115,9 +115,6 @@ import manifest from "../manifest.json";
 
 // ---- Obrigatório para tradução -------
 const moduleContainer = ref(null);
-const t = (key) => {
-  return moduleContainer.value?.t(key) || key;
-};
 // ---------------------------------------
 
 const tab = ref(1);

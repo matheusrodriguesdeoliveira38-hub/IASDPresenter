@@ -12,6 +12,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   saveCustomMusic: (filePath) => ipcRenderer.invoke('save-custom-music', filePath),
   
   openFileDialog: (options) => ipcRenderer.invoke('open-file-dialog', options),
+  saveFileDialog: (options) => ipcRenderer.invoke('save-file-dialog', options),
+  readTextFile: (filePath) => ipcRenderer.invoke('read-text-file', filePath),
+  writeTextFile: (filePath, content) => ipcRenderer.invoke('write-text-file', filePath, content),
   openExternal: (url) => ipcRenderer.invoke('open-external', url),
   openPath: (filePath) => ipcRenderer.invoke('open-path', filePath),
   preparePresentationFile: (filePath) => ipcRenderer.invoke('prepare-presentation-file', filePath),

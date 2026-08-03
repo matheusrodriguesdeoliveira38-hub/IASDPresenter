@@ -56,17 +56,31 @@
     "project": "Proyectar",
     "play": "Reproducir",
     "open": "Abrir",
-    "new_liturgy": "Nueva Liturgia"
+    "new_liturgy": "Nueva Liturgia",
+    "import": "Importar",
+    "export": "Exportar",
+    "import_all": "Importar todo",
+    "export_all": "Exportar todo",
+    "import_liturgy": "Importar Liturgia",
+    "export_liturgy": "Exportar Liturgia"
   },
   "messages": {
     "confirm_delete": "¿Desea eliminar este elemento de la liturgia?",
     "confirm_clear": "¿Desea limpiar todos los elementos de esta liturgia?",
     "item_added": "¡Elemento agregado con éxito!",
-    "liturgy_saved": "¡Liturgia guardada con éxito!"
+    "liturgy_saved": "¡Liturgia guardada con éxito!",
+    "confirm_import": "Importar este archivo reemplazara todas las liturgias guardadas. Desea continuar?",
+    "import_success": "Liturgia importada con exito!",
+    "export_success": "Liturgia exportada con exito!",
+    "import_error": "No se pudo importar la liturgia.",
+    "export_error": "No se pudo exportar la liturgia.",
+    "import_invalid": "El archivo seleccionado no contiene una liturgia valida.",
+    "desktop_only": "La importacion y exportacion solo estan disponibles en la version de escritorio."
   },
   "custom_liturgy": {
     "title": "Liturgias Personalizadas",
     "new": "Nueva Liturgia Personalizada",
-    "name_placeholder": "Nombre de la liturgia (ej: Culto Joven 12/07)"
+    "name_placeholder": "Nombre de la liturgia (ej: Culto Joven 12/07)",
+    "imported_name": "Liturgia Importada"
   }
 }

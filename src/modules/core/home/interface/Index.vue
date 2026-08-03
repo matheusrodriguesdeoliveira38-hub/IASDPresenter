@@ -263,7 +263,7 @@ export default {
   },
   watch: {
     displayCollections: {
-      handler(newVal) {
+      handler() {
         this.fetchCollectionInfo();
       },
       deep: true,
