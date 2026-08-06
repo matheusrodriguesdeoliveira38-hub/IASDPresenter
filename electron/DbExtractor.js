@@ -41,6 +41,9 @@ class DbExtractor {
       progressCallback({ text: 'Extraindo álbuns...', progress: 20 });
       this.extractAlbumsAndMusics(db, progressCallback);
 
+      progressCallback({ text: 'Criando indice de musicas...', progress: 55 });
+      this.extractMusicIndex(db);
+
       progressCallback({ text: 'Extraindo hinários...', progress: 60 });
       this.extractHymnals(db);
 
@@ -215,6 +218,82 @@ class DbExtractor {
         progressCallback({ text: 'Extraindo álbuns...', progress: 20 + Math.floor((processedAlbums / totalAlbums) * 40) });
       }
     }
+  }
+
+  extractMusicIndex(db) {
+    const rows = db.prepare(`
+      SELECT DISTINCT
+        m.id_music,
+        m.name,
+        fm.duration as duration,
+        fm.file_name as music_file,
+        fim.file_name as instrumental_file
+      FROM musics m
+      JOIN albums_musics am ON am.id_music = m.id_music
+      JOIN albums a ON a.id_album = am.id_album
+      LEFT JOIN files fm ON m.id_file_music = fm.id_file
+      LEFT JOIN files fim ON m.id_file_instrumental_music = fim.id_file
+      WHERE a.id_language = 'pt'
+      ORDER BY m.name ASC
+    `).all();
+
+    const albumRows = db.prepare(`
+      SELECT
+        am.id_music,
+        am.id_album,
+        am.track,
+        a.name,
+        CASE
+          WHEN am.id_album IN (712, 629) THEN 'hymnal'
+          ELSE 'album'
+        END as type
+      FROM albums_musics am
+      JOIN albums a ON am.id_album = a.id_album
+      WHERE a.id_language = 'pt'
+      ORDER BY a.name ASC, am.track ASC
+    `).all();
+
+    const lyricsRows = db.prepare(`
+      SELECT id_music, lyric, aux_lyric
+      FROM lyrics
+      ORDER BY \`order\` ASC
+    `).all();
+
+    const albumsByMusic = new Map();
+    for (const album of albumRows) {
+      if (!albumsByMusic.has(album.id_music)) albumsByMusic.set(album.id_music, []);
+      albumsByMusic.get(album.id_music).push({
+        id_album: album.id_album,
+        name: album.name,
+        type: album.type,
+        pivot: {
+          track: album.track
+        }
+      });
+    }
+
+    const lyricsByMusic = new Map();
+    for (const lyric of lyricsRows) {
+      const text = [lyric.lyric, lyric.aux_lyric].filter(Boolean).join(' ');
+      if (!lyricsByMusic.has(lyric.id_music)) lyricsByMusic.set(lyric.id_music, []);
+      if (text.trim()) lyricsByMusic.get(lyric.id_music).push(text);
+    }
+
+    const musicIndex = rows.map(row => {
+      const albums = albumsByMusic.get(row.id_music) || [];
+      return {
+        id_music: row.id_music,
+        name: row.name,
+        duration: row.duration,
+        has_music: row.music_file ? 1 : 0,
+        has_instrumental_music: row.instrumental_file ? 1 : 0,
+        albums,
+        albums_names: albums.map(album => album.name).join(' '),
+        lyric: (lyricsByMusic.get(row.id_music) || []).join(' ')
+      };
+    });
+
+    this.saveJson('pt_musics', musicIndex);
   }
 
   extractHymnals(db) {

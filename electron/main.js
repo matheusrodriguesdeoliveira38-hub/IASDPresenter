@@ -2967,6 +2967,18 @@ function setupYouTubeEmbedHeaders() {
   });
 }
 
+async function clearDesktopWebAppCaches() {
+  if (isDev) return;
+
+  try {
+    await session.defaultSession.clearStorageData({
+      storages: ['serviceworkers', 'cachestorage'],
+    });
+  } catch (error) {
+    console.warn('Erro ao limpar cache/service worker do app:', error.message);
+  }
+}
+
 async function createWindow() {
   const mainWindow = new BrowserWindow({
     width: 1300,
@@ -3304,6 +3316,7 @@ app.whenReady().then(async () => {
 
   startRemoteControlServer();
   setupYouTubeEmbedHeaders();
+  await clearDesktopWebAppCaches();
   await createWindow();
 
   const { screen } = require('electron');

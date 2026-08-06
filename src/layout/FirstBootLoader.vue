@@ -178,6 +178,25 @@ export default {
         await window.electronAPI.downloadMedia(fullUrl, "covers", filename);
       }
     },
+    async finishFirstBootSync() {
+      const saved = await window.electronAPI.saveLocalDb("system_first_boot_complete", { complete: true });
+      const hasRequiredData = window.electronAPI.hasLocalDbFiles
+        ? await window.electronAPI.hasLocalDbFiles(REQUIRED_LOCAL_DB_FILES)
+        : true;
+
+      if (!saved || !hasRequiredData) {
+        throw new Error("Sincronizacao concluida, mas os dados locais obrigatorios nao foram confirmados.");
+      }
+
+      this.progress = 100;
+      this.statusText = "Sincronizacao Concluida!";
+
+      setTimeout(() => {
+        this.isOpen = false;
+        this.$emit("boot-complete");
+        window.location.reload();
+      }, 1000);
+    },
     async runFirstBootSync() {
       try {
         if (window.electronAPI) {
@@ -199,15 +218,7 @@ export default {
             this.progress = 0;
             const bundledResult = await window.electronAPI.extractBundledDatabase();
             if (bundledResult && bundledResult.ok) {
-              await window.electronAPI.saveLocalDb("system_first_boot_complete", { complete: true });
-              this.progress = 100;
-              this.statusText = "Sincronização Concluída!";
-
-              setTimeout(() => {
-                this.isOpen = false;
-                this.$emit("boot-complete");
-                window.location.reload();
-              }, 1000);
+              await this.finishFirstBootSync();
               return;
             }
           }
@@ -231,17 +242,7 @@ export default {
           
           const extractResult = await window.electronAPI.extractLocalDb();
           if (extractResult === true || (extractResult && extractResult.ok)) {
-            this.progress = 100;
-            await window.electronAPI.saveLocalDb("system_first_boot_complete", { complete: true });
-            this.progress = 100;
-            this.statusText = "Sincronização Concluída!";
-            
-            setTimeout(() => {
-              this.isOpen = false;
-              this.$emit("boot-complete");
-              // Auto-reload the app so all pre-loaded modules (like sync) detect the new images
-              window.location.reload();
-            }, 1000);
+            await this.finishFirstBootSync();
             return;
           }
 

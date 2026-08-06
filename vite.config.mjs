@@ -8,6 +8,7 @@ import { fileURLToPath, URL } from "node:url";
 export default defineConfig(({ mode }) => {
   // Load app-level env vars to node-level env vars.
   const env = loadEnv(mode, process.cwd(), '');
+  const enablePwa = env.VITE_ENABLE_PWA === "true";
 
   return {
     base: env.VITE_BASE_URL ?? "/",
@@ -17,7 +18,7 @@ export default defineConfig(({ mode }) => {
       vuetify({
         autoImport: true,
       }),
-      VitePWA({
+      enablePwa && VitePWA({
         registerType: "autoUpdate",
         devOptions: {
           enabled: true,
@@ -62,7 +63,7 @@ export default defineConfig(({ mode }) => {
           ],
         },
       }),
-    ],
+    ].filter(Boolean),
     define: {
       "process.env": {},
       __VUE_PROD_HYDRATION_MISMATCH_DETAILS__: "true",
