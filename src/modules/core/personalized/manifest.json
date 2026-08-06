@@ -1,0 +1,14 @@
+{
+  "id": "personalized",
+  "name": "Personalizadas",
+  "version": "1.0.0",
+  "description": "Atalho para as musicas criadas no criador de musicas.",
+  "author": "Codex",
+  "category": "musics",
+  "icon": "mdi-playlist-music",
+  "minAppVersion": "1.0.0",
+  "dependencies": [
+    "album"
+  ],
+  "permissions": []
+}

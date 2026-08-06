@@ -39,6 +39,103 @@
   }
 }
 
+.home-launcher-layout {
+  .hero-search-header {
+    gap: 28px;
+    justify-content: center;
+  }
+}
+
+.home-launcher-content {
+  width: min(920px, 100%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 34px;
+  animation: fadeIn 0.45s ease;
+}
+
+.launcher-inline-search {
+  width: min(560px, 100%);
+  max-width: 560px;
+}
+
+.home-launcher-brand {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 18px;
+  text-align: center;
+
+  img {
+    width: 76px;
+    height: 76px;
+  }
+
+  h1 {
+    margin: 0;
+    color: var(--sidebar-text);
+    font-size: 2.25rem;
+    font-weight: 700;
+    line-height: 1.15;
+  }
+}
+
+.home-launcher-grid {
+  width: 100%;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
+  gap: 16px;
+  justify-items: center;
+}
+
+.home-launcher-button {
+  width: 132px;
+  aspect-ratio: 1 / 1;
+  border: 1px solid var(--border-color);
+  border-radius: 18px;
+  background: var(--card-bg);
+  color: var(--sidebar-text);
+  box-shadow: var(--shadow);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 14px;
+  cursor: pointer;
+  transition: transform 0.2s ease, background 0.2s ease, color 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+
+  .home-launcher-icon {
+    color: var(--accent-blue);
+    transition: color 0.2s ease, transform 0.2s ease;
+  }
+
+  span {
+    max-width: 100%;
+    font-size: 13px;
+    font-weight: 700;
+    line-height: 1.2;
+    text-align: center;
+    overflow-wrap: anywhere;
+  }
+
+  &:hover,
+  &:focus-visible {
+    background: linear-gradient(135deg, var(--accent-blue) 0%, var(--accent-blue-dark) 100%);
+    border-color: transparent;
+    color: #fff;
+    box-shadow: 0 14px 32px rgba(var(--accent-blue-rgb), 0.24);
+    transform: translateY(-3px);
+    outline: none;
+
+    .home-launcher-icon {
+      color: #fff;
+      transform: scale(1.04);
+    }
+  }
+}
+
 .content-main {
   padding: 20px 32px 32px 32px;
   width: 100%;
@@ -309,6 +406,38 @@
 }
 
 @media (max-width: 768px) {  
+  .home-launcher-layout {
+    .hero-search-header {
+      gap: 22px;
+      padding: 24px 16px !important;
+    }
+  }
+
+  .home-launcher-brand {
+    img {
+      width: 64px;
+      height: 64px;
+    }
+
+    h1 {
+      font-size: 1.8rem;
+    }
+  }
+
+  .home-launcher-grid {
+    grid-template-columns: repeat(2, minmax(118px, 1fr));
+    gap: 12px;
+  }
+
+  .home-launcher-button {
+    width: min(132px, 100%);
+    border-radius: 16px;
+
+    span {
+      font-size: 12px;
+    }
+  }
+
   .search-header {
     padding: 12px 16px 6px 16px;
     
@@ -342,5 +471,3 @@
     height: calc(100vh - 50px);
   }
 }
-
-

@@ -167,9 +167,8 @@
 
                     <v-divider class="mb-8" style="opacity: 0.1;" />
 
-                    <!-- LAYOUT DA TELA INICIAL -->
-                    <div class="d-flex align-center justify-space-between">
-                      <div class="d-flex align-center">
+                    <div>
+                      <div class="d-flex align-center mb-4">
                         <v-icon color="primary" class="mr-3" size="24">
                           mdi-view-dashboard
                         </v-icon>
@@ -178,7 +177,48 @@
                             {{ t('home_layout') }}
                           </h3>
                           <div class="text-caption" style="color: var(--sidebar-text-secondary);">
-                            Ativar modo histórico (exibe itens recentes)
+                            {{ t('home_layout_desc') }}
+                          </div>
+                        </div>
+                      </div>
+
+                      <v-btn-toggle
+                        v-model="home_layout"
+                        color="primary"
+                        variant="tonal"
+                        mandatory
+                        class="rounded-xl w-100 d-flex"
+                        style="min-height: 48px; background: var(--card-bg); box-shadow: inset 0 0 0 1px var(--border-color);"
+                      >
+                        <v-btn value="classic" class="flex-grow-1 text-none font-weight-bold">
+                          <v-icon start size="20">
+                            mdi-magnify
+                          </v-icon>
+                          {{ t('home_layout_classic') }}
+                        </v-btn>
+                        <v-btn value="launcher" class="flex-grow-1 text-none font-weight-bold">
+                          <v-icon start size="20">
+                            mdi-apps
+                          </v-icon>
+                          {{ t('home_layout_launcher') }}
+                        </v-btn>
+                      </v-btn-toggle>
+                    </div>
+
+                    <v-divider class="my-8" style="opacity: 0.1;" />
+
+                    <!-- HISTORICO DA TELA INICIAL -->
+                    <div class="d-flex align-center justify-space-between">
+                      <div class="d-flex align-center">
+                        <v-icon color="primary" class="mr-3" size="24">
+                          mdi-history
+                        </v-icon>
+                        <div>
+                          <h3 class="font-weight-bold" style="color: var(--sidebar-text); font-size: 1.1rem; line-height: 1.2;">
+                            {{ t('home_history') }}
+                          </h3>
+                          <div class="text-caption" style="color: var(--sidebar-text-secondary);">
+                            {{ t('home_history_desc') }}
                           </div>
                         </div>
                       </div>
@@ -1713,6 +1753,7 @@ export default {
     tab: 1,
     language: "pt",
     accent_color: "#0097d7",
+    home_layout: "classic",
     show_home_history: true,
     hardware_accel: true,
     light_mode: false,
@@ -1874,6 +1915,9 @@ export default {
     show_home_history(val) {
       this.$userdata.set("show_home_history", val);
     },
+    home_layout(val) {
+      this.$userdata.set("modules.config.home_layout", val || "classic");
+    },
     light_mode(val) {
       this.$userdata.set("modules.config.light_mode", val);
       this.applyLightModeRuntimeEffects();
@@ -2033,6 +2077,11 @@ export default {
     const saved_home_history = this.$userdata.get("show_home_history");
     if (saved_home_history !== undefined && saved_home_history !== null) {
       this.$data.show_home_history = saved_home_history;
+    }
+
+    const saved_home_layout = this.$userdata.get("modules.config.home_layout");
+    if (saved_home_layout) {
+      this.home_layout = saved_home_layout;
     }
 
     let savedSlideMonitor = this.$userdata.get("modules.config.slide_monitor");

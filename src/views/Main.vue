@@ -1,9 +1,9 @@
 <template>
-  <AppSidebar v-model="sidebarOpen" />
+  <AppSidebar v-if="!isLauncherLayout" v-model="sidebarOpen" />
 
   <AppAlert />
 
-  <div class="main-container" :class="{ 'sidebar-open': sidebarOpen }" @toggle-sidebar="toggleSidebar">
+  <div class="main-container" :class="{ 'sidebar-open': sidebarOpen, 'launcher-shell': isLauncherLayout }" @toggle-sidebar="toggleSidebar">
     <v-main class="bg-main">
       <AppModules />
       
@@ -240,6 +240,9 @@ export default {
     slide() {
       return this.$media.slide();
     },
+    isLauncherLayout() {
+      return this.$userdata.get("modules.config.home_layout") === "launcher";
+    },
   },
   watch: {
     externalMediaCurrentTime(val) {
@@ -373,6 +376,7 @@ export default {
   },
   methods: {
     toggleSidebar() {
+      if (this.isLauncherLayout) return;
       this.sidebarOpen = !this.sidebarOpen;
     },
     enqueueRemoteControlCommand(command) {
@@ -834,6 +838,10 @@ export default {
   height: calc(100vh - 32px);
   display: flex;
   flex-direction: column;
+}
+
+.main-container.launcher-shell {
+  margin-left: 0;
 }
 
 @media (max-width: 1024px) {

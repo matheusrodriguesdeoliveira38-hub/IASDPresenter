@@ -1,19 +1,56 @@
 <template>
   <v-slide-y-reverse-transition>
-    <div v-if="module?.show" class="module-full-page dashboard-home d-flex flex-column">
-      <div class="search-header-container" :class="(searchQuery || shouldShowHistory) ? 'search-header d-flex align-center w-100' : 'hero-search-header d-flex flex-column align-center justify-center'" :style="(searchQuery || shouldShowHistory) ? 'padding: 24px 32px 10px 32px; position: relative;' : 'flex: 1; position: relative; padding: 32px; transition: all 0.5s ease;'">
-        <div :style="(searchQuery || shouldShowHistory) ? 'flex: 1; display: flex; align-items: center;' : 'position: absolute; top: 24px; left: 32px;'">
+    <div v-if="module?.show" class="module-full-page dashboard-home d-flex flex-column" :class="{ 'home-launcher-layout': isLauncherLayout && !searchQuery }">
+      <div class="search-header-container" :class="hasSearchOrClassicHistory ? 'search-header d-flex align-center w-100' : 'hero-search-header d-flex flex-column align-center justify-center'" :style="hasSearchOrClassicHistory ? 'padding: 24px 32px 10px 32px; position: relative;' : 'flex: 1; position: relative; padding: 32px; transition: all 0.5s ease;'">
+        <div :style="hasSearchOrClassicHistory ? 'flex: 1; display: flex; align-items: center;' : 'position: absolute; top: 24px; left: 32px;'">
           <MenuToggleButton style="margin: 0;" @toggle-sidebar="toggleSidebar" />
         </div>
         
-        <div v-if="!searchQuery && !shouldShowHistory" class="hero-content d-flex flex-column align-center w-100" style="animation: fadeIn 0.5s ease;">
+        <div v-if="isLauncherLayout && !searchQuery" class="home-launcher-content">
+          <div class="home-launcher-brand">
+            <img src="/ico/favicon.png" alt="IASDPresenter" />
+            <h1>{{ t("launcher_title") }}</h1>
+          </div>
+
+          <div class="search-bar launcher-inline-search">
+            <v-text-field
+              v-model="searchQuery"
+              :placeholder="t('search_placeholder')"
+              prepend-inner-icon="mdi-magnify"
+              variant="solo"
+              density="comfortable"
+              hide-details
+              clearable
+              rounded
+              class="search-input-hero"
+              @keydown.enter="playFirstResult"
+            />
+          </div>
+
+          <div class="home-launcher-grid">
+            <button
+              v-for="item in launcherItems"
+              :key="item.id"
+              type="button"
+              class="home-launcher-button"
+              @click="openLauncherItem(item)"
+            >
+              <v-icon class="home-launcher-icon" size="34">
+                {{ item.icon }}
+              </v-icon>
+              <span>{{ item.title }}</span>
+            </button>
+          </div>
+        </div>
+
+        <div v-else-if="!searchQuery && !shouldShowHistory" class="hero-content d-flex flex-column align-center w-100" style="animation: fadeIn 0.5s ease;">
           <img src="/ico/favicon.png" alt="IASDPresenter" style="width: 80px; height: 80px; margin-bottom: 24px;" />
           <h1 class="hero-title mb-8" style="font-size: 2.5rem; font-weight: 700; color: var(--sidebar-text);">
             O que vamos cantar?
           </h1>
         </div>
         
-        <div class="search-bar" :style="(searchQuery || shouldShowHistory) ? 'flex: 2; display: flex; justify-content: center; transition: all 0.5s ease;' : 'width: 100%; max-width: 650px; transition: all 0.5s ease;'">
+        <div v-if="!isLauncherLayout || searchQuery" class="search-bar" :style="(searchQuery || shouldShowHistory) ? 'flex: 2; display: flex; justify-content: center; transition: all 0.5s ease;' : 'width: 100%; max-width: 650px; transition: all 0.5s ease;'">
           <v-text-field
             v-model="searchQuery"
             :placeholder="t('search_placeholder')"
@@ -29,10 +66,10 @@
           />
         </div>
 
-        <div v-if="(searchQuery || shouldShowHistory)" style="flex: 1;" />
+        <div v-if="hasSearchOrClassicHistory" style="flex: 1;" />
       </div>
 
-      <div v-if="searchQuery || shouldShowHistory" class="content-main">
+      <div v-if="searchQuery || (shouldShowHistory && !isLauncherLayout)" class="content-main">
         <div v-if="searchQuery" class="dashboard-section music-section h-100 d-flex flex-column" style="min-height: 0;">
           <h2 class="section-title mb-4">
             Resultados da Pesquisa
@@ -233,6 +270,97 @@ export default {
       });
       
       return result;
+    },
+
+    homeLayout() {
+      return this.$userdata.get("modules.config.home_layout") || "classic";
+    },
+
+    isLauncherLayout() {
+      return this.homeLayout === "launcher";
+    },
+
+    hasSearchOrClassicHistory() {
+      return !!this.searchQuery || (this.shouldShowHistory && !this.isLauncherLayout);
+    },
+
+    language() {
+      return this.$userdata.get("language");
+    },
+
+    isDev() {
+      return this.$appdata.get("is_dev");
+    },
+
+    isDesktop() {
+      return window.electronAPI && window.electronAPI.isElectron;
+    },
+
+    launcherItems() {
+      const modules = this.$appdata.get("modules") || {};
+      const groups = this.$appdata.get("module_group") || {};
+      const result = [];
+      const added = new Set();
+
+      const addModule = (moduleId, fallbackIcon = "mdi-puzzle") => {
+        const item = modules[moduleId];
+        if (!item || added.has(moduleId) || !this.shouldShowModule(moduleId)) return;
+
+        result.push({
+          id: moduleId,
+          icon: item.icon || fallbackIcon,
+          title: this.$t(item.title),
+          moduleId,
+        });
+        added.add(moduleId);
+      };
+
+      (groups.musics?.modules || []).forEach(id => addModule(id, "mdi-play"));
+      addModule("bible", "mdi-book");
+      (groups.utilities?.modules || []).forEach(id => addModule(id, "mdi-plus-circle"));
+
+      const groupedIds = new Set();
+      Object.values(groups).forEach(group => {
+        (group.modules || []).forEach(id => groupedIds.add(id));
+      });
+
+      Object.entries(modules)
+        .filter(([id, item]) => !groupedIds.has(id) && id !== "home" && item.showInMainMenu)
+        .sort(([idA, itemA], [idB, itemB]) => {
+          if (idA === "dev" && idB !== "dev") return 1;
+          if (idB === "dev" && idA !== "dev") return -1;
+
+          const titleA = itemA?.title ? this.$t(itemA.title).toLowerCase() : "";
+          const titleB = itemB?.title ? this.$t(itemB.title).toLowerCase() : "";
+          return titleA.localeCompare(titleB);
+        })
+        .forEach(([id]) => addModule(id));
+
+      if (this.isDesktop && !added.has("sync")) {
+        result.push({
+          id: "sync",
+          icon: "mdi-library",
+          title: this.$t("sidebar.local_library"),
+          moduleId: "sync",
+        });
+      }
+
+      result.push(
+        {
+          id: "help",
+          icon: "mdi-help-circle",
+          title: this.$t("sidebar.help"),
+          moduleId: "help",
+        },
+        {
+          id: "config",
+          icon: "mdi-cog",
+          title: this.$t("sidebar.settings"),
+          moduleId: "config",
+        },
+      );
+
+      return result.filter(item => item.moduleId && modules[item.moduleId] && this.shouldShowModule(item.moduleId));
     },
 
     shouldShowHistory() {
@@ -450,6 +578,27 @@ export default {
     
     openAlbum(id_album) {
       this.$media.openAlbum(id_album);
+    },
+
+    openLauncherItem(item) {
+      if (item?.moduleId) {
+        this.$modules.open(item.moduleId);
+      }
+    },
+
+    shouldShowModule(moduleId) {
+      const module = this.$appdata.get(`modules.${moduleId}`);
+      if (!module) return false;
+
+      if (module.language && module.language !== this.language) {
+        return false;
+      }
+
+      if (module.development && !this.isDev) {
+        return false;
+      }
+
+      return true;
     },
   },
 };
