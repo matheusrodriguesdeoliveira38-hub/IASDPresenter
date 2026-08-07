@@ -3397,6 +3397,7 @@ app.whenReady().then(async () => {
   setupYouTubeEmbedHeaders();
   await clearDesktopWebAppCaches();
   await createWindow();
+  setupAutoUpdater();
 
   const { screen } = require('electron');
   const notifyDisplaysChanged = () => {
@@ -3471,13 +3472,24 @@ app.on('will-quit', () => {
 autoUpdater.autoDownload = false;
 autoUpdater.autoInstallOnAppQuit = true;
 
+let autoUpdaterInitialized = false;
+
+function sendAutoUpdaterEvent(channel, payload) {
+  const mainWin = mainAppWindow && !mainAppWindow.isDestroyed()
+    ? mainAppWindow
+    : BrowserWindow.getAllWindows().find(win => !win.isDestroyed());
+
+  if (!mainWin || mainWin.webContents.isDestroyed()) return;
+  mainWin.webContents.send(channel, payload);
+}
+
 function setupAutoUpdater() {
-  const mainWin = BrowserWindow.getAllWindows()[0];
-  if (!mainWin) return;
+  if (autoUpdaterInitialized) return;
+  autoUpdaterInitialized = true;
 
   autoUpdater.on('update-available', (info) => {
     console.log('Update available:', info.version);
-    mainWin.webContents.send('update-available', {
+    sendAutoUpdaterEvent('update-available', {
       version: info.version,
       releaseDate: info.releaseDate,
       releaseNotes: info.releaseNotes,
@@ -3486,13 +3498,13 @@ function setupAutoUpdater() {
 
   autoUpdater.on('update-not-available', (info) => {
     console.log('No update available. Current version is up-to-date.');
-    mainWin.webContents.send('update-not-available', {
+    sendAutoUpdaterEvent('update-not-available', {
       version: info.version,
     });
   });
 
   autoUpdater.on('download-progress', (progress) => {
-    mainWin.webContents.send('update-download-progress', {
+    sendAutoUpdaterEvent('update-download-progress', {
       percent: Math.round(progress.percent),
       bytesPerSecond: progress.bytesPerSecond,
       transferred: progress.transferred,
@@ -3502,14 +3514,14 @@ function setupAutoUpdater() {
 
   autoUpdater.on('update-downloaded', (info) => {
     console.log('Update downloaded:', info.version);
-    mainWin.webContents.send('update-downloaded', {
+    sendAutoUpdaterEvent('update-downloaded', {
       version: info.version,
     });
   });
 
   autoUpdater.on('error', (error) => {
     console.error('Auto-updater error:', error.message);
-    mainWin.webContents.send('update-error', {
+    sendAutoUpdaterEvent('update-error', {
       message: error.message,
     });
   });
@@ -3545,9 +3557,4 @@ ipcMain.handle('download-update', async () => {
 ipcMain.handle('quit-and-install', () => {
   global.isQuitting = true;
   autoUpdater.quitAndInstall(true, true);
-});
-
-// Configura o auto-updater quando o app estiver pronto
-app.whenReady().then(() => {
-  setupAutoUpdater();
 });
