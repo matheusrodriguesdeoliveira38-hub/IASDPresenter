@@ -1,0 +1,14 @@
+{
+  "title": "External Media",
+  "alerts": {
+    "close": "Do you want to close this media?"
+  },
+  "controls": {
+    "play": "Play",
+    "pause": "Pause",
+    "minimize": "Minimize",
+    "maximize": "Maximize",
+    "close": "Close",
+    "projecting": "Presenting on the external display..."
+  }
+}

@@ -11,6 +11,7 @@
 node_modules
 /dist
 /dist-electron
+/dist-electron-*
 update.md
 
 # local env files
@@ -31,3 +32,6 @@ pnpm-debug.log*
 *.njsproj
 *.sln
 *.sw?
+
+.electron
+.node

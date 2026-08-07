@@ -956,7 +956,7 @@
   </v-slide-y-reverse-transition>
 </template>
 
-<script>
+<script lang="ts">
 import manifest from "../manifest.json";
 import MenuToggleButton from "@/components/MenuToggleButton.vue";
 import ModernColorPicker from "@/components/inputs/ModernColorPicker.vue";
@@ -1069,9 +1069,13 @@ export default {
   },
   watch: {
     language(val) {
-      if (val) {
-        this.$userdata.set("language", val);
-        this.$i18n.locale = val;
+      if (!val) return;
+      const currentLanguage = this.$userdata.get("language");
+      this.$userdata.set("language", val);
+      this.$i18n.locale = val;
+
+      if (currentLanguage && currentLanguage !== val && window.electronAPI?.isElectron) {
+        window.location.reload();
       }
     },
     show_home_history(val) {

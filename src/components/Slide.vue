@@ -1,5 +1,5 @@
 <template>
-  <div ref="container" class="w-100 h-100">
+  <div ref="container" class="slide-container w-100 h-100">
     <transition
       v-for="(slide, index) in slides.slice().reverse()"
       :key="index"
@@ -46,7 +46,7 @@
   </div>
 </template>
 
-<script>
+<script lang="ts">
 export default {
   name: "SlideComponent",
   props: {
@@ -55,7 +55,11 @@ export default {
     text: String,
     aux_text: String,
     image: String,
-    image_position: Number,
+    image_position: [Number, String],
+    settings: {
+      type: Object,
+      default: null,
+    },
   },
   data: () => ({
     slides: [{}, {}],
@@ -72,6 +76,7 @@ export default {
     customBgImage: null,
     customBgType: "image",
     customBgOpacity: 100,
+    resizeObserver: null,
   }),
   computed: {
     props_slide() {
@@ -104,35 +109,52 @@ export default {
         self.windowResize();
       }, 100);
     },
+    settings: {
+      deep: true,
+      handler() {
+        this.updateSettings();
+      },
+    },
   },
   mounted() {
     this.updateSettings();
     this.setSlide();
     this.windowResize();
+    if (typeof ResizeObserver !== "undefined") {
+      this.resizeObserver = new ResizeObserver(this.windowResize);
+      this.resizeObserver.observe(this.$refs.container);
+    }
     window.addEventListener("resize", this.windowResize);
     window.addEventListener("storage", this.updateSettings);
   },
   unmounted() {
     window.removeEventListener("resize", this.windowResize);
     window.removeEventListener("storage", this.updateSettings);
+    this.resizeObserver?.disconnect();
   },
   methods: {
     updateSettings() {
-      const align = this.$userdata.get("modules.config.slide_align") || "Centro";
+      const getSetting = (key, fallback) => {
+        if (this.settings && this.settings[key] !== undefined) return this.settings[key];
+        const stored = this.$userdata.get(`modules.config.${key}`);
+        return stored ?? fallback;
+      };
+
+      const align = getSetting("slide_align", "Centro");
       if (align === "Cima") this.slideAlignClass = "align-start";
       else if (align === "Baixo") this.slideAlignClass = "align-end";
       else this.slideAlignClass = "align-center";
 
-      this.customTextFormat = this.$userdata.get("modules.config.slide_custom_text_format") || false;
-      this.customFontSize = this.$userdata.get("modules.config.slide_font_size") || 100;
-      this.customFontColor = this.$userdata.get("modules.config.slide_font_color") || "#FFFFFF";
-      this.customFontWeight = this.$userdata.get("modules.config.slide_font_weight") || "700";
+      this.customTextFormat = getSetting("slide_custom_text_format", false);
+      this.customFontSize = getSetting("slide_font_size", 100);
+      this.customFontColor = getSetting("slide_font_color", "#FFFFFF");
+      this.customFontWeight = getSetting("slide_font_weight", "700");
 
-      this.customBg = this.$userdata.get("modules.config.slide_custom_bg") || false;
-      this.customBgColor = this.$userdata.get("modules.config.slide_bg_color") || "#000000";
-      this.customBgImage = this.$userdata.get("modules.config.slide_bg_image") || null;
-      this.customBgType = this.$userdata.get("modules.config.slide_bg_type") || "image";
-      this.customBgOpacity = this.$userdata.get("modules.config.slide_bg_opacity") ?? 100;
+      this.customBg = getSetting("slide_custom_bg", false);
+      this.customBgColor = getSetting("slide_bg_color", "#000000");
+      this.customBgImage = getSetting("slide_bg_image", null);
+      this.customBgType = getSetting("slide_bg_type", "image");
+      this.customBgOpacity = getSetting("slide_bg_opacity", 100);
     },
     setSlide() {
       this.updateSettings();
@@ -287,6 +309,11 @@ export default {
 </script>
 
 <style scoped>
+.slide-container {
+  position: relative;
+  overflow: hidden;
+}
+
 .fade-enter-active,
 .fade-leave-active {
   transition: opacity 0.5s ease;

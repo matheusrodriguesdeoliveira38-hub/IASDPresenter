@@ -526,7 +526,7 @@
   </v-slide-y-reverse-transition>
 </template>
 
-<script>
+<script lang="ts">
 import MenuToggleButton from "@/components/MenuToggleButton.vue";
 import LScreenBtn from "@/components/buttons/Screen.vue";
 import ConfigModal from "./components/ConfigModal.vue";

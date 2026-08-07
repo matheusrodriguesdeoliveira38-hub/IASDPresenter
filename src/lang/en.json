@@ -1,0 +1,37 @@
+{
+  "app": { "name": "IASDPresenter" },
+  "sidebar": {
+    "home": "Home",
+    "favorites": "Favorites",
+    "help": "Help and about",
+    "settings": "Settings",
+    "close_menu": "Close menu",
+    "local_library": "Local Library",
+    "update_available": "Update Available"
+  },
+  "modules": { "invalid": { "title": "#Error#" } },
+  "module_group": {
+    "musics": { "title": "Albums and Collections" },
+    "bible": { "title": "Bible" },
+    "utilities": { "title": "Utilities" }
+  },
+  "components": {
+    "letterpagination": { "all": "All" },
+    "datatable": { "alerts": { "not_found": "The data file could not be found." } }
+  },
+  "alert": {
+    "close": "Close",
+    "yes": "Yes",
+    "no": "No",
+    "wait": "Please wait...",
+    "close_app_title": "Close application?",
+    "close_app_text": "Media or a presentation is active. Do you really want to exit?"
+  },
+  "messages": {
+    "file_database_not_found": "Data file not found!",
+    "developer_mode_enabled": "DEVELOPER mode enabled!",
+    "developer_mode_disabled": "DEVELOPER mode disabled!",
+    "error_import_module": "Error importing module",
+    "misconfigured_module": "This module is misconfigured. The id in manifest.json must match its folder name!"
+  }
+}

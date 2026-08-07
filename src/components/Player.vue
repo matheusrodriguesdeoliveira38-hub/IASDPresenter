@@ -285,7 +285,7 @@
   </div>
 </template>
 
-<script>
+<script lang="ts">
 import LScreenBtn from "@/components/buttons/Screen.vue";
 
 export default {

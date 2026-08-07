@@ -20,7 +20,7 @@
   </v-footer>
 </template>
 
-<script>
+<script lang="ts">
 import packageJson from "../../package.json";
 
 import LPlayer from "@/components/Player.vue";

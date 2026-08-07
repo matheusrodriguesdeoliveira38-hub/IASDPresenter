@@ -3,11 +3,13 @@
     ref="container"
     class="d-flex align-center justify-center position-relative w-100 h-100 overflow-hidden"
     :style="{
-      background: preview ? 'transparent' : config.bgColor,
+      background: config.bgColor,
       height: height ? height + 'px' : '100%',
-      color: preview ? 'var(--sidebar-text)' : config.textColor,
+      color: config.textColor,
     }"
   >
+    <div v-if="timerFinished" class="timer-expired-overlay" />
+
     <!-- TIMER -->
     <v-fade-transition>
       <div
@@ -15,7 +17,8 @@
         class="timer-display font-weight-black d-flex flex-column align-center justify-center text-center w-100"
         :style="{
           fontSize: `${timerFontSize}px`,
-          textShadow: preview ? 'none' : `0 4px 30px ${timerTextColor}40`,
+          textShadow: `0 4px 30px ${timerTextColor}40`,
+          color: timerTextColor,
           fontFamily: 'system-ui, -apple-system, sans-serif'
         }"
       >
@@ -36,7 +39,7 @@
         class="digital-clock font-weight-black d-flex align-center justify-center text-center w-100"
         :style="{
           fontSize: `${digitalFontSize}px`,
-          textShadow: preview ? 'none' : `0 4px 30px ${config.textColor}40`,
+          textShadow: `0 4px 30px ${config.textColor}40`,
           fontFamily: 'system-ui, -apple-system, sans-serif'
         }"
       >
@@ -166,7 +169,7 @@
   </div>
 </template>
 
-<script>
+<script lang="ts">
 export default {
   name: "ClockScreen",
   props: {
@@ -202,6 +205,8 @@ export default {
         running: false,
         endsAt: null,
         remainingMs: 0,
+        negativeEnabled: false,
+        expiredAt: null,
         ...state,
       };
     },
@@ -215,35 +220,42 @@ export default {
       return Math.max(v * 0.32, 24);
     },
     timerTextColor() {
-      if (this.timerFinished) return "#ff5252";
-      return this.preview ? "var(--sidebar-text)" : this.config.textColor;
+      if (this.timerFinished) return "#ffffff";
+      return this.config.textColor;
     },
     timerRemainingMs() {
       if (!this.timer.enabled) return 0;
 
       if (this.timer.running && this.timer.endsAt) {
-        return Math.max(0, Number(this.timer.endsAt) - this.now.getTime());
+        const remainingMs = Number(this.timer.endsAt) - this.now.getTime();
+        return this.timer.negativeEnabled ? remainingMs : Math.max(0, remainingMs);
       }
 
-      return Math.max(0, Number(this.timer.remainingMs) || 0);
+      const remainingMs = Number(this.timer.remainingMs) || 0;
+      return this.timer.negativeEnabled ? remainingMs : Math.max(0, remainingMs);
     },
     timerFinished() {
       return this.timer.enabled && this.timerRemainingMs <= 0;
     },
     formattedTimer() {
-      const totalSeconds = Math.ceil(this.timerRemainingMs / 1000);
+      const showNegative = this.timer.negativeEnabled && this.timerRemainingMs < 0;
+      const totalSeconds = Math.ceil(Math.abs(this.timerRemainingMs) / 1000);
       const hours = Math.floor(totalSeconds / 3600);
       const minutes = Math.floor((totalSeconds % 3600) / 60);
       const seconds = totalSeconds % 60;
 
-      return [
+      const formatted = [
         hours.toString().padStart(2, "0"),
         minutes.toString().padStart(2, "0"),
         seconds.toString().padStart(2, "0"),
       ].join(":");
+
+      return showNegative ? `-${formatted}` : formatted;
     },
     timerLabel() {
-      if (this.timerFinished) return "ENCERRADO";
+      if (this.timerFinished) {
+        return this.timer.negativeEnabled ? "TEMPO EXCEDIDO" : "ENCERRADO";
+      }
       if (!this.timer.running) return "PAUSADO";
       return "CRONOMETRO";
     },
@@ -290,12 +302,20 @@ export default {
     
     const tick = () => {
       this.now = new Date();
-      if (this.timer.enabled && this.timer.running && this.timer.endsAt && Number(this.timer.endsAt) <= this.now.getTime()) {
+      if (
+        this.timer.enabled
+        && this.timer.running
+        && !this.timer.negativeEnabled
+        && this.timer.endsAt
+        && Number(this.timer.endsAt) <= this.now.getTime()
+      ) {
+        const expiredAt = Number(this.timer.endsAt);
         this.$appdata.set("clock_timer", {
           ...this.timer,
           running: false,
           endsAt: null,
           remainingMs: 0,
+          expiredAt,
         });
       }
       this.animationFrame = requestAnimationFrame(tick);
@@ -331,8 +351,18 @@ export default {
   font-variant-numeric: tabular-nums;
 }
 .timer-display {
+  position: relative;
+  z-index: 1;
   font-variant-numeric: tabular-nums;
   line-height: 1;
+}
+.timer-expired-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background: #d50000;
+  animation: timer-expired-flash 1s ease-in-out infinite;
 }
 .timer-label {
   letter-spacing: 0;
@@ -343,5 +373,15 @@ export default {
 }
 .second-hand {
   transition: none; /* Smooth sweep */
+}
+@keyframes timer-expired-flash {
+  0%, 100% { opacity: 0.22; }
+  50% { opacity: 0.92; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .timer-expired-overlay {
+    animation: none;
+    opacity: 0.72;
+  }
 }
 </style>

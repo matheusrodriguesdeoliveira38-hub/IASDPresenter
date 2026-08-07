@@ -102,13 +102,13 @@
   </ModuleContainer>
 </template>
 
-<script>
+<script lang="ts">
 export default {
   name: "CounterModule",
 };
 </script>
 
-<script setup>
+<script setup lang="ts">
 import { ref } from "vue";
 import ModuleContainer from "@/layout/ModuleContainer.vue";
 import manifest from "../manifest.json";

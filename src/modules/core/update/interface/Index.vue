@@ -169,7 +169,7 @@
   </v-slide-y-reverse-transition>
 </template>
 
-<script>
+<script lang="ts">
 export default {
   name: "UpdateModule",
   data: () => ({

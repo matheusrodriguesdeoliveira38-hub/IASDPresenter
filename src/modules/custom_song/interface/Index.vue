@@ -366,7 +366,7 @@
   </v-slide-y-reverse-transition>
 </template>
 
-<script>
+<script lang="ts">
 import LSlide from "@/components/Slide.vue";
 import MenuToggleButton from "@/components/MenuToggleButton.vue";
 import manifest from "../manifest.json";

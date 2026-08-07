@@ -24,6 +24,8 @@
   "timer_ready": "Defina uma duracao ou um horario de encerramento",
   "timer_running": "Cronometro em andamento",
   "timer_paused": "Cronometro pausado",
+  "timer_expired": "Tempo esgotado",
+  "timer_negative": "Tempo negativo",
   "timer_alert_5min": "5 Min",
   "timer_alert_1min": "1 Min"
 }

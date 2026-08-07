@@ -1,0 +1,19 @@
+{
+  "alerts": {
+    "not_loaded": "An error occurred while loading this audio!",
+    "close": "Do you want to close this song?"
+  },
+  "general": {
+    "sung": "Vocals",
+    "instrumental": "Backing Track",
+    "no_audio": "No Audio",
+    "lyric": "Song Lyrics",
+    "track": "Track"
+  },
+  "inputs": {
+    "lazy_load": "Dynamic Loading",
+    "lazy_load_tooltip": "When disabled, audio starts only after it has been fully loaded into memory.",
+    "fade_audio": "Audio Fade Effect",
+    "fade_audio_tooltip": "When enabled, audio volume fades smoothly when pausing or resuming."
+  }
+}

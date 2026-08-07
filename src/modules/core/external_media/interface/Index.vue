@@ -463,7 +463,7 @@
   </div>
 </template>
 
-<script>
+<script lang="ts">
 import manifest from "../manifest.json";
 import Window from "@/components/Window.vue";
 import ButtonScreen from "@/components/buttons/Screen.vue";

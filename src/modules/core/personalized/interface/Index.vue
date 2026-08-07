@@ -2,7 +2,7 @@
   <div v-if="module?.show" class="d-none" />
 </template>
 
-<script>
+<script lang="ts">
 import manifest from "../manifest.json";
 
 const CUSTOM_ALBUM_ID = 900001;

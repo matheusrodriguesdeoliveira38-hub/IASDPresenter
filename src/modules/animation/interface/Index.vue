@@ -20,7 +20,7 @@
   </ModuleContainer>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import ModuleContainer from "@/layout/ModuleContainer.vue";
 import { ref, watch } from "vue";
 import manifest from "../manifest.json";

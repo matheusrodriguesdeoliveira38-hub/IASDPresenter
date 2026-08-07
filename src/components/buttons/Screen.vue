@@ -20,7 +20,7 @@
   </v-btn>
 </template>
 
-<script>
+<script lang="ts">
 import $userdata from "@/helpers/UserData";
 
 export default {

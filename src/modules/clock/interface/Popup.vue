@@ -2,7 +2,7 @@
   <Screen />
 </template>
 
-<script>
+<script lang="ts">
 import manifest from "../manifest.json";
 
 import Screen from "../components/Screen.vue";

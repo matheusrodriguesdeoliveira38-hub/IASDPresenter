@@ -14,7 +14,7 @@
   </v-app-bar>
 </template>
 
-<script>
+<script lang="ts">
 import LanguageSelector from "@/components/LanguageSelector.vue";
 
 export default {

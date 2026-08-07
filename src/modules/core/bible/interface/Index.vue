@@ -355,7 +355,7 @@
   <ConfigModal v-if="!loading" v-model="showConfigModal" />
 </template>
 
-<script>
+<script lang="ts">
 import manifest from "../manifest.json";
 import LWindow from "@/components/Window.vue";
 import Screen from "../components/Screen.vue";

@@ -1,8 +1,8 @@
 {
   "name": "iasdpresenter",
-  "version": "1.7.20",
+  "version": "1.8.0",
   "private": true,
-  "main": "electron/main.js",
+  "main": ".electron/main.js",
   "scripts": {
     "version:major": "npm version major",
     "version:minor": "npm version minor",
@@ -11,17 +11,21 @@
     "version:min": "npm version minor",
     "version:bug": "npm version patch",
     "serve": "vite preview",
-    "build": "vite build",
-    "lint": "eslint src --ext .vue,.js",
-    "lint:fix": "eslint src --ext .vue,.js --fix",
+    "build": "npm run typecheck && vite build",
+    "lint": "eslint src electron node --ext .vue,.ts",
+    "lint:fix": "eslint src electron node --ext .vue,.ts --fix",
     "dev": "vite",
     "host": "vite --host",
-    "files": "node node/server.js",
+    "files": "npm run runtime:build && node .node/server.js",
     "git:tag": "git tag -a -f v%npm_package_version% -m \"Versão %npm_package_version%\" && git push origin -f v%npm_package_version% && git push -u origin main",
     "git:publish": "git pull origin main && git checkout main && git merge develop && git push -u origin main && git checkout develop",
-    "electron:dev": "concurrently -k \"vite\" \"wait-on http://localhost:5173 && electron .\"",
-    "electron:build": "vite build --base=./ && electron-builder",
-    "postinstall": "electron-builder install-app-deps"
+    "electron:dev": "npm run runtime:build && concurrently -k \"vite\" \"npm:runtime:watch\" \"wait-on http://localhost:5173 .electron/main.js && electron .\"",
+    "electron:build": "npm run typecheck && npm run runtime:build && vite build --base=./ && electron-builder",
+    "postinstall": "electron-builder install-app-deps",
+    "typecheck": "tsc -p tsconfig.app.json && tsc -p tsconfig.runtime.json --noEmit && tsc -p tsconfig.server.json --noEmit",
+    "runtime:build": "tsc -p tsconfig.runtime.json && tsc -p tsconfig.server.json",
+    "runtime:watch": "tsc -p tsconfig.runtime.json --watch --preserveWatchOutput",
+    "test:runtime": "npm run runtime:build && node --test .electron/*.test.js"
   },
   "dependencies": {
     "@mdi/font": "^7.4.47",
@@ -52,6 +56,11 @@
     "@babel/core": "^7.26.0",
     "@babel/eslint-parser": "^7.25.9",
     "@babel/preset-env": "^7.28.5",
+    "@types/fs-extra": "^11.0.4",
+    "@types/node": "^26.1.2",
+    "@types/webfontloader": "^1.6.38",
+    "@typescript-eslint/eslint-plugin": "^8.66.0",
+    "@typescript-eslint/parser": "^8.66.0",
     "@vitejs/plugin-vue": "^5.2.1",
     "concurrently": "^10.0.3",
     "electron": "^42.5.0",
@@ -59,9 +68,11 @@
     "eslint": "^8.57.1",
     "eslint-plugin-vue": "^9.31.0",
     "sass": "^1.83.0",
+    "typescript": "~5.9.3",
     "vite": "^5.4.11",
     "vite-plugin-pwa": "^0.21.2",
     "vite-plugin-vuetify": "^2.0.4",
+    "vue-tsc": "^3.3.9",
     "wait-on": "^9.0.10"
   },
   "browserslist": [
@@ -79,7 +90,9 @@
     "artifactName": "${productName}-Setup-${version}.${ext}",
     "files": [
       "dist/**/*",
-      "electron/**/*"
+      ".electron/**/*",
+      "!.electron/**/*.test.js",
+      "!.electron/**/*.test.js.map"
     ],
     "extraResources": [
       "resources/**"

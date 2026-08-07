@@ -1,0 +1,18 @@
+{
+  "title": "Bible",
+  "prev_verse": "Previous Verse",
+  "next_verse": "Next Verse",
+  "clear": "Clear",
+  "customize": "Customize",
+  "proj_customization": "Presentation Customization",
+  "proj_background": "Presentation Background",
+  "bg_color_desc": "Base background color for the display screen",
+  "main_text": "Main Text",
+  "main_text_desc": "Formatting for projected verses",
+  "font_size": "Font Size",
+  "font_color": "Font Color",
+  "text_align": "Text Alignment",
+  "bible_reference": "Bible Reference",
+  "bg_image": "Background Image",
+  "remove_image": "Remove"
+}

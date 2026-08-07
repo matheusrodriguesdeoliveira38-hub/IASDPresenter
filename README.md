@@ -113,7 +113,7 @@ Estrutura base de um modulo:
 ```text
 src/modules/<id>/
 |-- manifest.json          # Metadados do modulo
-|-- index.js               # Registro do modulo
+|-- index.ts               # Registro do modulo
 |-- interface/
 |   |-- Index.vue          # Interface principal
 |-- lang/

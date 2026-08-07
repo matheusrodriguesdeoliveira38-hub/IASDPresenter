@@ -62,19 +62,20 @@
 
             <v-btn-toggle
               v-model="timerInputMode"
+              class="timer-mode-toggle"
               mandatory
               density="comfortable"
               variant="tonal"
               color="primary"
               divided
             >
-              <v-btn value="duration" size="small">
+              <v-btn class="timer-mode-btn" value="duration" size="small">
                 <v-icon start>
                   mdi-timer-sand
                 </v-icon>
                 {{ t('timer_duration') }}
               </v-btn>
-              <v-btn value="endTime" size="small">
+              <v-btn class="timer-mode-btn" value="endTime" size="small">
                 <v-icon start>
                   mdi-clock-end
                 </v-icon>
@@ -87,7 +88,9 @@
             <template v-if="timerInputMode === 'duration'">
               <v-text-field
                 v-model.number="durationHours"
+                class="timer-field"
                 :label="t('timer_hours')"
+                prepend-inner-icon="mdi-clock-outline"
                 type="number"
                 min="0"
                 max="99"
@@ -99,7 +102,9 @@
               />
               <v-text-field
                 v-model.number="durationMinutes"
+                class="timer-field"
                 :label="t('timer_minutes')"
+                prepend-inner-icon="mdi-clock-outline"
                 type="number"
                 min="0"
                 max="59"
@@ -111,7 +116,9 @@
               />
               <v-text-field
                 v-model.number="durationSeconds"
+                class="timer-field"
                 :label="t('timer_seconds')"
+                prepend-inner-icon="mdi-clock-outline"
                 type="number"
                 min="0"
                 max="59"
@@ -126,7 +133,9 @@
             <v-text-field
               v-else
               v-model="endTime"
+              class="timer-field timer-field-end"
               :label="t('timer_end_at')"
+              prepend-inner-icon="mdi-clock-end"
               type="time"
               hide-details
               density="compact"
@@ -138,6 +147,7 @@
             <v-spacer />
 
             <v-btn
+              class="timer-action-btn timer-action-primary"
               color="primary"
               variant="flat"
               :disabled="!canStartTimer"
@@ -149,6 +159,7 @@
               {{ clockTimer.running ? t('timer_pause') : t('timer_start') }}
             </v-btn>
             <v-btn
+              class="timer-action-btn timer-action-secondary"
               variant="tonal"
               :disabled="!clockTimer.enabled"
               @click="resetTimer"
@@ -160,25 +171,49 @@
             </v-btn>
           </div>
 
-          <div class="timer-alerts d-flex align-center flex-wrap mt-4" style="gap: 10px;">
-            <v-switch
-              :model-value="clockTimer.alert5Enabled"
-              color="primary"
-              density="compact"
-              hide-details
-              inset
-              :label="t('timer_alert_5min')"
-              @update:model-value="setTimerAlert('alert5Enabled', $event)"
-            />
-            <v-switch
-              :model-value="clockTimer.alert1Enabled"
-              color="primary"
-              density="compact"
-              hide-details
-              inset
-              :label="t('timer_alert_1min')"
-              @update:model-value="setTimerAlert('alert1Enabled', $event)"
-            />
+          <div class="timer-alerts d-flex align-center flex-wrap mt-4">
+            <div class="timer-option">
+              <v-icon size="20">
+                mdi-bell-ring-outline
+              </v-icon>
+              <v-switch
+                :model-value="clockTimer.alert5Enabled"
+                color="primary"
+                density="compact"
+                hide-details
+                inset
+                :label="t('timer_alert_5min')"
+                @update:model-value="setTimerAlert('alert5Enabled', $event)"
+              />
+            </div>
+            <div class="timer-option">
+              <v-icon size="20">
+                mdi-bell-alert-outline
+              </v-icon>
+              <v-switch
+                :model-value="clockTimer.alert1Enabled"
+                color="primary"
+                density="compact"
+                hide-details
+                inset
+                :label="t('timer_alert_1min')"
+                @update:model-value="setTimerAlert('alert1Enabled', $event)"
+              />
+            </div>
+            <div class="timer-option timer-option-negative">
+              <v-icon size="20">
+                mdi-timer-minus-outline
+              </v-icon>
+              <v-switch
+                :model-value="clockTimer.negativeEnabled"
+                color="error"
+                density="compact"
+                hide-details
+                inset
+                :label="t('timer_negative')"
+                @update:model-value="setNegativeTime"
+              />
+            </div>
           </div>
         </div>
       </div>
@@ -189,7 +224,7 @@
   </v-slide-y-reverse-transition>
 </template>
 
-<script>
+<script lang="ts">
 import Screen from "../components/Screen.vue";
 import LScreenBtn from "@/components/buttons/Screen.vue";
 import ConfigModal from "./components/ConfigModal.vue";
@@ -232,11 +267,16 @@ export default {
         alert1Enabled: false,
         alert5Played: false,
         alert1Played: false,
+        negativeEnabled: false,
+        expiredAt: null,
         ...state,
       };
     },
     canStartTimer() {
-      if (this.clockTimer.enabled && !this.clockTimer.running && this.clockTimer.remainingMs > 0) {
+      if (this.clockTimer.enabled && !this.clockTimer.running && (
+        this.clockTimer.remainingMs > 0
+        || (this.clockTimer.negativeEnabled && this.clockTimer.remainingMs < 0)
+      )) {
         return true;
       }
 
@@ -254,6 +294,7 @@ export default {
     },
     timerStatusText() {
       if (!this.clockTimer.enabled) return this.t("timer_ready");
+      if (this.timerRemainingMs <= 0) return this.t("timer_expired");
       if (this.clockTimer.running) return this.t("timer_running");
       return this.t("timer_paused");
     },
@@ -261,10 +302,12 @@ export default {
       if (!this.clockTimer.enabled) return 0;
 
       if (this.clockTimer.running && this.clockTimer.endsAt) {
-        return Math.max(0, Number(this.clockTimer.endsAt) - this.now);
+        const remainingMs = Number(this.clockTimer.endsAt) - this.now;
+        return this.clockTimer.negativeEnabled ? remainingMs : Math.max(0, remainingMs);
       }
 
-      return Math.max(0, Number(this.clockTimer.remainingMs) || 0);
+      const remainingMs = Number(this.clockTimer.remainingMs) || 0;
+      return this.clockTimer.negativeEnabled ? remainingMs : Math.max(0, remainingMs);
     },
   },
   mounted() {
@@ -278,6 +321,8 @@ export default {
         alert1Enabled: false,
         alert5Played: false,
         alert1Played: false,
+        negativeEnabled: false,
+        expiredAt: null,
       });
     }
 
@@ -320,8 +365,12 @@ export default {
       }
 
       let remainingMs = Number(this.clockTimer.remainingMs) || 0;
+      const canResume = this.clockTimer.enabled && (
+        remainingMs > 0
+        || (this.clockTimer.negativeEnabled && remainingMs < 0)
+      );
 
-      if (!this.clockTimer.enabled || remainingMs <= 0) {
+      if (!canResume) {
         if (this.timerInputMode === "duration") {
           remainingMs = this.durationTotalSeconds * 1000;
         } else {
@@ -330,9 +379,9 @@ export default {
         }
       }
 
-      if (remainingMs <= 0) return;
+      if (!canResume && remainingMs <= 0) return;
 
-      const isFreshTimer = !this.clockTimer.enabled || Number(this.clockTimer.remainingMs) <= 0;
+      const isFreshTimer = !canResume;
 
       this.$appdata.set("clock_timer", {
         ...this.clockTimer,
@@ -341,18 +390,25 @@ export default {
         mode: this.timerInputMode,
         endsAt: Date.now() + remainingMs,
         remainingMs,
+        expiredAt: isFreshTimer ? null : this.clockTimer.expiredAt,
         alert5Played: isFreshTimer ? false : this.clockTimer.alert5Played,
         alert1Played: isFreshTimer ? false : this.clockTimer.alert1Played,
       });
     },
     pauseTimer() {
-      const remainingMs = Math.max(0, Number(this.clockTimer.endsAt) - Date.now());
+      const rawRemainingMs = Number(this.clockTimer.endsAt) - Date.now();
+      const remainingMs = this.clockTimer.negativeEnabled
+        ? rawRemainingMs
+        : Math.max(0, rawRemainingMs);
 
       this.$appdata.set("clock_timer", {
         ...this.clockTimer,
         running: false,
         endsAt: null,
         remainingMs,
+        expiredAt: rawRemainingMs <= 0
+          ? (this.clockTimer.expiredAt || Number(this.clockTimer.endsAt))
+          : this.clockTimer.expiredAt,
       });
     },
     resetTimer() {
@@ -362,8 +418,10 @@ export default {
         mode: this.timerInputMode,
         endsAt: null,
         remainingMs: 0,
+        expiredAt: null,
         alert5Enabled: this.clockTimer.alert5Enabled,
         alert1Enabled: this.clockTimer.alert1Enabled,
+        negativeEnabled: this.clockTimer.negativeEnabled,
         alert5Played: false,
         alert1Played: false,
       });
@@ -372,6 +430,32 @@ export default {
       this.$appdata.set("clock_timer", {
         ...this.clockTimer,
         [field]: enabled,
+      });
+    },
+    setNegativeTime(enabled) {
+      const now = Date.now();
+      const timerExpired = this.clockTimer.enabled && this.timerRemainingMs <= 0;
+      const expiredAt = Number(this.clockTimer.expiredAt)
+        || (this.clockTimer.endsAt ? Number(this.clockTimer.endsAt) : null);
+      const updates = {
+        negativeEnabled: enabled,
+      };
+
+      if (enabled && timerExpired && expiredAt) {
+        updates.running = true;
+        updates.endsAt = expiredAt;
+        updates.remainingMs = expiredAt - now;
+        updates.expiredAt = expiredAt;
+      } else if (!enabled && timerExpired) {
+        updates.running = false;
+        updates.endsAt = null;
+        updates.remainingMs = 0;
+        updates.expiredAt = expiredAt || now;
+      }
+
+      this.$appdata.set("clock_timer", {
+        ...this.clockTimer,
+        ...updates,
       });
     },
     checkTimerAlerts() {
@@ -422,14 +506,94 @@ export default {
 
 <style scoped>
 .timer-controls {
-  background: var(--card-bg, #ffffff);
+  background:
+    radial-gradient(circle at top right, rgba(var(--v-theme-primary), 0.11), transparent 38%),
+    var(--card-bg, #ffffff);
   border: 1px solid var(--border-color, rgba(0,0,0,0.05));
-  border-radius: 16px;
-  box-shadow: 0 14px 36px rgba(0,0,0,0.05);
-  padding: 16px;
+  border-radius: 24px;
+  box-shadow: 0 18px 46px rgba(15, 23, 42, 0.08);
+  padding: 20px;
+}
+.timer-mode-toggle {
+  border: 1px solid rgba(var(--v-theme-primary), 0.16);
+  border-radius: 14px;
+  overflow: hidden;
+  padding: 3px;
+  background: rgba(var(--v-theme-primary), 0.06);
+}
+.timer-mode-btn {
+  border: 0 !important;
+  border-radius: 10px !important;
+  letter-spacing: 0;
+  text-transform: none;
+}
+.timer-field {
+  flex: 0 1 132px;
+  max-width: 132px !important;
+}
+.timer-field-end {
+  flex-basis: 210px;
+  max-width: 210px !important;
+}
+.timer-field :deep(.v-field) {
+  border-radius: 14px;
+  background: rgba(var(--v-theme-surface), 0.78);
+  box-shadow: inset 0 0 0 1px rgba(var(--v-theme-primary), 0.05);
+  transition: box-shadow 0.2s ease, transform 0.2s ease;
+}
+.timer-field :deep(.v-field--focused) {
+  box-shadow: 0 0 0 3px rgba(var(--v-theme-primary), 0.14);
+  transform: translateY(-1px);
+}
+.timer-action-btn {
+  min-height: 42px;
+  border-radius: 13px;
+  padding-inline: 20px;
+  letter-spacing: 0;
+  text-transform: none;
+}
+.timer-action-primary {
+  box-shadow: 0 9px 22px rgba(var(--v-theme-primary), 0.25);
+}
+.timer-action-secondary {
+  border: 1px solid rgba(var(--v-theme-on-surface), 0.08);
 }
 .timer-alerts {
   border-top: 1px solid var(--border-color, rgba(0,0,0,0.05));
   padding-top: 12px;
+  gap: 10px;
+}
+.timer-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 42px;
+  padding: 2px 12px;
+  color: var(--sidebar-text);
+  background: rgba(var(--v-theme-on-surface), 0.035);
+  border: 1px solid rgba(var(--v-theme-on-surface), 0.07);
+  border-radius: 13px;
+}
+.timer-option-negative {
+  color: rgb(var(--v-theme-error));
+  background: rgba(var(--v-theme-error), 0.06);
+  border-color: rgba(var(--v-theme-error), 0.14);
+}
+.timer-option :deep(.v-label) {
+  font-size: 0.875rem;
+  font-weight: 600;
+  opacity: 0.9;
+}
+.timer-option :deep(.v-switch) {
+  flex: none;
+}
+@media (max-width: 720px) {
+  .timer-controls {
+    padding: 16px;
+  }
+
+  .timer-action-btn {
+    flex: 1 1 140px;
+  }
 }
 </style>

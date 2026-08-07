@@ -28,7 +28,7 @@
   </v-navigation-drawer>
 </template>
 
-<script>
+<script lang="ts">
 export default {
   name: "MenuLayout",
   computed: {

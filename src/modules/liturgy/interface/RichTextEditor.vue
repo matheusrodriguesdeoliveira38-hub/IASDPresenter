@@ -224,7 +224,7 @@
   </div>
 </template>
 
-<script>
+<script lang="ts">
 import ModernColorPicker from "@/components/inputs/ModernColorPicker.vue";
 
 export default {

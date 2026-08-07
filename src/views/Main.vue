@@ -156,7 +156,7 @@
   </div>
 </template>
 
-<script>
+<script lang="ts">
 import AppFooter from "@/layout/Footer.vue";
 import AppSidebar from "@/layout/Sidebar.vue";
 import AppModules from "@/layout/Modules.vue";

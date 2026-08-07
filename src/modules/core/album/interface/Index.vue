@@ -105,7 +105,7 @@
   </v-slide-y-reverse-transition>
 </template>
 
-<script>
+<script lang="ts">
 import manifest from "../manifest.json";
 
 import MusicMenuTable from "@/components/MusicMenuTable.vue";

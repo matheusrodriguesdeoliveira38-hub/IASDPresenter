@@ -29,7 +29,7 @@
   </v-menu>
 </template>
 
-<script>
+<script lang="ts">
 import CountryFlag from "vue-country-flag-next";
 
 export default {
@@ -47,8 +47,13 @@ export default {
   },
   methods: {
     changeLanguage(language) {
-      this.$i18n.locale = language;
+      if (!language || language === this.current_language) return;
       this.$userdata.set("language", language);
+      this.$i18n.locale = language;
+
+      if (window.electronAPI?.isElectron) {
+        window.location.reload();
+      }
     },
   },
 };

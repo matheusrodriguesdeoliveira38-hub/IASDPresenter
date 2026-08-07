@@ -128,7 +128,7 @@
   </div>
 </template>
 
-<script>
+<script lang="ts">
 import { isVideoFile } from "@/helpers/ExternalMedia";
 import { isYouTubeUrl } from "@/helpers/YouTube";
 

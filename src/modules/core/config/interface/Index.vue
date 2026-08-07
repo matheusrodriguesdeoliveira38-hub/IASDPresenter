@@ -78,6 +78,15 @@
                       </v-btn>
                     </v-btn-toggle>
 
+                    <ConfigMiniPreview
+                      class="mt-5"
+                      variant="theme"
+                      label="Compare os temas antes de escolher"
+                      :active-theme="active_theme_mode"
+                      :accent-color="accent_color"
+                      @select-theme="active_theme_mode = $event"
+                    />
+
                     <v-divider class="my-8" style="opacity: 0.1;" />
 
                     <div class="d-flex align-center justify-space-between">
@@ -879,6 +888,23 @@
                         </v-icon>
                         <span class="text-subtitle-1 font-weight-bold" style="color: var(--sidebar-text);">{{ t('font_customization') }}</span>
                       </div>
+
+                      <ConfigMiniPreview
+                        class="mb-6"
+                        variant="projection"
+                        label="Resultado no projetor"
+                        :alignment="slide_align"
+                        :custom-text="slide_custom_text_format"
+                        :font-size="slide_font_size"
+                        :font-color="slide_font_color"
+                        :font-weight="slide_font_weight"
+                        :custom-background="slide_custom_bg"
+                        :background-color="slide_bg_color"
+                        :background-image="slideBgPreviewUrl"
+                        :background-type="slide_bg_type"
+                        :background-opacity="slide_bg_opacity"
+                        :show-title="slide_show_title"
+                      />
 
                       <div class="mb-6">
                         <div class="text-body-2 font-weight-medium mb-2" style="color: var(--sidebar-text-secondary);">
@@ -1737,10 +1763,11 @@
   </v-slide-y-reverse-transition>
 </template>
 
-<script>
+<script lang="ts">
 import manifest from "../manifest.json";
 import MenuToggleButton from "@/components/MenuToggleButton.vue";
 import ModernColorPicker from "@/components/inputs/ModernColorPicker.vue";
+import ConfigMiniPreview from "./ConfigMiniPreview.vue";
 import $media from "@/helpers/Media";
 
 export default {
@@ -1748,6 +1775,7 @@ export default {
   components: {
     MenuToggleButton,
     ModernColorPicker,
+    ConfigMiniPreview,
   },
   data: () => ({
     tab: 1,
@@ -1907,9 +1935,13 @@ export default {
   },
   watch: {
     language(val) {
-      if (val) {
-        this.$userdata.set("language", val);
-        this.$i18n.locale = val;
+      if (!val) return;
+      const currentLanguage = this.$userdata.get("language");
+      this.$userdata.set("language", val);
+      this.$i18n.locale = val;
+
+      if (currentLanguage && currentLanguage !== val && window.electronAPI?.isElectron) {
+        window.location.reload();
       }
     },
     show_home_history(val) {

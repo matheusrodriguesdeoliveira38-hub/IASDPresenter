@@ -17,7 +17,7 @@
   </div>
 </template>
 
-<script>
+<script lang="ts">
 import LPlayer from "@/components/Player.vue";
 
 export default {

@@ -10,7 +10,7 @@
   />
 </template>
 
-<script>
+<script lang="ts">
 import manifest from "../manifest.json";
 
 import LSlide from "@/components/Slide.vue";

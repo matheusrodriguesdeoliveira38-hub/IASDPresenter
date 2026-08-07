@@ -12,7 +12,7 @@
   </v-app>
 </template>
 
-<script>
+<script lang="ts">
 import AppLoading from "@/layout/Loading.vue";
 import FirstBootLoader from "@/layout/FirstBootLoader.vue";
 import AppTitlebar from "@/layout/Titlebar.vue";

@@ -52,7 +52,7 @@
   </div>
 </template>
 
-<script>
+<script lang="ts">
 import manifest from "../manifest.json";
 import { getFileExtension, isVideoFile } from "@/helpers/ExternalMedia";
 import { getYouTubeEmbedUrl, isYouTubeUrl, YOUTUBE_PLAYER_ORIGIN } from "@/helpers/YouTube";

@@ -27,7 +27,7 @@
   </div>
 </template>
 
-<script>
+<script lang="ts">
 import manifest from "../manifest.json";
 
 export default {

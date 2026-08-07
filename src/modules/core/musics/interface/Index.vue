@@ -145,7 +145,7 @@
   </LWindow>
 </template>
 
-<script>
+<script lang="ts">
 import manifest from "../manifest.json";
 
 import LWindow from "@/components/Window.vue";

@@ -60,7 +60,7 @@
   </div>
 </template>
 
-<script>
+<script lang="ts">
 import $appdata from "@/helpers/AppData";
 import $alert from "@/helpers/Alert";
 

@@ -158,12 +158,29 @@
                         color="success"
                         variant="tonal"
                         size="small"
-                        class="font-weight-bold mr-2"
+                        class="font-weight-bold mr-1"
                       >
                         <v-icon start size="14">
                           mdi-check-circle
                         </v-icon> Baixado
                       </v-chip>
+                      <v-btn
+                        color="primary"
+                        variant="text"
+                        size="small"
+                        icon
+                        @click="downloadAlbum(album)"
+                      >
+                        <v-icon>mdi-shield-refresh</v-icon>
+                        <v-tooltip
+                          activator="parent"
+                          location="top"
+                          open-delay="300"
+                          content-class="modern-glass-menu elevation-0 font-weight-medium text-white"
+                        >
+                          Verificar e reparar mídias
+                        </v-tooltip>
+                      </v-btn>
                       <v-btn
                         color="error"
                         variant="text"
@@ -218,7 +235,7 @@
   </v-slide-y-reverse-transition>
 </template>
 
-<script>
+<script lang="ts">
 import $path from "@/helpers/Path";
 import $db from "@/helpers/Database";
 import manifest from "../manifest.json";
@@ -387,7 +404,10 @@ export default {
     },
     async downloadAlbum(album) {
       if (!window.electronAPI) return;
-      if (this.cancelToken) return;
+      if (this.cancelToken) {
+        if (this.isDownloadingAll) return;
+        this.cancelToken = false;
+      }
       
       this.$appdata.set("sync_is_downloading", true);
       
@@ -475,52 +495,74 @@ export default {
           return;
         }
         
-        let downloaded = 0;
+        const mediaEntries = allMediaFiles.map(media => ({
+          ...media,
+          fullUrl: $path.file(media.url),
+          relativePath: media.url.replace(/^\/(musics|images|covers)\//, ""),
+        }));
+        const checkItems = mediaEntries.map(media => ({
+          type: media.type,
+          filename: media.relativePath,
+        }));
+        const existingMedia = window.electronAPI.checkMediaBatch
+          ? await window.electronAPI.checkMediaBatch(checkItems)
+          : await Promise.all(checkItems.map(media =>
+            window.electronAPI.checkMedia(media.type, media.filename),
+          ));
+        const pendingMedia = mediaEntries.filter((media, index) => !existingMedia[index]);
+
+        let downloaded = mediaEntries.length - pendingMedia.length;
         const batchSize = 5;
         let consecutiveErrors = 0;
         let totalErrors = 0;
-        const MAX_CONSECUTIVE_ERRORS = 5; // Aborta se 5 falhas seguidas (servidor provavelmente caiu)
-        
-        album.progressText = "Baixando...";
-        
-        for (let i = 0; i < allMediaFiles.length; i += batchSize) {
-          if (this.cancelToken || album.cancelToken || !navigator.onLine) {
-            if (!navigator.onLine) totalErrors++;
+        let stoppedOffline = false;
+        const MAX_CONSECUTIVE_ERRORS = 5;
+
+        album.downloadedCount = downloaded;
+        album.progress = 10 + Math.floor((downloaded / album.totalCount) * 90);
+        album.progressText = pendingMedia.length > 0
+          ? `Recuperando ${pendingMedia.length} mídia(s)...`
+          : "Verificação concluída";
+
+        for (let i = 0; i < pendingMedia.length; i += batchSize) {
+          if (this.cancelToken || album.cancelToken) break;
+          if (!navigator.onLine) {
+            stoppedOffline = true;
             break;
           }
           if (consecutiveErrors >= MAX_CONSECUTIVE_ERRORS) break;
-          
-          const batch = allMediaFiles.slice(i, i + batchSize);
-          await Promise.all(batch.map(async (media) => {
-            if (consecutiveErrors >= MAX_CONSECUTIVE_ERRORS) return;
-            const fullUrl = $path.file(media.url);
-            const relativePath = media.url.replace(/^\/(musics|images|covers)\//, "");
-            const exists = await window.electronAPI.checkMedia(media.type, relativePath);
-            if (!exists) {
-              const success = await window.electronAPI.downloadMedia(fullUrl, media.type, relativePath);
-              if (!success) {
-                consecutiveErrors++;
-                totalErrors++;
-                console.warn(`[Sync] Falha ao baixar: ${relativePath} (${consecutiveErrors} consecutivas)`);
-                return;
-              }
-              consecutiveErrors = 0; // Reset ao ter sucesso
+
+          const batch = pendingMedia.slice(i, i + batchSize);
+          const results = await Promise.all(batch.map(async (media) => {
+            const success = await window.electronAPI.downloadMedia(
+              media.fullUrl,
+              media.type,
+              media.relativePath,
+            );
+            if (!success) {
+              console.warn(`[Sync] Falha ao baixar: ${media.relativePath}`);
             }
-            downloaded++;
-            album.downloadedCount = downloaded;
-            album.progress = 10 + Math.floor((downloaded / album.totalCount) * 90);
+            return success;
           }));
+
+          const failures = results.filter(success => !success).length;
+          const successes = results.length - failures;
+          totalErrors += failures;
+          downloaded += successes;
+          consecutiveErrors = successes > 0 ? 0 : consecutiveErrors + failures;
+          album.downloadedCount = downloaded;
+          album.progress = 10 + Math.floor((downloaded / album.totalCount) * 90);
         }
-        
+
         const abortedByErrors = consecutiveErrors >= MAX_CONSECUTIVE_ERRORS;
-        
-        if (abortedByErrors || !navigator.onLine) {
+        if (abortedByErrors || stoppedOffline || totalErrors > 0) {
           album.status = "error";
-          album.progressText = !navigator.onLine ? "Sem internet" : "Falha no servidor";
+          await this.unmarkAlbumDownloaded(album.id_album);
+          album.progressText = stoppedOffline ? "Sem internet" : `${totalErrors} mídia(s) pendente(s)`;
           if (!this.isDownloadingAll) {
             this.$alert.error({
               title: "Falha no download",
-              text: !navigator.onLine 
+              text: stoppedOffline
                 ? "Não foi possível baixar os arquivos. Verifique sua conexão com a internet." 
                 : `Não foi possível concluir o download pois o servidor está indisponível no momento. ${totalErrors} arquivo(s) falharam. Tente novamente mais tarde.`,
               translate: false,
@@ -530,15 +572,13 @@ export default {
           album.status = "idle";
           album.progressText = "Cancelado";
         } else {
-          if (totalErrors > 0) {
-            console.warn(`[Sync] Coletânea baixada com ${totalErrors} arquivo(s) faltando.`);
-          }
           album.status = "downloaded";
           await this.markAlbumDownloaded(album.id_album);
         }
       } catch (error) {
         console.error("Erro ao baixar album:", error);
         album.status = "error";
+        await this.unmarkAlbumDownloaded(album.id_album);
         album.progressText = "Erro ao baixar";
       } finally {
         this.checkGlobalDownloadState();
@@ -551,8 +591,18 @@ export default {
         await window.electronAPI.saveLocalDb("downloaded_albums", manifest);
       }
     },
+    async unmarkAlbumDownloaded(albumId) {
+      const manifest = await window.electronAPI.getLocalDb("downloaded_albums") || [];
+      if (manifest.includes(albumId)) {
+        await window.electronAPI.saveLocalDb(
+          "downloaded_albums",
+          manifest.filter(id => id !== albumId),
+        );
+      }
+    },
     async downloadAllAlbums() {
       if (this.hasNoIdleAlbums) return;
+      this.cancelToken = false;
       this.isDownloadingAll = true;
       this.$appdata.set("sync_is_downloading", true);
       
