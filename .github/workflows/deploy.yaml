@@ -3,6 +3,9 @@ on:
   push:
     branches:
       - main
+
+permissions:
+  contents: write
 jobs:
   deploy:
     runs-on: ubuntu-latest
@@ -15,14 +18,12 @@ jobs:
           node-version: 18
       - name: setup git auth
         env:
-          email: ${{ secrets.EMAIL }}
-          username: ${{ secrets.USERNAME }}
-          access_token: ${{ secrets.ACCESS_TOKEN }}
+          access_token: ${{ secrets.GITHUB_TOKEN }}
         run: |
           git config --global credential.helper store
-          echo "https://${access_token}:x-oauth-basic@github.com" > ~/.git-credentials
-          git config --global user.email $email
-          git config --global user.name $username
+          echo "https://x-access-token:${access_token}@github.com" > ~/.git-credentials
+          git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git config --global user.name "github-actions[bot]"
       - name: fetch CNAME from dist branch
         run: |
           git fetch origin dist:dist
