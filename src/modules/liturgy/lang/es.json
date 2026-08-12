@@ -24,6 +24,7 @@
     "music": "Música",
     "verse": "Versículo",
     "media": "Medio",
+    "presentation": "Presentaci\u00f3n",
     "link": "Enlace"
   },
   "type_descriptions": {
@@ -32,6 +33,7 @@
     "music": "Seleccione una música del Himnario o Colección",
     "verse": "Seleccione un versículo bíblico",
     "media": "Seleccione un archivo de video",
+    "presentation": "Seleccione un archivo PDF o PowerPoint",
     "link": "Agregue una URL para abrir en el navegador"
   },
   "fields": {

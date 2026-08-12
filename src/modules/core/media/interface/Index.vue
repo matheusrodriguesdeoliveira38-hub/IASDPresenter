@@ -196,6 +196,8 @@ export default {
   data: () => ({
     preview_height: 0,
     scrollPos: 0,
+    preferredFullscreenRequest: 0,
+    preferredFullscreenTimer: null,
   }),
   computed: {
     module_id() {
@@ -230,6 +232,9 @@ export default {
         this.$media.fullscreen(value);
       },
     },
+    fullscreenRequest() {
+      return this.module?.config?.fullscreen_request || 0;
+    },
     lazy_load: {
       get() {
         return this.$userdata.get("modules.media.lazy_load");
@@ -251,42 +256,17 @@ export default {
     },
   },
   watch: {
-    "module.show"(newVal) {
-      if (newVal) {
-        const slideFullscreen = this.$userdata.get("modules.config.slide_fullscreen") !== false;
-        const disableIfExtended = this.$userdata.get("modules.config.slide_disable_main_if_extended") !== false;
-        let slideMonitors = this.$userdata.get("modules.config.slide_monitor") || [];
-        
-        if (!Array.isArray(slideMonitors)) {
-          slideMonitors = slideMonitors ? [slideMonitors] : [];
-        }
-
-        if (window.electronAPI && window.electronAPI.getDisplays) {
-          window.electronAPI.getDisplays().then(displays => {
-            let hasExtended = false;
-            if (displays && displays.length > 1) {
-              const primary = displays.find(d => d.isPrimary) || displays[0];
-              const extendedSelected = slideMonitors.filter(m => m !== primary.id);
-              hasExtended = extendedSelected.length > 0;
-            }
-            if (slideFullscreen && !(disableIfExtended && hasExtended)) {
-              this.$nextTick(() => {
-                setTimeout(() => {
-                  this.fullscreen = true;
-                }, 200);
-              });
-            }
-          });
-        } else {
-          if (slideFullscreen && !(disableIfExtended && slideMonitors.length > 0)) {
-            this.$nextTick(() => {
-              setTimeout(() => {
-                this.fullscreen = true;
-              }, 200);
-            });
-          }
-        }
-      }
+    "module.show": {
+      immediate: true,
+      handler(newVal) {
+        if (newVal) this.applyPreferredFullscreen();
+      },
+    },
+    fullscreenRequest: {
+      immediate: true,
+      handler() {
+        if (this.module?.show) this.applyPreferredFullscreen();
+      },
     },
     slide_index() {
       if (!this.module.show) {
@@ -302,7 +282,49 @@ export default {
       }
     },
   },
+  beforeUnmount() {
+    this.preferredFullscreenRequest += 1;
+    window.clearTimeout(this.preferredFullscreenTimer);
+  },
   methods: {
+    async applyPreferredFullscreen() {
+      const requestId = ++this.preferredFullscreenRequest;
+      const slideFullscreen = this.$userdata.get("modules.config.slide_fullscreen") !== false;
+      const disableIfExtended = this.$userdata.get("modules.config.slide_disable_main_if_extended") !== false;
+      let slideMonitors = this.$userdata.get("modules.config.slide_monitor") || [];
+      if (!Array.isArray(slideMonitors)) {
+        slideMonitors = slideMonitors ? [slideMonitors] : [];
+      }
+
+      let hasExtended = slideMonitors.length > 0;
+      if (window.electronAPI?.getDisplays) {
+        const displays = await window.electronAPI.getDisplays();
+        if (requestId !== this.preferredFullscreenRequest || !this.module?.show) return;
+        if (displays?.length > 1) {
+          const primary = displays.find((display) => display.isPrimary) || displays[0];
+          hasExtended = slideMonitors.some((monitorId) => monitorId !== primary.id);
+        } else {
+          hasExtended = false;
+        }
+      }
+
+      const shouldFullscreen = slideFullscreen && !(disableIfExtended && hasExtended);
+      window.clearTimeout(this.preferredFullscreenTimer);
+      if (!shouldFullscreen) {
+        this.fullscreen = false;
+        return;
+      }
+
+      // A transição precisa acontecer depois que <fullscreen> estiver no DOM.
+      this.fullscreen = false;
+      await this.$nextTick();
+      if (requestId !== this.preferredFullscreenRequest || !this.module?.show) return;
+      this.preferredFullscreenTimer = window.setTimeout(() => {
+        if (requestId === this.preferredFullscreenRequest && this.module?.show) {
+          this.fullscreen = true;
+        }
+      }, 50);
+    },
     t(text) {
       return this.$t(`modules.${this.module_id}.${text}`);
     },

@@ -1,6 +1,6 @@
 {
   "name": "iasdpresenter",
-  "version": "1.8.1",
+  "version": "1.8.2",
   "private": true,
   "main": ".electron/main.js",
   "scripts": {
@@ -37,6 +37,7 @@
     "electron-updater": "^6.8.9",
     "fs-extra": "^11.3.2",
     "pdfjs-dist": "^6.1.200",
+    "qrcode": "^1.5.4",
     "roboto-fontface": "*",
     "soundcraft-ui-connection": "^7.0.2",
     "systeminformation": "^5.31.11",

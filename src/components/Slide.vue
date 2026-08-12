@@ -1,5 +1,16 @@
 <template>
   <div ref="container" class="slide-container w-100 h-100">
+    <video
+      v-if="customBg && customBgType === 'video' && customBgImage"
+      :src="customBgSource"
+      class="position-absolute top-0 left-0 w-100 h-100"
+      style="object-fit: cover;"
+      :style="{ opacity: customBgOpacity / 100, backgroundColor: customBgColor }"
+      autoplay
+      muted
+      loop
+      playsinline
+    />
     <transition
       v-for="(slide, index) in slides.slice().reverse()"
       :key="index"
@@ -11,18 +22,11 @@
         class="position-absolute top-0 left-0 w-100 h-100"
         style="overflow: hidden; background-color: rgb(0,0,0);"
       >
-        <video
-          v-if="customBg && customBgType === 'video' && customBgImage"
-          :src="customBgSource"
+        <div
+          v-if="!(customBg && customBgType === 'video' && customBgImage)"
           class="position-absolute top-0 left-0 w-100 h-100"
-          style="object-fit: cover;"
-          :style="{ opacity: customBgOpacity / 100, backgroundColor: customBgColor }"
-          autoplay
-          muted
-          loop
-          playsinline
+          :style="style_bg(slide)"
         />
-        <div v-else class="position-absolute top-0 left-0 w-100 h-100" :style="style_bg(slide)" />
         <div
           class="position-absolute top-0 left-0 w-100 h-100 d-flex justify-center"
           :class="slideAlignClass"
@@ -71,12 +75,17 @@ export default {
     customFontSize: 100,
     customFontColor: "#FFFFFF",
     customFontWeight: "700",
+    customFontFamily: "Roboto",
+    customLineHeight: 140,
+    customLetterSpacing: 3,
+    customTextBox: true,
     customBg: false,
     customBgColor: "#000000",
     customBgImage: null,
     customBgType: "image",
     customBgOpacity: 100,
     resizeObserver: null,
+    slideCleanupTimers: [],
   }),
   computed: {
     props_slide() {
@@ -131,6 +140,8 @@ export default {
     window.removeEventListener("resize", this.windowResize);
     window.removeEventListener("storage", this.updateSettings);
     this.resizeObserver?.disconnect();
+    this.slideCleanupTimers.forEach((timer) => window.clearTimeout(timer));
+    this.slideCleanupTimers = [];
   },
   methods: {
     updateSettings() {
@@ -149,6 +160,10 @@ export default {
       this.customFontSize = getSetting("slide_font_size", 100);
       this.customFontColor = getSetting("slide_font_color", "#FFFFFF");
       this.customFontWeight = getSetting("slide_font_weight", "700");
+      this.customFontFamily = getSetting("slide_font_family", "Roboto");
+      this.customLineHeight = getSetting("slide_line_height", 140);
+      this.customLetterSpacing = getSetting("slide_letter_spacing", 3);
+      this.customTextBox = getSetting("slide_text_box", true);
 
       this.customBg = getSetting("slide_custom_bg", false);
       this.customBgColor = getSetting("slide_bg_color", "#000000");
@@ -178,7 +193,14 @@ export default {
       };
 
       if (this.slides.length > 3) {
-        this.slides[3].destroy = true;
+        const expiredSlide = this.slides[3];
+        expiredSlide.destroy = true;
+        const timer = window.setTimeout(() => {
+          const index = this.slides.indexOf(expiredSlide);
+          if (index >= 0) this.slides.splice(index, 1);
+          this.slideCleanupTimers = this.slideCleanupTimers.filter((item) => item !== timer);
+        }, 550);
+        this.slideCleanupTimers.push(timer);
       }
     },
     style_bg(slide) {
@@ -253,19 +275,20 @@ export default {
       if (this.customTextFormat) {
         const sizeMultiplier = this.customFontSize / 100;
         return {
-          backgroundColor: "rgba(0, 0, 0, 0.25)",
-          border: `${Math.max(2, this.fontSizePc(0.4))}px solid rgba(255, 255, 255, 0.85)`,
+          backgroundColor: this.customTextBox ? "rgba(0, 0, 0, 0.25)" : "transparent",
+          border: this.customTextBox ? `${Math.max(2, this.fontSizePc(0.4))}px solid rgba(255, 255, 255, 0.85)` : "none",
           padding: `${this.fontSizePc(5)}px ${this.fontSizePc(8)}px`,
-          backdropFilter: "blur(8px)",
-          WebkitBackdropFilter: "blur(8px)",
-          boxShadow: "0px 10px 30px rgba(0, 0, 0, 0.4)",
+          backdropFilter: this.customTextBox ? "blur(8px)" : "none",
+          WebkitBackdropFilter: this.customTextBox ? "blur(8px)" : "none",
+          boxShadow: this.customTextBox ? "0px 10px 30px rgba(0, 0, 0, 0.4)" : "none",
           textAlign: "center",
           textTransform: "uppercase",
           fontSize: `${this.fontSizePc(15) * sizeMultiplier}px`,
           color: this.repeat ? "#f6c32a" : this.customFontColor,
           fontWeight: this.customFontWeight,
-          letterSpacing: "0.03em",
-          lineHeight: "1.4",
+          fontFamily: `${this.customFontFamily}, sans-serif`,
+          letterSpacing: `${this.customLetterSpacing / 100}em`,
+          lineHeight: String(this.customLineHeight / 100),
           textShadow: "0px 2px 10px rgba(0, 0, 0, 0.8)",
         };
       }

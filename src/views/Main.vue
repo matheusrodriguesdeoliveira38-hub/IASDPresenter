@@ -181,6 +181,7 @@ export default {
       sidebarOpen: false,
       remoteControlUnsubscribe: null,
       remoteControlQueue: Promise.resolve(),
+      remoteControlStateTimer: null,
     };
   },
   computed: {
@@ -367,17 +368,79 @@ export default {
           this.enqueueRemoteControlCommand,
         );
       }
+      if (window.electronAPI.setRemoteControlState) {
+        this.publishRemoteControlState();
+        const publishInterval = this.$performance.isLightMode() ? 2000 : 750;
+        this.remoteControlStateTimer = window.setInterval(this.publishRemoteControlState, publishInterval);
+      }
     }
   },
   beforeUnmount() {
     if (this.remoteControlUnsubscribe) {
       this.remoteControlUnsubscribe();
     }
+    if (this.remoteControlStateTimer) {
+      window.clearInterval(this.remoteControlStateTimer);
+    }
   },
   methods: {
     toggleSidebar() {
       if (this.isLauncherLayout) return;
       this.sidebarOpen = !this.sidebarOpen;
+    },
+    publishRemoteControlState() {
+      if (!window.electronAPI?.setRemoteControlState) return;
+
+      const popupModule = this.$appdata.get("popup_module") || "";
+      const override = this.$appdata.get("projection_override") || "none";
+      const mediaConfig = this.$media.config() || {};
+      const slides = this.$media.slides() || [];
+      const slideIndex = Math.max(0, Number(mediaConfig.slide_index || 0));
+      const currentSlide = slides[slideIndex] || null;
+      const nextSlide = slides[slideIndex + 1] || null;
+      let current = null;
+      let next = null;
+
+      if (popupModule === "media" || this.$appdata.get("modules.media.id_music")) {
+        current = {
+          title: mediaConfig.title || this.$appdata.get("modules.media.data.name") || "Música",
+          text: currentSlide?.lyric || currentSlide?.text || currentSlide?.source_text || "",
+          number: slides.length ? slideIndex + 1 : null,
+          total: slides.length || null,
+        };
+        next = nextSlide ? {
+          title: nextSlide.marker || nextSlide.name || "Próximo slide",
+          text: nextSlide.lyric || nextSlide.text || nextSlide.source_text || "",
+        } : null;
+      } else if (popupModule === "bible") {
+        const bible = this.$appdata.get("modules.bible.data") || {};
+        current = { title: bible.scriptural_reference || bible.reference || "Bíblia", text: bible.text || "" };
+      } else if (popupModule === "presentation") {
+        const index = Number(this.$appdata.get("modules.presentation.config.slide_index") || 0);
+        const total = Number(this.$appdata.get("modules.presentation.totalSlides") || 0);
+        current = {
+          title: this.$appdata.get("modules.presentation.titleText") || "Apresentação",
+          text: `Slide ${index + 1}${total ? ` de ${total}` : ""}`,
+          number: index + 1,
+          total: total || null,
+        };
+        next = total && index + 1 < total ? { text: `Slide ${index + 2}` } : null;
+      } else if (popupModule === "external_media") {
+        const filePath = this.$appdata.get("modules.external_media.filePath") || "";
+        current = { title: filePath.split(/[\\/]/).pop() || "Mídia externa", text: "Mídia externa em exibição" };
+      }
+
+      window.electronAPI.setRemoteControlState({
+        projection: { active: Boolean(popupModule), module: popupModule, override },
+        current,
+        next,
+        playback: {
+          paused: mediaConfig.is_paused !== false,
+          progress: Number(mediaConfig.progress || 0),
+          currentTime: Number(mediaConfig.current_time || 0),
+          duration: Number(mediaConfig.duration || 0),
+        },
+      }).catch(() => {});
     },
     enqueueRemoteControlCommand(command) {
       this.remoteControlQueue = this.remoteControlQueue
@@ -388,6 +451,13 @@ export default {
     },
     async handleRemoteControlCommand(command) {
       if (!command || typeof command !== "object") return;
+
+      if (command.type === "emergency") {
+        const override = command.action === "clear" ? "none" : command.action;
+        this.$appdata.set("projection_override", override);
+        this.publishRemoteControlState();
+        return;
+      }
 
       if (command.type === "open_media" && command.id_music) {
         await this.$media.open({

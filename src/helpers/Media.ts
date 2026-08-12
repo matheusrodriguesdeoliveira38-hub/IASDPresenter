@@ -310,7 +310,7 @@ const helper: Record<string, any> = {
     await $popup.syncReturnMonitor(returnMonitor, forceOpen);
   },
 
-  async close(force = false) {
+  async close(force = false, options: { preserveProjection?: boolean } = {}) {
     //Se force for true, fechamento forçado. Sem diálogo de confirmação!
     if (!force) {
       const self = this;
@@ -329,7 +329,7 @@ const helper: Record<string, any> = {
     $appdata.set("modules.media.minimized", false);
 
     // Fechar a projeção se estiver aberta
-    if ($appdata.get("popup_module") === "media") {
+    if ($appdata.get("popup_module") === "media" && options.preserveProjection !== true) {
       await $popup.exit();
     } else {
       await $popup.closeReturnMonitor();
@@ -477,6 +477,9 @@ const helper: Record<string, any> = {
   maximize() {
     $appdata.set("modules.media.show", true);
     $appdata.set("modules.media.minimized", false);
+    // O componente pode ainda estar carregando. Este token preserva o pedido
+    // de tela cheia na primeira abertura e ao reabrir a mesma música.
+    $appdata.set("modules.media.config.fullscreen_request", Date.now());
   },
 
   isMinimized() {
@@ -493,6 +496,8 @@ const helper: Record<string, any> = {
 
   slides() {
     const data = $appdata.get("modules.media.data");
+    if (!data || typeof data !== "object") return [];
+
     const showTitle = $userdata.get("modules.config.slide_show_title") !== false;
 
     let prev_image = data.url_image;
@@ -518,6 +523,10 @@ const helper: Record<string, any> = {
     return [
       {
         lyric: showTitle ? data.name : "",
+        source_text: showTitle
+          ? data.title_source_text || (data.title_chords ? `// ${data.title_chords}
+${data.name}` : data.name)
+          : "",
         cover: true,
         time: "00:00:00",
         instrumental_time: "00:00:00",

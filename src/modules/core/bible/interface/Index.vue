@@ -230,13 +230,11 @@
             </h3>
             <div class="d-flex align-center ml-auto flex-shrink-0" style="gap: 8px;">
               <v-btn
-                v-shortkey="['arrowleft']"
                 :disabled="!(select_bible?.verses && select_bible.verses.length > 0)"
                 variant="tonal"
                 size="small"
                 icon
                 @click="prevVerse()"
-                @shortkey="prevVerse()"
               >
                 <v-icon>mdi-chevron-left</v-icon>
                 <v-tooltip
@@ -249,13 +247,11 @@
                 </v-tooltip>
               </v-btn>
               <v-btn
-                v-shortkey="['arrowright']"
                 :disabled="!(select_bible?.verses && select_bible.verses.length > 0)"
                 variant="tonal"
                 size="small"
                 icon
                 @click="nextVerse()"
-                @shortkey="nextVerse()"
               >
                 <v-icon>mdi-chevron-right</v-icon>
                 <v-tooltip
@@ -268,14 +264,12 @@
                 </v-tooltip>
               </v-btn>
               <v-btn
-                v-shortkey="['del']"
                 :disabled="!(select_bible?.verses && select_bible.verses.length > 0)"
                 variant="tonal"
                 color="error"
                 size="small"
                 icon
                 @click="clean()"
-                @shortkey="clean()"
               >
                 <v-icon>mdi-eraser</v-icon>
                 <v-tooltip
@@ -582,11 +576,13 @@ export default {
   },
   async mounted() {
     window.addEventListener("keydown", this.handleBibleKeydown);
+    window.addEventListener("bible-presentation-navigation", this.handleProjectedBibleNavigation);
     window.addEventListener("click", this.handleBibleSearchClickOutside);
     await this.loadData();
   },
   unmounted() {
     window.removeEventListener("keydown", this.handleBibleKeydown);
+    window.removeEventListener("bible-presentation-navigation", this.handleProjectedBibleNavigation);
     window.removeEventListener("click", this.handleBibleSearchClickOutside);
   },
   methods: {
@@ -607,18 +603,31 @@ export default {
       this.$appdata.set(`modules.${this.module_id}.data.${param}`, value);
     },
     handleBibleKeydown(event) {
-      if (!this.show || event.ctrlKey || event.altKey || event.metaKey) return;
+      if (!this.show || this.isBibleProjectionActive() || event.ctrlKey || event.altKey || event.metaKey) return;
       if (["INPUT", "TEXTAREA"].includes(document.activeElement?.tagName) || document.activeElement?.isContentEditable) {
         return;
       }
 
-      if (event.code === "ArrowRight") {
+      if (["ArrowRight", "ArrowDown"].includes(event.code)) {
         event.preventDefault();
         this.advanceVerse(1);
-      } else if (event.code === "ArrowLeft") {
+      } else if (["ArrowLeft", "ArrowUp"].includes(event.code)) {
         event.preventDefault();
         this.advanceVerse(-1);
+      } else if (event.code === "Delete") {
+        event.preventDefault();
+        this.clean();
       }
+    },
+    isBibleProjectionActive() {
+      const popups = this.$appdata.get("popups") || [];
+      const popup = this.$appdata.get("popup");
+      const hasProjection = popups.some((item) => item && !item.closed) || !!(popup && !popup.closed);
+      return this.$appdata.get("popup_module") === "bible" && hasProjection;
+    },
+    handleProjectedBibleNavigation(event) {
+      const direction = event.detail?.direction === "prev" ? -1 : 1;
+      this.advanceVerse(direction);
     },
     clearBibleSearch() {
       this.verseSearchQuery = "";

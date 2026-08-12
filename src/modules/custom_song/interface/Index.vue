@@ -44,12 +44,16 @@
               <span>Dados</span>
             </div>
 
-            <v-text-field
+            <v-textarea
               v-model="form.name"
-              label="Titulo"
+              label="Titulo e cifra do slide de titulo"
+              placeholder="//      G  D
+Titulo da musica"
               variant="outlined"
+              rows="3"
               density="compact"
               hide-details="auto"
+              prepend-inner-icon="mdi-music-clef-treble"
             />
             <v-text-field
               v-model="form.artist"
@@ -278,6 +282,14 @@
               </v-chip>
               <v-spacer />
               <v-btn
+                variant="tonal"
+                class="text-none"
+                prepend-icon="mdi-file-upload-outline"
+                @click="importLyricsTxt"
+              >
+                Importar TXT
+              </v-btn>
+              <v-btn
                 color="primary"
                 variant="tonal"
                 class="text-none"
@@ -331,11 +343,24 @@
 
                 <v-textarea
                   v-model="slide.text"
-                  label="Letra do slide"
+                  label="Letra e cifras do slide"
+                  placeholder="//       Bb    C\nA Ele a gloria"
+                  hint="Linhas iniciadas com // aparecem somente no monitor de retorno."
+                  persistent-hint
                   variant="outlined"
                   rows="2"
                   density="compact"
                   hide-details="auto"
+                />
+                <v-textarea
+                  v-model="slide.notes"
+                  label="Notas para o retorno"
+                  placeholder="Lembrete, entrada do vocal..."
+                  variant="outlined"
+                  rows="2"
+                  density="compact"
+                  hide-details="auto"
+                  prepend-inner-icon="mdi-note-text-outline"
                 />
                 <div class="slide-meta-row">
                   <v-text-field
@@ -408,7 +433,7 @@ export default {
       return this.$modules.get(this.module_id);
     },
     canSave() {
-      return this.form.name.trim() && this.form.slides.some((slide) => slide.text.trim());
+      return this.lyricText(this.form.name) && this.form.slides.some((slide) => this.lyricText(slide.text));
     },
     activePreview() {
       return this.form.slides[this.previewIndex] || this.form.slides[0] || {};
@@ -418,7 +443,7 @@ export default {
       return [
         {
           uid: "title-preview",
-          lyric: showTitle ? this.form.name || "Titulo da musica" : "",
+          lyric: showTitle ? this.toSlideHtml(this.lyricText(this.form.name) || "Titulo da musica") : "",
           aux_lyric: "",
           cover: true,
           url_image: "",
@@ -426,7 +451,7 @@ export default {
         },
         ...this.form.slides.map((slide) => ({
           uid: slide.uid,
-          lyric: this.toSlideHtml(slide.text),
+          lyric: this.toSlideHtml(this.lyricText(slide.text)),
           aux_lyric: this.toSlideHtml(slide.aux),
           cover: false,
           url_image: "",
@@ -465,7 +490,7 @@ export default {
     const draft = this.$userdata.get(CUSTOM_STORAGE_KEY);
     if (draft && Array.isArray(draft.slides)) {
       this.form = {
-        name: draft.name || "",
+        name: draft.titleChords ? this.mergeInlineChords(draft.name, draft.titleChords) : draft.name || "",
         artist: draft.artist || "",
         duration: draft.duration || "00:00",
         audioPath: draft.audioPath || "",
@@ -488,6 +513,7 @@ export default {
       return {
         uid: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
         text: "",
+        notes: "",
         aux: "",
         time: "00:00",
       };
@@ -513,6 +539,28 @@ export default {
     toSlideHtml(text) {
       return String(text || "").trim().replace(/[\r\n]+/g, "<br>");
     },
+    lyricText(text) {
+      return String(text || "")
+        .split(/\r?\n/)
+        .filter((line) => !/^\s*\/\//.test(line))
+        .join("\n")
+        .trim();
+    },
+    chordText(text) {
+      return String(text || "")
+        .split(/\r?\n/)
+        .filter((line) => /^\s*\/\//.test(line))
+        .map((line) => line.replace(/^(\s*)\/\/ ?/, "$1"))
+        .join("\n")
+        .trimEnd();
+    },
+    mergeInlineChords(text, chords) {
+      const chordLines = String(chords || "")
+        .split(/\r?\n/)
+        .map((line) => `// ${  line}`)
+        .join("\n");
+      return [chordLines, text].filter(Boolean).join("\n");
+    },
     previewSlideTitle(slide, index) {
       if (index === 0) return "Titulo";
       return String(slide.lyric || "").replace(/<br\s*\/?>/gi, " ") || "Slide vazio";
@@ -528,6 +576,53 @@ export default {
         filters: [{ name: "Audio MP3", extensions: ["mp3"] }],
       });
       if (filePath) this.form.audioPath = filePath;
+    },
+    async importLyricsTxt() {
+      if (!window.electronAPI?.openFileDialog || !window.electronAPI?.readTextFile) {
+        this.$alert.error({ text: "Importacao de TXT disponivel apenas no aplicativo desktop.", translate: false });
+        return;
+      }
+
+      try {
+        const filePath = await window.electronAPI.openFileDialog({
+          title: "Importar letra de musica",
+          filters: [{ name: "Arquivo de texto", extensions: ["txt"] }],
+        });
+        if (!filePath) return;
+
+        const file = await window.electronAPI.readTextFile(filePath);
+        if (!file?.ok) throw new Error(file?.error || "Nao foi possivel ler o arquivo selecionado.");
+
+        const importedSlides = String(file.content || "")
+          .replace(/^\uFEFF/, "")
+          .trim()
+          .split(/(?:\r?\n)[\t ]*(?:\r?\n)+/)
+          .map((text) => text.trim())
+          .filter(Boolean)
+          .map((text) => ({ ...this.createSlide(), text }));
+
+        if (!importedSlides.length) {
+          this.$alert.error({ text: "O arquivo TXT nao possui uma letra valida.", translate: false });
+          return;
+        }
+
+        const hasExistingLyrics = this.form.slides.some((slide) => slide.text.trim());
+        this.form.slides = hasExistingLyrics
+          ? [...this.form.slides, ...importedSlides]
+          : importedSlides;
+        this.previewIndex = hasExistingLyrics ? this.form.slides.length - importedSlides.length + 1 : 1;
+
+        if (!this.form.name.trim()) {
+          this.form.name = this.fileName(filePath).replace(/\.txt$/i, "");
+        }
+
+        this.$alert.info({
+          text: `${importedSlides.length  } slide${  importedSlides.length === 1 ? "" : "s"  } importado${  importedSlides.length === 1 ? "" : "s"  }.`,
+          translate: false,
+        });
+      } catch (error) {
+        this.$alert.error({ text: "Nao foi possivel importar a letra do arquivo TXT.", error, translate: false });
+      }
     },
     async toggleTimingAudio() {
       const audio = this.$refs.timingAudio;
@@ -687,7 +782,8 @@ export default {
         .sort((a, b) => (a.order || 0) - (b.order || 0))
         .map((slide) => ({
           uid: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
-          text: slide.lyric || "",
+          text: slide.source_text || slide.lyric || "",
+          notes: slide.notes || "",
           aux: slide.aux_lyric || "",
           time: slide.time || "00:00",
         }));
@@ -695,7 +791,7 @@ export default {
       this.editingMusicId = idMusic;
       this.previewIndex = 0;
       this.form = {
-        name: music.name || "",
+        name: music.title_source_text || this.mergeInlineChords(music.name, music.title_chords) || music.name || "",
         artist: music.artist || "",
         duration: music.duration || "00:00",
         audioPath: music.url_music || "",
@@ -772,7 +868,7 @@ export default {
       const indexedMusic = {
         ...musicSummary,
         albums_names: CUSTOM_ALBUM_NAME,
-        lyric: this.form.slides.map((slide) => slide.text).join(" "),
+        lyric: this.form.slides.map((slide) => this.lyricText(slide.text)).join(" "),
       };
 
       if (existing >= 0) index.splice(existing, 1, indexedMusic);
@@ -783,7 +879,7 @@ export default {
     createMusicSummary(idMusic, track, urlMusic) {
       return {
         id_music: idMusic,
-        name: this.form.name.trim(),
+        name: this.lyricText(this.form.name),
         duration: this.normalizeTime(this.form.duration),
         track,
         has_music: urlMusic ? 1 : 0,
@@ -804,16 +900,20 @@ export default {
       return {
         ...summary,
         artist: this.form.artist.trim(),
+        title_source_text: String(this.form.name || "").trim(),
+        title_chords: this.chordText(this.form.name),
         albums: [albumRef],
         categories: [categoryId],
         url_image: "",
         image_position: "center center",
         instrumental_duration: "00:00",
         lyric: this.form.slides
-          .filter((slide) => slide.text.trim())
+          .filter((slide) => this.lyricText(slide.text))
           .map((slide, index) => ({
             id_lyric: index + 1,
-            lyric: slide.text.trim(),
+            lyric: this.lyricText(slide.text),
+            source_text: String(slide.text || "").trim(),
+            notes: String(slide.notes || "").trim(),
             aux_lyric: slide.aux.trim(),
             order: index + 1,
             show_slide: 1,

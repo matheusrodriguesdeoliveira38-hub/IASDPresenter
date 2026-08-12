@@ -5,6 +5,7 @@ const fsExtra = require('fs-extra');
 const crypto = require('crypto');
 const http = require('http');
 const os = require('os');
+const QRCode = require('qrcode');
 const { spawn } = require('child_process');
 const { autoUpdater } = require('electron-updater');
 const DbExtractor = require('./DbExtractor');
@@ -70,6 +71,17 @@ const mediaFolders = {
 let presentationShortcutsEnabled = false;
 let mainAppWindow = null;
 let remoteControlServer = null;
+let remoteControlState = {
+  revision: 0,
+  updatedAt: null,
+  connected: false,
+  projection: { active: false, module: '', override: 'none' },
+  current: null,
+  next: null,
+  playback: { paused: true, progress: 0, currentTime: 0, duration: 0 },
+};
+let remoteCommandLockUntil = 0;
+const recentRemoteCommandIds = new Map();
 let productionAppServer = null;
 let productionAppUrl = null;
 const remoteControlConfigPath = path.join(userDataPath, 'remote-control.json');
@@ -134,11 +146,6 @@ function savePerformanceConfig(config = {}) {
 if (performanceConfig.disableHardwareAcceleration) {
   app.disableHardwareAcceleration();
   app.commandLine.appendSwitch('disable-gpu');
-} else {
-  app.commandLine.appendSwitch('ignore-gpu-blocklist');
-  app.commandLine.appendSwitch('enable-gpu-rasterization');
-  app.commandLine.appendSwitch('enable-zero-copy');
-  app.commandLine.appendSwitch('disable-renderer-backgrounding');
 }
 
 function writeFirstBootErrorLog(context, error) {
@@ -444,6 +451,46 @@ function getRemoteControlNetworkOptions() {
 function isRemoteControlPasswordValid(request) {
   if (!remoteControlConfig.requirePassword || !remoteControlConfig.password) return true;
   return request.headers['x-remote-password'] === remoteControlConfig.password;
+}
+
+function getRemoteControlRole(request) {
+  return request.headers['x-remote-role'] === 'presenter' ? 'presenter' : 'operator';
+}
+
+function isRemoteControlActionAllowed(role, endpoint, action = '') {
+  if (role === 'operator') return true;
+  if (endpoint === 'control') return ['play_pause', 'next', 'prev'].includes(action);
+  return endpoint === 'liturgy_open';
+}
+
+function reserveRemoteCommand(requestId) {
+  const now = Date.now();
+  for (const [id, timestamp] of recentRemoteCommandIds) {
+    if (now - timestamp > 10000) recentRemoteCommandIds.delete(id);
+  }
+
+  if (requestId && recentRemoteCommandIds.has(requestId)) {
+    return { ok: true, duplicate: true };
+  }
+  if (now < remoteCommandLockUntil) {
+    return { ok: false, retryAfter: remoteCommandLockUntil - now };
+  }
+
+  remoteCommandLockUntil = now + 180;
+  if (requestId) recentRemoteCommandIds.set(requestId, now);
+  return { ok: true, duplicate: false };
+}
+
+function updateRemoteControlState(state = {}) {
+  const safeState = state && typeof state === 'object' ? state : {};
+  remoteControlState = {
+    ...remoteControlState,
+    ...safeState,
+    revision: remoteControlState.revision + 1,
+    updatedAt: new Date().toISOString(),
+    connected: true,
+  };
+  return remoteControlState;
 }
 
 function sendRemoteControlCommand(command) {
@@ -1023,735 +1070,62 @@ function getRemoteControlHtml() {
 <html lang="pt-BR">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#081526">
   <title>Controle IASDPresenter</title>
   <style>
-    :root {
-      color-scheme: light;
-      --accent: #0097d7;
-      --accent-dark: #0077b3;
-      --accent-soft: #e8f7ff;
-      --danger: #ff3448;
-      --success: #08bf63;
-      --yellow: #ffc107;
-      --bg: #f2f5f8;
-      --panel: rgba(255, 255, 255, 0.92);
-      --panel-strong: #ffffff;
-      --text: #152333;
-      --muted: #667789;
-      --border: rgba(20, 32, 46, 0.1);
-      --hover: rgba(0, 151, 215, 0.08);
-      --shadow: 0 20px 50px rgba(31, 47, 70, 0.1);
-    }
-    * { box-sizing: border-box; }
-    html { min-height: 100%; background: var(--bg); }
-    body {
-      min-height: 100vh;
-      margin: 0;
-      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
-      background:
-        linear-gradient(180deg, rgba(255,255,255,0.86), rgba(242,245,248,0.96)),
-        radial-gradient(circle at 50% -10%, rgba(0,151,215,0.14), transparent 38%);
-      color: var(--text);
-      -webkit-font-smoothing: antialiased;
-    }
-    main { width: min(820px, 100%); margin: 0 auto; padding: 18px; }
-    #homeView { min-height: calc(100vh - 36px); }
-    #homeView.active { display: grid; place-items: center; }
-    #homeView .surface {
-      width: min(390px, 100%);
-      min-height: min(710px, calc(100vh - 36px));
-      display: grid;
-      align-content: center;
-      gap: clamp(48px, 9vh, 74px);
-      background: #ffffff;
-      border-color: rgba(0, 151, 215, 0.12);
-      box-shadow: 0 30px 80px rgba(35, 55, 78, 0.12);
-      padding: clamp(34px, 7vh, 62px) clamp(30px, 8vw, 48px);
-    }
-    header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 18px; }
-    h1 { font-size: 24px; margin: 0; font-weight: 850; line-height: 1.08; letter-spacing: 0; }
-    .brand { display: flex; align-items: center; gap: 12px; min-width: 0; }
-    .brand-mark {
-      width: 48px;
-      height: 48px;
-      border-radius: 12px;
-      display: grid;
-      place-items: center;
-      background: linear-gradient(135deg, var(--accent) 0%, var(--accent-dark) 100%);
-      box-shadow: 0 12px 28px rgba(0, 151, 215, 0.24);
-      font-weight: 900;
-      letter-spacing: 0;
-      color: #ffffff;
-    }
-    .status { color: var(--muted); font-size: 13px; margin-top: 5px; line-height: 1.35; }
-    .view { display: none; }
-    .view.active { display: block; }
-    .login-card { margin-top: 16px; display: grid; gap: 12px; }
-    .login-card.hidden { display: none; }
-    .surface {
-      background: var(--panel);
-      border: 1px solid var(--border);
-      border-radius: 18px;
-      box-shadow: var(--shadow);
-      backdrop-filter: blur(24px) saturate(145%);
-      -webkit-backdrop-filter: blur(24px) saturate(145%);
-      padding: 18px;
-    }
-    button {
-      border: 0;
-      border-radius: 12px;
-      background: linear-gradient(135deg, var(--accent) 0%, var(--accent-dark) 100%);
-      color: white;
-      padding: 0 16px;
-      min-height: 46px;
-      font-weight: 800;
-      font-size: 14px;
-      cursor: pointer;
-      transition: transform 0.16s ease, background 0.16s ease, border-color 0.16s ease, box-shadow 0.16s ease;
-    }
-    button:hover { transform: translateY(-1px); }
-    button:active { transform: scale(0.98); }
-    .controls {
-      display: grid;
-      grid-template-areas:
-        ". close ."
-        "prev play next";
-      grid-template-columns: 1fr auto 1fr;
-      justify-items: center;
-      align-items: center;
-      gap: 42px 40px;
-      margin: 0;
-    }
-    .controls button {
-      background: #ffffff;
-      border: 1px solid rgba(0, 151, 215, 0.2);
-      color: var(--text);
-      min-height: 54px;
-      padding: 0;
-      display: grid;
-      place-items: center;
-      box-shadow: 0 12px 26px rgba(28, 68, 98, 0.08);
-    }
-    .controls button:hover, .home-button:hover, .song:hover, .back-button:hover { background: var(--hover); border-color: rgba(0, 151, 215, 0.45); }
-    .control-close { grid-area: close; width: 58px; height: 58px; background: var(--danger) !important; border-color: var(--danger) !important; color: #ffffff !important; box-shadow: 0 16px 30px rgba(255, 52, 72, 0.26) !important; }
-    .control-prev { grid-area: prev; }
-    .control-play { grid-area: play; width: 88px !important; height: 88px !important; background: var(--success) !important; border-color: var(--success) !important; color: #ffffff !important; box-shadow: 0 20px 38px rgba(8, 191, 99, 0.28) !important; }
-    .control-next { grid-area: next; }
-    .control-prev, .control-next { width: 56px; height: 54px; }
-    .control-icon { display: grid; place-items: center; width: 34px; height: 34px; line-height: 1; }
-    .control-icon svg { width: 100%; height: 100%; stroke: currentColor; fill: none; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
-    .control-play .control-icon { width: 46px; height: 46px; }
-    .control-play .control-icon svg { fill: currentColor; stroke: none; }
-    .control-close .control-icon { width: 34px; height: 34px; }
-    .control-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
-    .home-actions { display: grid; grid-template-columns: repeat(3, 1fr); gap: 28px; margin: 0; }
-    .home-button {
-      width: 100%;
-      min-height: 74px;
-      aspect-ratio: 1 / 1;
-      text-align: center;
-      background: #ffffff;
-      border: 1px solid rgba(0, 151, 215, 0.18);
-      display: grid;
-      align-items: center;
-      justify-items: center;
-      align-content: center;
-      gap: 7px;
-      box-shadow: 0 14px 32px rgba(28, 68, 98, 0.08);
-      color: var(--accent);
-    }
-    .home-button strong { display: block; font-size: 9px; line-height: 1.08; max-width: 100%; color: var(--accent-dark); text-transform: uppercase; font-weight: 850; letter-spacing: 0; }
-    .home-button span, .arrow-pill { display: none; }
-    .home-icon {
-      width: 34px;
-      height: 34px;
-      border-radius: 8px;
-      display: grid;
-      place-items: center;
-      color: var(--accent);
-      font-size: 28px;
-      line-height: 1;
-    }
-    .home-icon svg { width: 34px; height: 34px; stroke: currentColor; }
-    .back-button { background: #ffffff; border: 1px solid var(--border); color: var(--text); min-height: 42px; white-space: nowrap; box-shadow: 0 8px 20px rgba(31,47,70,0.06); }
-    .search {
-      display: grid;
-      grid-template-columns: 1fr auto;
-      gap: 10px;
-      margin-bottom: 14px;
-      background: #ffffff;
-      border: 1px solid var(--border);
-      border-radius: 14px;
-      padding: 8px;
-      box-shadow: 0 10px 24px rgba(31,47,70,0.06);
-    }
-    input {
-      width: 100%;
-      border: 0;
-      background: transparent;
-      color: var(--text);
-      padding: 10px 8px;
-      font-size: 16px;
-      outline: none;
-      min-width: 0;
-    }
-    input::placeholder { color: #98a2b3; }
-    .results { display: grid; gap: 10px; }
-    .song {
-      width: 100%;
-      text-align: left;
-      background: #ffffff;
-      border: 1px solid rgba(20, 32, 46, 0.09);
-      color: var(--text);
-      padding: 12px 14px;
-      display: grid;
-      grid-template-columns: auto 1fr auto;
-      gap: 12px;
-      align-items: center;
-      min-height: 74px;
-      box-shadow: 0 10px 24px rgba(31,47,70,0.05);
-    }
-    .track {
-      width: 42px;
-      height: 42px;
-      border-radius: 12px;
-      display: grid;
-      place-items: center;
-      background: rgba(0, 151, 215, 0.14);
-      color: var(--accent);
-      font-weight: 900;
-      font-size: 15px;
-    }
-    .name { font-size: 15px; font-weight: 850; line-height: 1.25; letter-spacing: 0; }
-    .meta { color: var(--muted); font-size: 12px; margin-top: 4px; line-height: 1.3; font-weight: 600; }
-    .duration { color: var(--accent-dark); }
-    .empty {
-      color: var(--muted);
-      text-align: center;
-      padding: 32px 18px;
-      border: 1px dashed var(--border);
-      border-radius: 14px;
-      background: rgba(0, 151, 215, 0.04);
-      line-height: 1.45;
-    }
-    @media (max-width: 520px) {
-      main { padding: 8px 4px; }
-      h1 { font-size: 21px; }
-      .surface { padding: 14px; }
-      #homeView { min-height: calc(100vh - 16px); }
-      #homeView .surface { min-height: calc(100vh - 16px); border-radius: 0; gap: clamp(54px, 12vh, 76px); }
-      .brand-mark { width: 42px; height: 42px; }
-      .controls { gap: 44px 36px; }
-      .control-play { width: 86px !important; height: 86px !important; }
-      .control-prev, .control-next { width: 54px; height: 52px; }
-      .home-actions { gap: clamp(24px, 9vw, 36px); }
-      .home-button { min-height: 64px; }
-      .search { grid-template-columns: 1fr; }
-      .login-card { margin-top: 10px; }
-      .song { grid-template-columns: auto 1fr; }
-      .duration { display: none; }
-    }
+    :root{font-family:Inter,system-ui,-apple-system,sans-serif;color:#f8fafc;background:#06101d;color-scheme:dark;--blue:#0097d7;--card:#102033;--muted:#91a4ba;--line:#22364c;--danger:#ef4444;--ok:#22c55e;--warn:#f6c32a}*{box-sizing:border-box}body{margin:0;min-height:100vh;background:radial-gradient(circle at top,#12304a 0,#081526 38%,#06101d 100%)}button,input,select{font:inherit}.app{width:min(720px,100%);margin:auto;padding:calc(14px + env(safe-area-inset-top)) 14px calc(88px + env(safe-area-inset-bottom))}.top{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px}.brand{display:flex;align-items:center;gap:10px;font-weight:850}.brand img{width:34px;height:34px}.status{display:flex;align-items:center;gap:7px;color:var(--muted);font-size:12px}.dot{width:9px;height:9px;border-radius:50%;background:var(--danger);box-shadow:0 0 0 4px rgba(239,68,68,.12)}.online .dot{background:var(--ok);box-shadow:0 0 0 4px rgba(34,197,94,.12)}.role{border:1px solid var(--line);border-radius:10px;background:#0b1929;color:#fff;padding:8px}.card{background:linear-gradient(145deg,rgba(18,39,62,.96),rgba(11,27,44,.96));border:1px solid var(--line);border-radius:20px;padding:18px;box-shadow:0 18px 50px rgba(0,0,0,.2)}.onair{color:#69d99a;font-size:11px;font-weight:900;letter-spacing:.13em}.title{font-size:22px;font-weight:850;margin:7px 0 4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.slide{color:#d8e5f2;line-height:1.4;min-height:42px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}.next{margin-top:14px;padding-top:13px;border-top:1px solid var(--line);color:var(--muted);font-size:13px}.next strong{display:block;color:#f8fafc;margin-top:4px}.bar{height:5px;background:#26394d;border-radius:99px;margin-top:15px;overflow:hidden}.bar i{display:block;height:100%;width:0;background:var(--blue);transition:width .3s}.controls{display:grid;grid-template-columns:1fr 1.25fr 1fr;gap:12px;margin:15px 0}.btn{border:1px solid var(--line);background:var(--card);color:#fff;border-radius:16px;padding:14px 10px;font-weight:800;min-height:54px}.btn:active{transform:scale(.97)}.btn.primary{background:var(--blue);border-color:var(--blue);font-size:20px}.emergency{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:15px}.emergency .btn{font-size:11px;padding:10px 5px;min-height:48px}.emergency .danger{color:#fecaca;border-color:#7f1d1d}.emergency .active{background:var(--warn);color:#111827;border-color:var(--warn)}.tabs{position:fixed;z-index:8;bottom:0;left:50%;transform:translateX(-50%);width:min(720px,100%);display:grid;grid-template-columns:repeat(4,1fr);background:rgba(5,15,27,.96);backdrop-filter:blur(16px);border-top:1px solid var(--line);padding:8px 8px calc(8px + env(safe-area-inset-bottom))}.tab{border:0;background:transparent;color:var(--muted);padding:9px 3px;font-size:11px;font-weight:750}.tab.active{color:#5cc8f6}.view{display:none}.view.active{display:block}.section{margin-top:12px}.searchbox{display:flex;gap:8px}.searchbox input,.login input{width:100%;border:1px solid var(--line);border-radius:14px;background:#0a1929;color:white;padding:14px}.results{display:grid;gap:8px;margin-top:12px}.result{width:100%;text-align:left;border:1px solid var(--line);background:var(--card);color:#fff;border-radius:14px;padding:13px}.result small{display:block;color:var(--muted);margin-top:4px}.empty{color:var(--muted);text-align:center;padding:26px}.toast{position:fixed;z-index:20;left:50%;bottom:90px;transform:translateX(-50%);background:#17283b;border:1px solid var(--line);padding:10px 16px;border-radius:99px;font-size:13px;opacity:0;pointer-events:none;transition:.2s}.toast.show{opacity:1}.login{position:fixed;z-index:30;inset:0;background:#071321;display:none;place-items:center;padding:24px}.login.show{display:grid}.login .card{width:min(420px,100%)}.login h1{margin-top:0}.login label{display:block;color:var(--muted);font-size:13px;margin:12px 0 6px}.login .btn{width:100%;margin-top:14px}.meta{display:flex;justify-content:space-between;color:var(--muted);font-size:12px;margin-top:10px}@media(max-width:420px){.app{padding-left:10px;padding-right:10px}.emergency{grid-template-columns:repeat(3,1fr)}.role{max-width:125px}.title{font-size:19px}}
   </style>
 </head>
 <body>
-  <main>
-    <section id="homeView" class="view active">
-      <div class="surface">
-        <section class="controls">
-          <button class="control-close" type="button" data-action="close">
-            <span class="control-icon">
-              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12" /><path d="M18 6L6 18" /></svg>
-            </span>
-            <span class="control-label">Fechar</span>
-          </button>
-          <button class="control-prev" type="button" data-action="prev">
-            <span class="control-icon">
-              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 12H5" /><path d="M12 5l-7 7 7 7" /></svg>
-            </span>
-            <span class="control-label">Anterior</span>
-          </button>
-          <button class="control-play" type="button" data-action="play_pause">
-            <span class="control-icon">
-              <svg viewBox="0 0 48 48" aria-hidden="true"><path d="M11 9v30l22-15L11 9Z" /><path d="M36 10h5v28h-5z" /></svg>
-            </span>
-            <span class="control-label">Play/Pausa</span>
-          </button>
-          <button class="control-next" type="button" data-action="next">
-            <span class="control-icon">
-              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14" /><path d="M12 5l7 7-7 7" /></svg>
-            </span>
-            <span class="control-label">Proximo</span>
-          </button>
-        </section>
-        <section class="home-actions">
-          <button id="openLibrary" type="button" class="home-button">
-            <div class="home-icon">
-              <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                <path d="M8 18V6l10-2v12" />
-                <circle cx="6" cy="18" r="2" />
-                <circle cx="16" cy="16" r="2" />
-              </svg>
-            </div>
-            <div>
-              <strong>&Aacute;lbuns e Colet&acirc;neas</strong>
-              <span>Pesquisar hinos e m&uacute;sicas para iniciar a proje&ccedil;&atilde;o</span>
-            </div>
-            <div class="arrow-pill">&gt;</div>
-          </button>
-          <button id="openBible" type="button" class="home-button">
-            <div class="home-icon">
-              <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                <path d="M5 4h10a3 3 0 0 1 3 3v13H8a3 3 0 0 1-3-3V4Z" />
-                <path d="M8 4v16" />
-                <path d="M11 8h4" />
-                <path d="M13 6v4" />
-              </svg>
-            </div>
-            <div>
-              <strong>B&iacute;blia</strong>
-              <span>Escolher livro, cap&iacute;tulo e verso para projetar</span>
-            </div>
-            <div class="arrow-pill">&gt;</div>
-          </button>
-          <button id="openLiturgy" type="button" class="home-button">
-            <div class="home-icon">
-              <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                <path d="M12 3v13" />
-                <path d="M8 7c2 1 6 1 8 0" />
-                <path d="M7 16c2 4 8 4 10 0" />
-                <path d="M5 21h14" />
-              </svg>
-            </div>
-            <div>
-              <strong>Liturgia</strong>
-              <span>Acessar a liturgia do dia e iniciar um item</span>
-            </div>
-            <div class="arrow-pill">&gt;</div>
-          </button>
-        </section>
-      </div>
+  <main class="app">
+    <header class="top"><div class="brand"><img src="/ico/favicon.png" alt=""><span>IASDPresenter</span></div><div><select id="role" class="role"><option value="operator">Operador</option><option value="presenter">Apresentador</option></select></div></header>
+    <div id="connection" class="status"><span class="dot"></span><span id="connectionText">Conectando...</span></div>
+
+    <section id="home" class="view active">
+      <article class="card section"><div class="onair" id="onair">SEM PROJECAO</div><div class="title" id="currentTitle">Aguardando conteúdo</div><div class="slide" id="currentText">O estado da projeção aparecerá aqui.</div><div class="next">PRÓXIMO<strong id="nextText">—</strong></div><div class="bar"><i id="progress"></i></div><div class="meta"><span id="counter">—</span><span id="time">00:00 / 00:00</span></div></article>
+      <div class="controls"><button class="btn" data-control="prev">◀ Voltar</button><button class="btn primary" id="play" data-control="play_pause">▶</button><button class="btn" data-control="next">Avançar ▶</button></div>
+      <div id="emergency" class="emergency"><button class="btn" data-emergency="blackout">⬛ Tela preta</button><button class="btn" data-emergency="freeze">❄ Congelar</button><button class="btn" data-emergency="logo">◇ Logo</button><button class="btn" data-emergency="clear">✓ Normal</button><button class="btn danger" data-control="close">✕ Encerrar</button><button class="btn" data-control="maximize">⛶ Projetar</button></div>
     </section>
-    <section id="loginView" class="view">
-      <div class="surface">
-        <header>
-          <div class="brand">
-            <div class="brand-mark">JA</div>
-            <div>
-              <h1>Acesso protegido</h1>
-              <div id="loginStatus" class="status">Digite a senha do controle remoto.</div>
-            </div>
-          </div>
-        </header>
-        <form id="loginForm" class="login-card">
-          <input id="passwordInput" type="password" autocomplete="current-password" placeholder="Senha do controle remoto">
-          <button type="submit">Entrar</button>
-        </form>
-      </div>
-    </section>
-    <section id="libraryView" class="view">
-      <div class="surface">
-        <header>
-          <div class="brand">
-            <div class="brand-mark">&#9835;</div>
-            <div>
-              <h1>&Aacute;lbuns e Colet&acirc;neas</h1>
-              <div id="status" class="status">Busque pelo nome. Hin&aacute;rios tamb&eacute;m aceitam n&uacute;mero.</div>
-            </div>
-          </div>
-          <button id="backHome" type="button" class="back-button">Voltar</button>
-        </header>
-        <form id="searchForm" class="search">
-          <input id="q" type="search" autocomplete="off" placeholder="Digite o nome da m&uacute;sica ou n&uacute;mero do hino">
-          <button type="submit">Buscar</button>
-        </form>
-        <section id="results" class="results">
-          <div class="empty">Pesquise pelo nome da m&uacute;sica. Para hin&aacute;rios, voc&ecirc; tamb&eacute;m pode digitar o n&uacute;mero.</div>
-        </section>
-      </div>
-    </section>
-    <section id="bibleView" class="view">
-      <div class="surface">
-        <header>
-          <div class="brand">
-            <div class="brand-mark">B</div>
-            <div>
-              <h1>B&iacute;blia</h1>
-              <div id="bibleStatus" class="status">Busque por livro, depois cap&iacute;tulo e verso.</div>
-            </div>
-          </div>
-          <button id="backBibleHome" type="button" class="back-button">Voltar</button>
-        </header>
-        <form id="bibleForm" class="search">
-          <input id="bibleQ" type="search" autocomplete="off" placeholder="Ex.: Jo&atilde;o 3:16">
-          <button type="submit">Buscar</button>
-        </form>
-        <section id="bibleResults" class="results">
-          <div class="empty">Digite o nome do livro. Depois escolha o cap&iacute;tulo e o verso.</div>
-        </section>
-      </div>
-    </section>
-    <section id="liturgyView" class="view">
-      <div class="surface">
-        <header>
-          <div class="brand">
-            <div class="brand-mark">L</div>
-            <div>
-              <h1>Liturgia</h1>
-              <div id="liturgyStatus" class="status">Liturgia do dia</div>
-            </div>
-          </div>
-          <button id="backLiturgyHome" type="button" class="back-button">Voltar</button>
-        </header>
-        <section id="liturgyResults" class="results">
-          <div class="empty">Carregando liturgia...</div>
-        </section>
-      </div>
-    </section>
+
+    <section id="music" class="view"><div class="searchbox section"><input id="musicQ" type="search" placeholder="Nome ou número do hino"><button id="musicSearch" class="btn">Buscar</button></div><div id="musicResults" class="results"></div></section>
+    <section id="bible" class="view"><div class="searchbox section"><input id="bibleQ" type="search" placeholder="Ex.: João 3:16"><button id="bibleSearch" class="btn">Buscar</button></div><div id="bibleResults" class="results"></div></section>
+    <section id="liturgy" class="view"><div class="card section"><strong>Liturgia de hoje</strong><div id="liturgyStatus" class="status">Carregando...</div></div><div id="liturgyResults" class="results"></div></section>
   </main>
-  <script>
-    const homeView = document.getElementById('homeView');
-    const loginView = document.getElementById('loginView');
-    const libraryView = document.getElementById('libraryView');
-    const bibleView = document.getElementById('bibleView');
-    const liturgyView = document.getElementById('liturgyView');
-    const q = document.getElementById('q');
-    const results = document.getElementById('results');
-    const statusEl = document.getElementById('status');
-    const bibleQ = document.getElementById('bibleQ');
-    const bibleResults = document.getElementById('bibleResults');
-    const bibleStatus = document.getElementById('bibleStatus');
-    const liturgyResults = document.getElementById('liturgyResults');
-    const liturgyStatus = document.getElementById('liturgyStatus');
-    const loginStatus = document.getElementById('loginStatus');
-    const passwordInput = document.getElementById('passwordInput');
-    let timer = null;
-    let bibleTimer = null;
-    let remotePassword = sessionStorage.getItem('louvorjaRemotePassword') || '';
-
-    function showView(view) {
-      homeView.classList.toggle('active', view === 'home');
-      loginView.classList.toggle('active', view === 'login');
-      libraryView.classList.toggle('active', view === 'library');
-      bibleView.classList.toggle('active', view === 'bible');
-      liturgyView.classList.toggle('active', view === 'liturgy');
-      if (view === 'library') {
-        setTimeout(() => q.focus(), 50);
-      } else if (view === 'bible') {
-        setTimeout(() => bibleQ.focus(), 50);
-      } else if (view === 'login') {
-        setTimeout(() => passwordInput.focus(), 50);
-      }
-    }
-
-    function authHeaders(extra = {}) {
-      return remotePassword ? { ...extra, 'X-Remote-Password': remotePassword } : extra;
-    }
-
-    function escapeHtml(value) {
-      return String(value || '').replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' }[char]));
-    }
-
-    async function search() {
-      const value = q.value.trim();
-      if (!value) {
-        results.innerHTML = '<div class="empty">Pesquise pelo nome da musica. Para hinarios, voce tambem pode digitar o numero.</div>';
-        return;
-      }
-
-      statusEl.textContent = 'Buscando...';
-      const response = await fetch('/api/search?q=' + encodeURIComponent(value), { headers: authHeaders() });
-      if (response.status === 401) {
-        sessionStorage.removeItem('louvorjaRemotePassword');
-        remotePassword = '';
-        showView('login');
-        loginStatus.textContent = 'Senha obrigatoria para pesquisar.';
-        return;
-      }
-      const data = await response.json();
-      statusEl.textContent = data.count ? data.count + ' resultado(s)' : 'Nenhum resultado';
-
-      if (!data.ready) {
-        results.innerHTML = '<div class="empty">Biblioteca local nao encontrada. Baixe/sincronize a biblioteca no IASDPresenter neste computador.</div>';
-        return;
-      }
-
-      if (!data.results.length) {
-        results.innerHTML = '<div class="empty">Nenhuma musica encontrada.</div>';
-        return;
-      }
-
-      results.innerHTML = data.results.map((song) => {
-        const track = song.track ? '<div class="track">' + escapeHtml(song.track) + '</div>' : '<div class="track"></div>';
-        const album = escapeHtml(song.album_name || song.source_label || '');
-        const duration = escapeHtml(song.duration || '');
-        return '<button class="song" type="button" data-id="' + song.id_music + '" data-mode="' + (song.has_music === 0 ? 'no_audio' : 'audio') + '">' +
-          track +
-          '<div><div class="name">' + escapeHtml(song.name) + '</div><div class="meta">' + album + '</div></div>' +
-          '<div class="duration meta">' + duration + '</div>' +
-          '</button>';
-      }).join('');
-    }
-
-    async function loadLiturgy() {
-      liturgyStatus.textContent = 'Carregando...';
-      const response = await fetch('/api/liturgy/today', { headers: authHeaders() });
-      if (response.status === 401) {
-        sessionStorage.removeItem('louvorjaRemotePassword');
-        remotePassword = '';
-        showView('login');
-        loginStatus.textContent = 'Senha obrigatoria para acessar a liturgia.';
-        return;
-      }
-
-      const data = await response.json();
-      liturgyStatus.textContent = data.title ? data.title + ' - ' + data.count + ' item(ns)' : 'Liturgia do dia';
-
-      if (!data.items || !data.items.length) {
-        liturgyResults.innerHTML = '<div class="empty">Nenhum item na liturgia de hoje.</div>';
-        return;
-      }
-
-      liturgyResults.innerHTML = data.items.map((item) => {
-        const action = item.executable ? 'Iniciar' : 'Abrir';
-        const payload = encodeURIComponent(JSON.stringify(item.payload));
-        const number = item.number ? item.number : '&sect;';
-        return '<button class="song liturgy-option" type="button" data-executable="' + (item.executable ? '1' : '0') + '" data-payload="' + payload + '">' +
-          '<div class="track">' + number + '</div>' +
-          '<div><div class="name">' + escapeHtml(item.name || item.type_label) + '</div><div class="meta">' + escapeHtml(item.type_label + (item.subtitle ? ' - ' + item.subtitle : '')) + '</div></div>' +
-          '<div class="duration meta">' + action + '</div>' +
-          '</button>';
-      }).join('');
-    }
-
-    async function searchBible() {
-      const value = bibleQ.value.trim();
-      if (!value) {
-        bibleResults.innerHTML = '<div class="empty">Digite o nome do livro. Depois escolha o capitulo e o verso.</div>';
-        bibleStatus.textContent = 'Busque por livro, depois capitulo e verso.';
-        return;
-      }
-
-      bibleStatus.textContent = 'Buscando...';
-      const response = await fetch('/api/bible/search?q=' + encodeURIComponent(value), { headers: authHeaders() });
-      if (response.status === 401) {
-        sessionStorage.removeItem('louvorjaRemotePassword');
-        remotePassword = '';
-        showView('login');
-        loginStatus.textContent = 'Senha obrigatoria para pesquisar.';
-        return;
-      }
-
-      const data = await response.json();
-      if (!data.ready) {
-        bibleStatus.textContent = 'Biblioteca nao encontrada';
-        bibleResults.innerHTML = '<div class="empty">B&iacute;blia local nao encontrada. Abra/sincronize a B&iacute;blia no IASDPresenter neste computador.</div>';
-        return;
-      }
-
-      bibleStatus.textContent = data.results.length ? data.results.length + ' resultado(s)' : 'Nenhum resultado';
-      if (!data.results.length) {
-        bibleResults.innerHTML = '<div class="empty">Nenhuma referencia encontrada.</div>';
-        return;
-      }
-
-      bibleResults.innerHTML = data.results.map((item) => {
-        if (item.type === 'book') {
-          return '<button class="song bible-option" type="button" data-type="book" data-book="' + escapeHtml(item.book.name) + '">' +
-            '<div class="track">' + escapeHtml(item.book.abbreviation || '') + '</div>' +
-            '<div><div class="name">' + escapeHtml(item.book.name) + '</div><div class="meta">' + escapeHtml(item.book.chapters || '') + ' capitulo(s)</div></div>' +
-            '<div class="duration meta">Livro</div>' +
-            '</button>';
-        }
-        if (item.type === 'chapter') {
-          return '<button class="song bible-option" type="button" data-type="chapter" data-book="' + escapeHtml(item.book.name) + '" data-chapter="' + item.chapter + '">' +
-            '<div class="track">' + item.chapter + '</div>' +
-            '<div><div class="name">' + escapeHtml(item.book.name) + ' ' + item.chapter + '</div><div class="meta">Escolher verso</div></div>' +
-            '<div class="duration meta">Cap.</div>' +
-            '</button>';
-        }
-        if (item.type === 'selected') {
-          return '<button class="song bible-option" type="button" data-type="selected" data-payload="' + encodeURIComponent(JSON.stringify(item.payload)) + '">' +
-            '<div class="track">&#9654;</div>' +
-            '<div><div class="name">' + escapeHtml(item.reference) + '</div><div class="meta">' + escapeHtml(item.text).slice(0, 150) + '</div></div>' +
-            '<div class="duration meta">Projetar</div>' +
-            '</button>';
-        }
-        return '<button class="song bible-option" type="button" data-type="verse" data-book-id="' + item.book.id_bible_book + '" data-version-id="' + item.version.id_bible_version + '" data-book="' + escapeHtml(item.book.name) + '" data-chapter="' + item.chapter + '" data-verse="' + item.verseNumbers[0] + '">' +
-          '<div class="track">' + item.verseNumbers[0] + '</div>' +
-          '<div><div class="name">' + escapeHtml(item.book.name) + ' ' + item.chapter + ':' + item.verseNumbers[0] + '</div><div class="meta">' + escapeHtml(item.text).slice(0, 150) + '</div></div>' +
-          '<div class="duration meta">Verso</div>' +
-          '</button>';
-      }).join('');
-    }
-
-    document.getElementById('searchForm').addEventListener('submit', (event) => {
-      event.preventDefault();
-      search().catch(() => statusEl.textContent = 'Erro na busca');
-    });
-
-    document.getElementById('openLibrary').addEventListener('click', () => showView('library'));
-    document.getElementById('openBible').addEventListener('click', () => showView('bible'));
-    document.getElementById('openLiturgy').addEventListener('click', () => {
-      showView('liturgy');
-      loadLiturgy().catch(() => liturgyStatus.textContent = 'Erro ao carregar');
-    });
-    document.getElementById('backHome').addEventListener('click', () => showView('home'));
-    document.getElementById('backBibleHome').addEventListener('click', () => showView('home'));
-    document.getElementById('backLiturgyHome').addEventListener('click', () => showView('home'));
-
-    q.addEventListener('input', () => {
-      clearTimeout(timer);
-      timer = setTimeout(() => search().catch(() => statusEl.textContent = 'Erro na busca'), 180);
-    });
-
-    document.getElementById('bibleForm').addEventListener('submit', (event) => {
-      event.preventDefault();
-      searchBible().catch(() => bibleStatus.textContent = 'Erro na busca');
-    });
-
-    bibleQ.addEventListener('input', () => {
-      clearTimeout(bibleTimer);
-      bibleTimer = setTimeout(() => searchBible().catch(() => bibleStatus.textContent = 'Erro na busca'), 180);
-    });
-
-    results.addEventListener('click', async (event) => {
-      const button = event.target.closest('.song');
-      if (!button) return;
-      statusEl.textContent = 'Iniciando no computador...';
-      const response = await fetch('/api/play', {
-        method: 'POST',
-        headers: authHeaders({ 'Content-Type': 'application/json' }),
-        body: JSON.stringify({ id_music: Number(button.dataset.id), mode: button.dataset.mode })
-      });
-      if (response.status === 401) {
-        sessionStorage.removeItem('louvorjaRemotePassword');
-        remotePassword = '';
-        showView('login');
-        loginStatus.textContent = 'Senha obrigatoria para enviar comandos.';
-        return;
-      }
-      const data = await response.json();
-      statusEl.textContent = data.ok ? 'Comando enviado' : 'Nao foi possivel enviar';
-    });
-
-    bibleResults.addEventListener('click', async (event) => {
-      const button = event.target.closest('.bible-option');
-      if (!button) return;
-
-      if (button.dataset.type === 'book') {
-        bibleQ.value = button.dataset.book + ' ';
-        await searchBible().catch(() => bibleStatus.textContent = 'Erro na busca');
-        return;
-      }
-
-      if (button.dataset.type === 'chapter') {
-        bibleQ.value = button.dataset.book + ' ' + button.dataset.chapter + ' ';
-        await searchBible().catch(() => bibleStatus.textContent = 'Erro na busca');
-        return;
-      }
-
-      let payload = null;
-      if (button.dataset.type === 'selected') {
-        payload = JSON.parse(decodeURIComponent(button.dataset.payload));
-      } else {
-        payload = {
-          id_bible_version: Number(button.dataset.versionId),
-          id_bible_book: Number(button.dataset.bookId),
-          chapter: Number(button.dataset.chapter),
-          verses: [Number(button.dataset.verse)]
-        };
-      }
-
-      bibleStatus.textContent = 'Iniciando no computador...';
-      const response = await fetch('/api/bible/open', {
-        method: 'POST',
-        headers: authHeaders({ 'Content-Type': 'application/json' }),
-        body: JSON.stringify(payload)
-      });
-      if (response.status === 401) {
-        sessionStorage.removeItem('louvorjaRemotePassword');
-        remotePassword = '';
-        showView('login');
-        loginStatus.textContent = 'Senha obrigatoria para enviar comandos.';
-        return;
-      }
-      const data = await response.json();
-      bibleStatus.textContent = data.ok ? 'Comando enviado' : 'Nao foi possivel enviar';
-    });
-
-    liturgyResults.addEventListener('click', async (event) => {
-      const button = event.target.closest('.liturgy-option');
-      if (!button) return;
-      const payload = JSON.parse(decodeURIComponent(button.dataset.payload));
-
-      liturgyStatus.textContent = 'Iniciando no computador...';
-      const response = await fetch('/api/liturgy/open', {
-        method: 'POST',
-        headers: authHeaders({ 'Content-Type': 'application/json' }),
-        body: JSON.stringify({ item: payload })
-      });
-      if (response.status === 401) {
-        sessionStorage.removeItem('louvorjaRemotePassword');
-        remotePassword = '';
-        showView('login');
-        loginStatus.textContent = 'Senha obrigatoria para enviar comandos.';
-        return;
-      }
-      const data = await response.json();
-      liturgyStatus.textContent = data.ok ? 'Comando enviado' : 'Nao foi possivel enviar';
-    });
-
-    document.querySelector('.controls').addEventListener('click', async (event) => {
-      const button = event.target.closest('button[data-action]');
-      if (!button) return;
-      const response = await fetch('/api/control', {
-        method: 'POST',
-        headers: authHeaders({ 'Content-Type': 'application/json' }),
-        body: JSON.stringify({ action: button.dataset.action })
-      });
-      if (response.status === 401) {
-        sessionStorage.removeItem('louvorjaRemotePassword');
-        remotePassword = '';
-        showView('login');
-        loginStatus.textContent = 'Senha obrigatoria para enviar comandos.';
-        return;
-      }
-      const data = await response.json();
-      statusEl.textContent = data.ok ? 'Comando enviado' : 'Nao foi possivel enviar';
-    });
-
-    document.getElementById('loginForm').addEventListener('submit', async (event) => {
-      event.preventDefault();
-      const password = passwordInput.value;
-      loginStatus.textContent = 'Verificando...';
-      const response = await fetch('/api/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ password })
-      });
-      const data = await response.json();
-      if (data.ok) {
-        remotePassword = password;
-        sessionStorage.setItem('louvorjaRemotePassword', password);
-        passwordInput.value = '';
-        showView('home');
-      } else {
-        loginStatus.textContent = 'Senha incorreta.';
-      }
-    });
-
-    fetch('/api/info')
-      .then(response => response.json())
-      .then(data => {
-        if (data.requiresPassword && !remotePassword) showView('login');
-      })
-      .catch(() => {});
-  </script>
-</body>
-</html>`;
+  <nav class="tabs"><button class="tab active" data-view="home">●<br>Controle</button><button class="tab" data-view="music">♫<br>Músicas</button><button class="tab" data-view="bible">▣<br>Bíblia</button><button class="tab" data-view="liturgy">☷<br>Liturgia</button></nav>
+  <div id="toast" class="toast"></div>
+  <section id="login" class="login"><form id="loginForm" class="card"><h1>Conectar</h1><p style="color:var(--muted)">Use a senha configurada no computador.</p><label>Perfil</label><select id="loginRole" class="role" style="width:100%"><option value="operator">Operador</option><option value="presenter">Apresentador</option></select><label>Senha</label><input id="password" type="password" autocomplete="current-password"><button class="btn primary" type="submit">Entrar</button><div id="loginStatus" class="status"></div></form></section>
+<script>
+(function(){
+  var password=sessionStorage.getItem('iasdRemotePassword')||'';
+  var role=sessionStorage.getItem('iasdRemoteRole')||new URLSearchParams(location.search).get('role')||'operator';
+  var failures=0,pollTimer=null,currentOverride='none',toastTimer=null;
+  var roleEl=document.getElementById('role'),loginRole=document.getElementById('loginRole'); roleEl.value=role;loginRole.value=role;
+  function headers(json){var h={'X-Remote-Password':password,'X-Remote-Role':role};if(json)h['Content-Type']='application/json';return h}
+  function requestId(){return Date.now().toString(36)+Math.random().toString(36).slice(2)}
+  async function api(url,options){options=options||{};options.headers=Object.assign({},headers(Boolean(options.body)),options.headers||{});var response=await fetch(url,options);if(response.status===401){document.getElementById('login').classList.add('show');throw new Error('Autenticacao necessaria')}var data=await response.json();if(response.status===409)throw new Error('Outro comando está sendo processado');if(!response.ok||data.ok===false)throw new Error(data.error||'Não foi possível executar');return data}
+  function toast(text){var el=document.getElementById('toast');el.textContent=text;el.classList.add('show');clearTimeout(toastTimer);toastTimer=setTimeout(function(){el.classList.remove('show')},2200)}
+  function setConnected(ok){var el=document.getElementById('connection');el.classList.toggle('online',ok);document.getElementById('connectionText').textContent=ok?'Conectado • atualização automática':'Reconectando...'}
+  function text(value){return String(value||'').replace(/<[^>]*>/g,' ').replace(/\\s+/g,' ').trim()}
+  function clock(value){var n=Math.max(0,Number(value)||0),m=Math.floor(n/60),s=Math.floor(n%60);return String(m).padStart(2,'0')+':'+String(s).padStart(2,'0')}
+  function renderState(state){failures=0;setConnected(true);var p=state.projection||{},playback=state.playback||{},current=state.current||{},next=state.next||{};currentOverride=p.override||'none';document.getElementById('onair').textContent=p.active?'NO AR • '+String(p.module||'').toUpperCase():'SEM PROJEÇÃO';document.getElementById('currentTitle').textContent=current.title||'Aguardando conteúdo';document.getElementById('currentText').textContent=text(current.text)||'O estado da projeção aparecerá aqui.';document.getElementById('nextText').textContent=text(next.text)||next.title||'—';document.getElementById('progress').style.width=Math.max(0,Math.min(100,Number(playback.progress)||0))+'%';document.getElementById('time').textContent=clock(playback.currentTime)+' / '+clock(playback.duration);document.getElementById('counter').textContent=current.number&&current.total?current.number+' de '+current.total:'—';document.getElementById('play').textContent=playback.paused?'▶':'Ⅱ';document.querySelectorAll('[data-emergency]').forEach(function(btn){var action=btn.dataset.emergency;btn.classList.toggle('active',(action==='clear'&&currentOverride==='none')||action===currentOverride)});document.getElementById('emergency').style.display=role==='operator'?'grid':'none'}
+  async function poll(){try{var data=await api('/api/state');renderState(data.state||{})}catch(e){failures++;if(failures>1)setConnected(false)}finally{pollTimer=setTimeout(poll,1500)}}
+  async function command(endpoint,body){body.requestId=requestId();try{await api(endpoint,{method:'POST',body:JSON.stringify(body)});toast('Comando enviado');setTimeout(poll,120)}catch(e){toast(e.message)}}
+  document.querySelectorAll('[data-control]').forEach(function(btn){btn.addEventListener('click',function(){command('/api/control',{action:btn.dataset.control})})});
+  document.querySelectorAll('[data-emergency]').forEach(function(btn){btn.addEventListener('click',function(){command('/api/emergency',{action:btn.dataset.emergency})})});
+  document.querySelectorAll('[data-view]').forEach(function(btn){btn.addEventListener('click',function(){document.querySelectorAll('.view').forEach(function(v){v.classList.remove('active')});document.querySelectorAll('.tab').forEach(function(v){v.classList.remove('active')});document.getElementById(btn.dataset.view).classList.add('active');btn.classList.add('active');if(btn.dataset.view==='liturgy')loadLiturgy()})});
+  roleEl.addEventListener('change',function(){role=roleEl.value;loginRole.value=role;sessionStorage.setItem('iasdRemoteRole',role);renderState({projection:{override:currentOverride}});poll()});
+  async function searchMusic(){var box=document.getElementById('musicResults');box.innerHTML='<div class="empty">Buscando...</div>';try{var data=await api('/api/search?q='+encodeURIComponent(document.getElementById('musicQ').value));box.innerHTML='';(data.results||[]).forEach(function(item){var b=document.createElement('button');b.className='result';b.innerHTML='<strong>'+escapeHtml((item.track?item.track+' • ':'')+item.name)+'</strong><small>'+escapeHtml(item.album_name||item.source_label||'')+'</small>';b.onclick=function(){command('/api/play',{id_music:item.id_music,id_album:item.id_album,mode:'audio'})};box.appendChild(b)});if(!box.children.length)box.innerHTML='<div class="empty">Nenhuma música encontrada.</div>'}catch(e){box.innerHTML='<div class="empty">'+escapeHtml(e.message)+'</div>'}}
+  async function searchBible(){var box=document.getElementById('bibleResults');box.innerHTML='<div class="empty">Buscando...</div>';try{var data=await api('/api/bible/search?q='+encodeURIComponent(document.getElementById('bibleQ').value));box.innerHTML='';(data.results||[]).forEach(function(item){var b=document.createElement('button');b.className='result';b.innerHTML='<strong>'+escapeHtml(item.reference||'Versículo')+'</strong><small>'+escapeHtml(item.text||'')+'</small>';b.onclick=function(){command('/api/bible/open',item.payload||{})};box.appendChild(b)});if(!box.children.length)box.innerHTML='<div class="empty">Referência não encontrada.</div>'}catch(e){box.innerHTML='<div class="empty">'+escapeHtml(e.message)+'</div>'}}
+  async function loadLiturgy(){var box=document.getElementById('liturgyResults');try{var data=await api('/api/liturgy/today');document.getElementById('liturgyStatus').textContent=data.title+' • '+data.count+' item(ns)';box.innerHTML='';(data.items||[]).forEach(function(item){var b=document.createElement('button');b.className='result';b.disabled=!item.executable;b.innerHTML='<strong>'+escapeHtml((item.number?item.number+'. ':'')+(item.name||item.type_label))+'</strong><small>'+escapeHtml(item.type_label+(item.done?' • concluído':''))+'</small>';if(item.executable)b.onclick=function(){command('/api/liturgy/open',{item:item.payload})};box.appendChild(b)});if(!box.children.length)box.innerHTML='<div class="empty">Nenhum item para hoje.</div>'}catch(e){box.innerHTML='<div class="empty">'+escapeHtml(e.message)+'</div>'}}
+  function escapeHtml(value){var d=document.createElement('div');d.textContent=String(value||'');return d.innerHTML}
+  document.getElementById('musicSearch').onclick=searchMusic;document.getElementById('musicQ').addEventListener('keydown',function(e){if(e.key==='Enter')searchMusic()});document.getElementById('bibleSearch').onclick=searchBible;document.getElementById('bibleQ').addEventListener('keydown',function(e){if(e.key==='Enter')searchBible()});
+  document.getElementById('loginForm').addEventListener('submit',async function(e){e.preventDefault();role=loginRole.value;var candidate=document.getElementById('password').value;document.getElementById('loginStatus').textContent='Verificando...';try{var response=await fetch('/api/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({password:candidate,role:role})});var data=await response.json();if(!data.ok)throw new Error('Senha incorreta');password=candidate;roleEl.value=role;sessionStorage.setItem('iasdRemotePassword',password);sessionStorage.setItem('iasdRemoteRole',role);document.getElementById('login').classList.remove('show');poll()}catch(err){document.getElementById('loginStatus').textContent=err.message}});
+  fetch('/api/info').then(function(r){return r.json()}).then(function(info){if(info.requiresPassword&&!password)document.getElementById('login').classList.add('show');else poll()}).catch(function(){poll()});
+})();
+</script>
+</body></html>`;
 }
-
 async function handleRemoteControlRequest(request, response) {
   const url = new URL(request.url, `http://${request.headers.host || 'localhost'}`);
 
@@ -1780,6 +1154,13 @@ async function handleRemoteControlRequest(request, response) {
 
   if (!isRemoteControlPasswordValid(request)) {
     sendJson(response, 401, { ok: false, error: 'Senha obrigatoria.' });
+    return;
+  }
+
+  const remoteRole = getRemoteControlRole(request);
+
+  if (request.method === 'GET' && url.pathname === '/api/state') {
+    sendJson(response, 200, { ok: true, role: remoteRole, state: remoteControlState });
     return;
   }
 
@@ -1817,6 +1198,19 @@ async function handleRemoteControlRequest(request, response) {
 
   if (request.method === 'POST' && url.pathname === '/api/play') {
     const body = await readRequestJson(request);
+    if (!isRemoteControlActionAllowed(remoteRole, 'play')) {
+      sendJson(response, 403, { ok: false, error: 'Perfil sem permissao para trocar a musica.' });
+      return;
+    }
+    const reservation = reserveRemoteCommand(String(body.requestId || ''));
+    if (!reservation.ok) {
+      sendJson(response, 409, { ok: false, error: 'Outro comando esta sendo processado.', retryAfter: reservation.retryAfter });
+      return;
+    }
+    if (reservation.duplicate) {
+      sendJson(response, 200, { ok: true, duplicate: true });
+      return;
+    }
     const idMusic = Number(body.id_music);
     if (!Number.isFinite(idMusic) || idMusic <= 0) {
       sendJson(response, 400, { ok: false, error: 'Musica invalida.' });
@@ -1835,6 +1229,19 @@ async function handleRemoteControlRequest(request, response) {
 
   if (request.method === 'POST' && url.pathname === '/api/bible/open') {
     const body = await readRequestJson(request);
+    if (!isRemoteControlActionAllowed(remoteRole, 'bible_open')) {
+      sendJson(response, 403, { ok: false, error: 'Perfil sem permissao para trocar a projecao.' });
+      return;
+    }
+    const reservation = reserveRemoteCommand(String(body.requestId || ''));
+    if (!reservation.ok) {
+      sendJson(response, 409, { ok: false, error: 'Outro comando esta sendo processado.', retryAfter: reservation.retryAfter });
+      return;
+    }
+    if (reservation.duplicate) {
+      sendJson(response, 200, { ok: true, duplicate: true });
+      return;
+    }
     const payload = buildRemoteBiblePayload({
       versionId: body.id_bible_version,
       bookId: body.id_bible_book,
@@ -1858,6 +1265,19 @@ async function handleRemoteControlRequest(request, response) {
 
   if (request.method === 'POST' && url.pathname === '/api/liturgy/open') {
     const body = await readRequestJson(request);
+    if (!isRemoteControlActionAllowed(remoteRole, 'liturgy_open')) {
+      sendJson(response, 403, { ok: false, error: 'Perfil sem permissao para abrir este item.' });
+      return;
+    }
+    const reservation = reserveRemoteCommand(String(body.requestId || ''));
+    if (!reservation.ok) {
+      sendJson(response, 409, { ok: false, error: 'Outro comando esta sendo processado.', retryAfter: reservation.retryAfter });
+      return;
+    }
+    if (reservation.duplicate) {
+      sendJson(response, 200, { ok: true, duplicate: true });
+      return;
+    }
     if (!body.item || typeof body.item !== 'object') {
       sendJson(response, 400, { ok: false, error: 'Item invalido.' });
       return;
@@ -1878,8 +1298,47 @@ async function handleRemoteControlRequest(request, response) {
       sendJson(response, 400, { ok: false, error: 'Comando invalido.' });
       return;
     }
+    if (!isRemoteControlActionAllowed(remoteRole, 'control', action)) {
+      sendJson(response, 403, { ok: false, error: 'Este comando exige o perfil Operador.' });
+      return;
+    }
+    const reservation = reserveRemoteCommand(String(body.requestId || ''));
+    if (!reservation.ok) {
+      sendJson(response, 409, { ok: false, error: 'Outro comando esta sendo processado.', retryAfter: reservation.retryAfter });
+      return;
+    }
+    if (reservation.duplicate) {
+      sendJson(response, 200, { ok: true, duplicate: true });
+      return;
+    }
 
     const ok = sendRemoteControlCommand({ type: 'control', action });
+    sendJson(response, ok ? 200 : 503, { ok });
+    return;
+  }
+
+  if (request.method === 'POST' && url.pathname === '/api/emergency') {
+    const body = await readRequestJson(request);
+    const action = String(body.action || '');
+    if (!['blackout', 'freeze', 'logo', 'clear'].includes(action)) {
+      sendJson(response, 400, { ok: false, error: 'Acao de emergencia invalida.' });
+      return;
+    }
+    if (!isRemoteControlActionAllowed(remoteRole, 'emergency')) {
+      sendJson(response, 403, { ok: false, error: 'Acoes de emergencia exigem o perfil Operador.' });
+      return;
+    }
+    const reservation = reserveRemoteCommand(String(body.requestId || ''));
+    if (!reservation.ok) {
+      sendJson(response, 409, { ok: false, error: 'Outro comando esta sendo processado.', retryAfter: reservation.retryAfter });
+      return;
+    }
+    if (reservation.duplicate) {
+      sendJson(response, 200, { ok: true, duplicate: true });
+      return;
+    }
+
+    const ok = sendRemoteControlCommand({ type: 'emergency', action });
     sendJson(response, ok ? 200 : 503, { ok });
     return;
   }
@@ -1927,11 +1386,26 @@ function stopRemoteControlServer() {
   });
 }
 
-function getRemoteControlStatus() {
+async function getRemoteControlStatus() {
+  const addresses = getRemoteControlAddresses();
+  let qrCode = '';
+  if (addresses[0]) {
+    try {
+      qrCode = await QRCode.toDataURL(addresses[0], {
+        width: 320,
+        margin: 2,
+        color: { dark: '#081526', light: '#FFFFFF' },
+      });
+    } catch (error) {
+      console.error('[RemoteControl] Nao foi possivel gerar QR Code:', error.message);
+    }
+  }
+
   return {
     running: Boolean(remoteControlServer),
     config: { ...remoteControlConfig, password: remoteControlConfig.password ? '********' : '' },
-    addresses: getRemoteControlAddresses(),
+    addresses,
+    qrCode,
     networkOptions: getRemoteControlNetworkOptions(),
   };
 }
@@ -2756,6 +2230,34 @@ ipcMain.handle('get-displays', () => {
   }));
 });
 
+ipcMain.handle('get-system-fonts', async () => {
+  if (process.platform !== 'win32') return [];
+
+  return new Promise((resolve) => {
+    const command = [
+      '[Console]::OutputEncoding = [System.Text.Encoding]::UTF8',
+      'Add-Type -AssemblyName System.Drawing',
+      '$fonts = (New-Object System.Drawing.Text.InstalledFontCollection).Families | ForEach-Object { $_.Name } | Sort-Object -Unique',
+      '$fonts | ConvertTo-Json -Compress',
+    ].join('; ');
+    const child = spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', command], {
+      windowsHide: true,
+    });
+    let stdout = '';
+    child.stdout.on('data', chunk => { stdout += chunk.toString(); });
+    child.on('error', () => resolve([]));
+    child.on('close', code => {
+      if (code !== 0 || !stdout.trim()) return resolve([]);
+      try {
+        const parsed = JSON.parse(stdout.trim());
+        resolve(Array.isArray(parsed) ? parsed : [parsed]);
+      } catch {
+        resolve([]);
+      }
+    });
+  });
+});
+
 ipcMain.handle('identify-displays', () => {
   const { screen } = require('electron');
   const displays = screen.getAllDisplays();
@@ -2798,6 +2300,7 @@ ipcMain.handle('identify-displays', () => {
 });
 
 ipcMain.handle('get-remote-control-status', () => getRemoteControlStatus());
+ipcMain.handle('set-remote-control-state', (event, state) => updateRemoteControlState(state));
 
 ipcMain.handle('get-automation-config', () => automationConfig);
 
@@ -3065,7 +2568,7 @@ async function createWindow() {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
-      backgroundThrottling: false,
+      backgroundThrottling: true,
     },
     frame: false
   });
@@ -3121,6 +2624,13 @@ async function createWindow() {
           click: () => {
             mainWindow.webContents.send('navigate-module', 'home');
           },
+        },
+        {
+          label: 'Buscar M\u00fasicas',
+          accelerator: 'CmdOrCtrl+F',
+          click: () => {
+            mainWindow.webContents.send('open-quick-search', 'music');
+          },
         }
       ]
     },
@@ -3154,7 +2664,7 @@ async function createWindow() {
           label: 'Abrir Bíblia',
           accelerator: 'CmdOrCtrl+B',
           click: () => {
-            mainWindow.webContents.send('navigate-module', 'bible');
+            mainWindow.webContents.send('open-quick-search', 'bible');
           },
         }
       ]
@@ -3222,7 +2732,7 @@ async function createWindow() {
         preload: path.join(__dirname, 'preload.js'),
         contextIsolation: true,
         nodeIntegration: false,
-        backgroundThrottling: false,
+        backgroundThrottling: true,
       }
     };
 

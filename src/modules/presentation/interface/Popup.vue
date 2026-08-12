@@ -64,6 +64,7 @@ export default {
       const bytes = this.toPdfBytes(result.data);
       const pdfDocument = await pdfjsLib.getDocument({ data: bytes }).promise;
       this.pdfDoc = markRaw(pdfDocument);
+      this.$appdata.set("modules.presentation.config.total_slides", pdfDocument.numPages);
       await this.renderCurrentSlide();
     },
     toPdfBytes(data) {

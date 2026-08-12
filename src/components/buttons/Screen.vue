@@ -61,6 +61,9 @@ export default {
     async popup() {
       if (this.is_selected) {
         this.$popup.exit();
+        if (this.module === "bible" && window.electronAPI?.setPresentationShortcutsEnabled) {
+          window.electronAPI.setPresentationShortcutsEnabled(false);
+        }
       } else {
         let selectedMonitors = [];
         if (window.electronAPI && window.electronAPI.getDisplays) {
@@ -99,6 +102,10 @@ export default {
           } else {
             this.$popup.open({ module: this.module, fullscreen });
           }
+        }
+
+        if (this.module === "bible" && window.electronAPI?.setPresentationShortcutsEnabled) {
+          window.electronAPI.setPresentationShortcutsEnabled(true);
         }
       }
     },

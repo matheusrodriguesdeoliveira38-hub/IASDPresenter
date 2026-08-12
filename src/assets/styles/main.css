@@ -113,3 +113,16 @@ img, a {
     -moz-user-select: none;
     -ms-user-select: none;
 }
+
+/* Estrutura compartilhada pelas telas de módulos. Esta regra precisa existir
+   antes de qualquer módulo assíncrono ser aberto. */
+.module-full-page {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  background: var(--card-bg);
+  z-index: 10;
+}

@@ -47,6 +47,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onNavigateRoute: (callback) => {
     ipcRenderer.on('navigate-route', (_event, routeName) => callback(routeName));
   },
+  onOpenQuickSearch: (callback) => {
+    const listener = (_event, mode) => callback(mode);
+    ipcRenderer.on('open-quick-search', listener);
+    return () => ipcRenderer.removeListener('open-quick-search', listener);
+  },
   onRemoteControlCommand: (callback) => {
     const listener = (_event, command) => callback(command);
     ipcRenderer.on('remote-control-command', listener);
@@ -64,9 +69,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
   
   getDisplays: () => ipcRenderer.invoke('get-displays'),
+  getSystemFonts: () => ipcRenderer.invoke('get-system-fonts'),
   identifyDisplays: () => ipcRenderer.invoke('identify-displays'),
   onDisplaysChanged: (callback) => ipcRenderer.on('displays-changed', callback),
   getRemoteControlStatus: () => ipcRenderer.invoke('get-remote-control-status'),
+  setRemoteControlState: (state) => ipcRenderer.invoke('set-remote-control-state', state),
   saveRemoteControlConfig: (config) => ipcRenderer.invoke('save-remote-control-config', config),
   startRemoteControlServer: () => ipcRenderer.invoke('start-remote-control-server'),
   stopRemoteControlServer: () => ipcRenderer.invoke('stop-remote-control-server'),

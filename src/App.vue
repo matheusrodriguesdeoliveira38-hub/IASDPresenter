@@ -3,6 +3,7 @@
     <AppTitlebar />
     <FirstBootLoader />
     <AppLoading />
+    <QuickSearchOverlay />
     <v-btn
       v-show="false"
       v-shortkey="['ctrl', 'alt', 'd']"
@@ -17,6 +18,7 @@ import AppLoading from "@/layout/Loading.vue";
 import FirstBootLoader from "@/layout/FirstBootLoader.vue";
 import AppTitlebar from "@/layout/Titlebar.vue";
 import BackgroundSync from "@/helpers/BackgroundSync";
+import QuickSearchOverlay from "@/components/QuickSearchOverlay.vue";
 
 export default {
   name: "App",
@@ -24,6 +26,7 @@ export default {
     AppLoading,
     FirstBootLoader,
     AppTitlebar,
+    QuickSearchOverlay,
   },
   created() {
     this.$userdata.load();
@@ -60,10 +63,17 @@ export default {
       }
     }
     
-    // Inicia a sincronização silenciosa em background (se necessária)
-    setTimeout(() => {
-      BackgroundSync.start();
-    }, 5000);
+    // A varredura de milhares de capas compete com a interface em discos e CPUs
+    // lentos. No modo leve ela fica para a sincronização manual; nos demais
+    // dispositivos só inicia quando o navegador estiver ocioso.
+    if (!this.$performance.isLightMode()) {
+      const startBackgroundSync = () => BackgroundSync.start();
+      if ("requestIdleCallback" in window) {
+        window.requestIdleCallback(startBackgroundSync, { timeout: 60000 });
+      } else {
+        setTimeout(startBackgroundSync, 30000);
+      }
+    }
   },
   unmounted() {
     window.removeEventListener("keydown", this.handleGlobalKeydown);
@@ -88,6 +98,13 @@ export default {
       }
 
       if (["INPUT", "TEXTAREA"].includes(document.activeElement.tagName) || document.activeElement.isContentEditable) {
+        return;
+      }
+
+      if (this.isBibleProjectionActive() && ["ArrowLeft", "ArrowUp", "ArrowRight", "ArrowDown"].includes(e.code)) {
+        e.preventDefault();
+        const direction = ["ArrowLeft", "ArrowUp"].includes(e.code) ? "prev" : "next";
+        window.dispatchEvent(new CustomEvent("bible-presentation-navigation", { detail: { direction } }));
         return;
       }
 
@@ -133,6 +150,12 @@ export default {
       }
     },
     handlePresentationShortcut(action) {
+      if (this.isBibleProjectionActive()) {
+        const direction = action === "prev" ? "prev" : "next";
+        window.dispatchEvent(new CustomEvent("bible-presentation-navigation", { detail: { direction } }));
+        return;
+      }
+
       if (!this.isPresentationProjectionActive()) {
         if (window.electronAPI?.setPresentationShortcutsEnabled) {
           window.electronAPI.setPresentationShortcutsEnabled(false);
@@ -161,6 +184,9 @@ export default {
     },
     isPresentationProjectionActive() {
       return this.$appdata.get("popup_module") === "presentation" && this.hasActiveProjection();
+    },
+    isBibleProjectionActive() {
+      return this.$appdata.get("popup_module") === "bible" && this.hasActiveProjection();
     },
   },
 };

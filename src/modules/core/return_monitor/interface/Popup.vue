@@ -11,6 +11,13 @@
 
       <div class="return-current-text" :style="currentTextStyle" v-html="currentText" />
 
+      <div v-if="currentNotes" class="return-notes" :style="notesStyle">
+        <div class="return-notes-label">
+          {{ currentNotesLabel }}
+        </div>
+        <div class="return-notes-text" v-html="currentNotes" />
+      </div>
+
       <div v-if="showCounter && totalSlides > 0" class="return-counter">
         Slide {{ currentNumber }} de {{ totalSlides }}
       </div>
@@ -58,13 +65,29 @@ export default {
       return this.config.title || this.$appdata.get("modules.media.data.name") || "";
     },
     currentText() {
+      if (this.currentSlide?.source_text) {
+        return [this.currentSlide.aux_lyric, this.formatInlineSongText(this.currentSlide.source_text)]
+          .filter(Boolean)
+          .join("<br><br>");
+      }
       if (this.currentSlide?.aux_lyric || this.currentSlide?.lyric) {
         return [this.currentSlide.aux_lyric, this.currentSlide.lyric].filter(Boolean).join("<br><br>");
       }
       if (this.currentSlide?.text) return this.currentSlide.text;
       return "Monitor de retorno";
     },
+    currentNotes() {
+      return this.formatPlainText(this.currentSlide?.notes);
+    },
+    currentNotesLabel() {
+      return this.currentSlide?.notes_label || "NOTAS";
+    },
     nextText() {
+      if (this.nextSlide?.source_text) {
+        return [this.nextSlide.aux_lyric, this.formatInlineSongText(this.nextSlide.source_text)]
+          .filter(Boolean)
+          .join("<br><br>");
+      }
       if (this.nextSlide?.aux_lyric || this.nextSlide?.lyric) {
         return [this.nextSlide.aux_lyric, this.nextSlide.lyric].filter(Boolean).join("<br><br>");
       }
@@ -87,6 +110,14 @@ export default {
     },
     previewFontSize() {
       return this.$userdata.get("modules.config.return_monitor_preview_font_size") || 38;
+    },
+    contentAlign() {
+      const value = this.$userdata.get("modules.config.return_monitor_text_align") || "center";
+      return ["left", "center", "right"].includes(value) ? value : "center";
+    },
+    notesFontSize() {
+      const value = Number(this.$userdata.get("modules.config.return_monitor_notes_font_size") || 32);
+      return Math.min(96, Math.max(16, value));
     },
     ratio() {
       const value = Number(this.$userdata.get("modules.config.return_monitor_ratio") || 75);
@@ -124,11 +155,24 @@ export default {
     currentTextStyle() {
       return {
         fontSize: `${this.currentFontSize}px`,
+        maxHeight: this.currentNotes ? "calc(100% - 18vh)" : "100%",
+        color: this.isRepeatedAt(this.slideIndex) ? "#f6c32a" : this.textColor,
+        textAlign: this.contentAlign,
+        fontFamily: this.currentSlide?.source_text ? "monospace" : "inherit",
       };
     },
     previewTextStyle() {
       return {
         fontSize: `${this.previewFontSize}px`,
+        color: this.isRepeatedAt(this.slideIndex + 1) ? "#f6c32a" : this.textColor,
+        textAlign: this.contentAlign,
+        fontFamily: this.nextSlide?.source_text ? "monospace" : "inherit",
+      };
+    },
+    notesStyle() {
+      return {
+        textAlign: this.contentAlign,
+        fontSize: `${this.notesFontSize}px`,
       };
     },
     overlayColor() {
@@ -143,6 +187,60 @@ export default {
     clearInterval(this.clockTimer);
   },
   methods: {
+    isRepeatedAt(index) {
+      if (index <= 0 || index >= this.slides.length) return false;
+
+      let identicalTransitions = 0;
+      for (let position = index; position > 0; position -= 1) {
+        if (!this.areEquivalentSlides(this.slides[position], this.slides[position - 1])) break;
+        identicalTransitions += 1;
+      }
+      return identicalTransitions % 2 === 1;
+    },
+    areEquivalentSlides(current, previous) {
+      if (!current || !previous) return false;
+      return this.$string.clean(current.lyric || current.text) === this.$string.clean(previous.lyric || previous.text)
+        && this.$string.clean(current.aux_lyric) === this.$string.clean(previous.aux_lyric)
+        && current.url_image === previous.url_image
+        && current.cover === previous.cover;
+    },
+    formatInlineSongText(value) {
+      const lines = String(value || "").split(/\r?\n/);
+      const blocks = [];
+
+      for (let index = 0; index < lines.length; index += 1) {
+        const line = lines[index];
+        const chord = line.match(/^(\s*)\/\/ ?(.*)$/);
+
+        if (chord) {
+          const chordText = this.formatPlainText(chord[1] + chord[2]) || "&nbsp;";
+          const nextLine = lines[index + 1];
+          const hasLyric = nextLine !== undefined && !/^\s*\/\//.test(nextLine);
+          const lyricText = hasLyric ? this.formatPlainText(nextLine) : "";
+          blocks.push(
+            `<div class="return-song-pair"><div class="return-chord">${  chordText  }</div>${
+               lyricText ? `<div class="return-song-lyric">${  lyricText  }</div>` : ""
+               }</div>`,
+          );
+          if (hasLyric) index += 1;
+        } else if (line.trim()) {
+          blocks.push(`<div class="return-song-lyric-only">${  this.formatPlainText(line)  }</div>`);
+        } else {
+          blocks.push('<div class="return-song-spacer">&nbsp;</div>');
+        }
+      }
+
+      return blocks.join("");
+    },
+    formatPlainText(value) {
+      return String(value || "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/["]/g, "&quot;")
+        .replace(/'/g, "&#039;")
+        .replace(/\r?\n/g, "<br>");
+    },
     updateClock() {
       this.clockText = new Date().toLocaleTimeString("pt-BR", {
         hour: "2-digit",
@@ -190,11 +288,69 @@ export default {
   overflow: hidden;
   overflow-wrap: anywhere;
   text-shadow: 0 4px 18px rgba(0, 0, 0, 0.7);
+  white-space: pre-wrap;
+}
+
+:deep(.return-song-pair),
+:deep(.return-song-lyric-only) {
+  display: block;
+  text-transform: none;
+}
+
+:deep(.return-song-pair + .return-song-pair) {
+  margin-top: 0.45em;
+}
+
+:deep(.return-chord) {
+  display: block;
+  min-height: 1em;
+  color: #ff6d00;
+  font-size: 0.62em;
+  font-weight: 800;
+  line-height: 1;
+  text-transform: none;
+}
+
+:deep(.return-song-lyric),
+:deep(.return-song-lyric-only) {
+  display: block;
+  line-height: 1.12;
+}
+
+:deep(.return-song-spacer) {
+  height: 0.45em;
 }
 
 .return-preview-text {
   font-weight: 700;
   line-height: 1.25;
+}
+
+.return-notes {
+  position: absolute;
+  left: 4vw;
+  right: 4vw;
+  bottom: 2vh;
+  padding: 14px 18px;
+  border: 2px solid currentColor;
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.38);
+  text-align: left;
+  text-transform: none;
+}
+
+.return-notes-label {
+  margin-bottom: 4px;
+  font-size: 18px;
+  font-weight: 800;
+  opacity: 0.75;
+}
+
+.return-notes-text {
+  font-size: inherit;
+  font-weight: 700;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
 }
 
 .return-title,
@@ -227,6 +383,11 @@ export default {
   right: 4vw;
   bottom: 2vh;
   font-size: 28px;
+}
+
+.return-notes + .return-counter {
+  bottom: auto;
+  top: 2vh;
 }
 
 .return-preview-label {

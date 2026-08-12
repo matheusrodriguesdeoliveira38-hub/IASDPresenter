@@ -300,6 +300,66 @@
                         {{ getExecuteTooltip(element.type) }}
                       </v-tooltip>
                     </v-btn>
+                    <template v-if="element.type === 'music'">
+                      <v-btn
+                        icon
+                        size="x-small"
+                        variant="text"
+                        color="primary"
+                        :disabled="!musicHasPlayback(element)"
+                        @click.stop="executeItem(element, 'instrumental')"
+                      >
+                        <v-icon size="16">
+                          mdi-play-circle-outline
+                        </v-icon>
+                        <v-tooltip
+                          activator="parent"
+                          location="top"
+                          open-delay="300"
+                          content-class="modern-glass-menu elevation-0 font-weight-medium text-white"
+                        >
+                          Playback
+                        </v-tooltip>
+                      </v-btn>
+                      <v-btn
+                        icon
+                        size="x-small"
+                        variant="text"
+                        color="primary"
+                        @click.stop="executeItem(element, 'no_audio')"
+                      >
+                        <v-icon size="16">
+                          mdi-monitor
+                        </v-icon>
+                        <v-tooltip
+                          activator="parent"
+                          location="top"
+                          open-delay="300"
+                          content-class="modern-glass-menu elevation-0 font-weight-medium text-white"
+                        >
+                          Sem Áudio
+                        </v-tooltip>
+                      </v-btn>
+                      <v-btn
+                        icon
+                        size="x-small"
+                        variant="text"
+                        color="primary"
+                        @click.stop="openMusicLyric(element)"
+                      >
+                        <v-icon size="16">
+                          mdi-text-box-outline
+                        </v-icon>
+                        <v-tooltip
+                          activator="parent"
+                          location="top"
+                          open-delay="300"
+                          content-class="modern-glass-menu elevation-0 font-weight-medium text-white"
+                        >
+                          Letra
+                        </v-tooltip>
+                      </v-btn>
+                    </template>
                     <v-btn
                       icon
                       size="x-small"
@@ -628,6 +688,23 @@
                   </div>
                 </div>
 
+                <!-- Presentation file selector -->
+                <div v-if="addForm.type === 'presentation'" class="mb-4">
+                  <v-btn
+                    block
+                    variant="tonal"
+                    color="primary"
+                    rounded="lg"
+                    class="text-none font-weight-bold"
+                    prepend-icon="mdi-folder-open"
+                    @click="selectPresentationFile"
+                  >
+                    {{ addForm.filePath ? 'Trocar Arquivo' : t('fields.select_file') }}
+                  </v-btn>
+                  <div v-if="addForm.filePath" class="text-caption mt-2" style="color: var(--sidebar-text-secondary); word-break: break-all;">
+                    {{ addForm.filePath }}
+                  </div>
+                </div>
                 <!-- Link URL -->
                 <v-text-field
                   v-if="addForm.type === 'link'"
@@ -642,6 +719,7 @@
                 />
 
                 <v-select
+                  v-if="supportsAutomationTrigger(addForm.type)"
                   v-model="addForm.automationTriggerId"
                   :items="automationTriggerOptions"
                   label="Gatilho de automação"
@@ -753,6 +831,8 @@ export default {
     isCompactView: false,
     selectedDay: null,
     selectedItemIndex: null,
+    liturgyTransitionInProgress: false,
+    liturgyExternalTargetVolume: 100,
     selectedCustomIndex: 0,
 
     // Liturgies storage: { sunday: [...], monday: [...], ... }
@@ -910,6 +990,7 @@ export default {
         { value: "music", icon: "mdi-music-note", color: "success", label: this.t("types.music"), description: this.t("type_descriptions.music") },
         { value: "verse", icon: "mdi-book-open-variant", color: "purple", label: this.t("types.verse"), description: this.t("type_descriptions.verse") },
         { value: "media", icon: "mdi-file-presentation-box", color: "orange", label: this.t("types.media"), description: this.t("type_descriptions.media") },
+        { value: "presentation", icon: "mdi-presentation", color: "indigo", label: this.t("types.presentation"), description: this.t("type_descriptions.presentation") },
         { value: "link", icon: "mdi-link", color: "cyan", label: this.t("types.link"), description: this.t("type_descriptions.link") },
       ];
     },
@@ -924,6 +1005,7 @@ export default {
       if (this.addForm.type === "music" && !this.addForm.musicId) return false;
       if (this.addForm.type === "verse" && (!this.addForm.verseBookId || !this.addForm.verseChapter)) return false;
       if (this.addForm.type === "media" && !this.addForm.filePath) return false;
+      if (this.addForm.type === "presentation" && !this.addForm.filePath) return false;
       if (this.addForm.type === "link" && !this.addForm.url.trim()) return false;
       return true;
     },
@@ -962,6 +1044,10 @@ export default {
     }
   },
   methods: {
+    supportsAutomationTrigger(type) {
+      return ["music", "media", "link"].includes(type);
+    },
+
     setupResizeObserver() {
       if (this.$refs.moduleContainer && !this.resizeObserver) {
         this.resizeObserver = new ResizeObserver((entries) => {
@@ -1162,11 +1248,11 @@ export default {
 
     // ====== ITEM TYPE HELPERS ======
     getTypeIcon(type) {
-      const map = { annotation: "mdi-text", category: "mdi-tag", music: "mdi-music-note", verse: "mdi-book-open-variant", media: "mdi-file-presentation-box", link: "mdi-link" };
+      const map = { annotation: "mdi-text", category: "mdi-tag", music: "mdi-music-note", verse: "mdi-book-open-variant", media: "mdi-file-presentation-box", presentation: "mdi-presentation", link: "mdi-link" };
       return map[type] || "mdi-help";
     },
     getTypeColor(type) {
-      const map = { annotation: "info", category: "warning", music: "success", verse: "purple", media: "orange", link: "cyan" };
+      const map = { annotation: "info", category: "warning", music: "success", verse: "purple", media: "orange", presentation: "indigo", link: "cyan" };
       return map[type] || "grey";
     },
     getTypeLabel(type) {
@@ -1180,11 +1266,17 @@ export default {
         verse: "",
         media: "Nome do arquivo",
         link: "Nome do link",
+        presentation: "Nome da apresentacao",
       };
       return map[type] || "";
     },
     isExecutable(item) {
-      return ["music", "verse", "link", "media"].includes(item.type);
+      return ["music", "verse", "link", "media", "presentation"].includes(item.type);
+    },
+
+    musicHasPlayback(item) {
+      const music = this.musicList.find(m => m.id_music === item.musicId);
+      return Boolean(music?.has_instrumental_music || music?.url_instrumental_music);
     },
 
     getExecuteIcon(type) {
@@ -1198,6 +1290,7 @@ export default {
         verse: "mdi-presentation-play",
         link: "mdi-open-in-new",
         media: "mdi-open-in-new",
+        presentation: "mdi-presentation-play",
       };
       return map[type] || "mdi-play";
     },
@@ -1212,6 +1305,7 @@ export default {
         verse: "actions.project",
         link: "actions.open",
         media: "actions.open",
+        presentation: "actions.project",
       };
       return this.t(map[type] || "actions.project");
     },
@@ -1277,7 +1371,7 @@ export default {
         subtitle: this.addForm.subtitle?.trim() || "",
       };
 
-      if (this.addForm.automationTriggerId) {
+      if (this.supportsAutomationTrigger(this.addForm.type) && this.addForm.automationTriggerId) {
         item.automationTriggerId = this.addForm.automationTriggerId;
       }
 
@@ -1300,7 +1394,7 @@ export default {
         }
       }
 
-      if (this.addForm.type === "media") {
+      if (["media", "presentation"].includes(this.addForm.type)) {
         item.filePath = this.addForm.filePath;
         if (item.filePath) {
           const parts = item.filePath.split(/[\\/]/);
@@ -1452,14 +1546,57 @@ export default {
       }
     },
 
+    // ====== PRESENTATION FILE SELECTOR ======
+    async selectPresentationFile() {
+      if (!window.electronAPI?.openFileDialog) {
+        this.$alert.error({ text: "Selecao de arquivos disponivel apenas na versao desktop.", translate: false });
+        return;
+      }
+
+      const filePath = await window.electronAPI.openFileDialog({
+        title: "Selecionar apresentacao",
+        filters: [
+          { name: "Apresentacoes", extensions: ["pdf", "ppt", "pptx"] },
+          { name: "PDF", extensions: ["pdf"] },
+          { name: "PowerPoint", extensions: ["ppt", "pptx"] },
+        ],
+      });
+
+      if (filePath) {
+        this.addForm.filePath = filePath;
+        if (!this.addForm.name) {
+          const fileName = filePath.split(/[\\/]/).pop();
+          this.addForm.name = fileName.replace(/\.[^.]+$/, "");
+        }
+      }
+    },
+
     // ====== EXECUTE/PROJECT ITEMS ======
-    async executeItem(item) {
+    async executeItem(item, musicMode = "audio") {
+      if (this.liturgyTransitionInProgress) return;
+      this.liturgyTransitionInProgress = true;
+
+      const durationMs = this.getLiturgyTransitionDurationMs();
+      this.liturgyExternalTargetVolume = this.getLiturgyExternalVolume();
+      const hasActiveItem = this.hasActiveLiturgyItem();
+      const shouldTransition = hasActiveItem && durationMs > 0;
+      const phaseDurationMs = Math.round(durationMs / 2);
+
+      try {
+        if (shouldTransition) {
+          const audioFadeOut = this.fadeCurrentLiturgyAudioOut(phaseDurationMs);
+          this.setLiturgyProjectionTransition(true, phaseDurationMs);
+          await Promise.all([this.waitForLiturgyTransition(phaseDurationMs), audioFadeOut]);
+        }
+
+        await this.stopActiveLiturgyPlayback(item);
+
       let targetModule = null;
 
       switch (item.type) {
         case "music":
           if (item.musicId) {
-            this.$media.open({ id_music: item.musicId, mode: "audio" });
+            await this.$media.open({ id_music: item.musicId, mode: musicMode });
             targetModule = "media";
           }
           break;
@@ -1480,21 +1617,11 @@ export default {
             const useInternal = this.$userdata.get("modules.config.media_use_internal_player");
             
             if (useInternal) {
-              if (this.$appdata.get("modules.media.id_music")) {
-                const confirmed = await new Promise((resolve) => {
-                  this.$alert.yesno({
-                    text: "Uma música está em reprodução no momento. Deseja encerrá-la e reproduzir esta mídia?",
-                    translate: false,
-                }, (res) => resolve(res === "yes"));
-                });
-                if (!confirmed) return;
-                this.$media.close(true);
-              }
-
               openExternalMedia(this.$appdata, {
                 filePath: item.filePath,
                 title: item.name || "",
                 subtitle: item.subtitle || "",
+                volume: shouldTransition ? 0 : this.liturgyExternalTargetVolume,
               });
 
               const isAudio = isAudioFile(item.filePath);
@@ -1517,6 +1644,26 @@ export default {
             }
           }
           break;
+        case "presentation":
+          if (item.filePath && window.electronAPI?.preparePresentationFile) {
+            const prepared = await window.electronAPI.preparePresentationFile(item.filePath);
+            if (!prepared?.ok) {
+              const details = prepared?.details ? `\n\nDetalhes: ${prepared.details}` : "";
+              this.$alert.error({
+                text: `${prepared?.error || "Nao foi possivel preparar a apresentacao."}${details}`,
+                translate: false,
+              });
+              return;
+            }
+
+            this.$appdata.set("modules.presentation.sourcePath", prepared.sourcePath || item.filePath);
+            this.$appdata.set("modules.presentation.preparedPath", prepared.filePath);
+            this.$appdata.set("modules.presentation.titleText", item.name || item.subtitle || "Apresentacao");
+            this.$appdata.set("modules.presentation.config.slide_index", 0);
+            this.$appdata.set("modules.presentation.config.total_slides", 0);
+            targetModule = "presentation";
+          }
+          break;
         case "link":
           if (item.url) {
             if (isYouTubeUrl(item.url)) {
@@ -1524,6 +1671,7 @@ export default {
                 filePath: item.url,
                 title: item.name || "YouTube",
                 subtitle: item.subtitle || item.url,
+                volume: shouldTransition ? 0 : this.liturgyExternalTargetVolume,
               });
               this.$appdata.set("modules.external_media.show", true);
               targetModule = "external_media";
@@ -1561,13 +1709,136 @@ export default {
             this.$popup.open({ module: targetModule, fullscreen: true });
           }
         }
+        if (targetModule === "presentation" && window.electronAPI?.setPresentationShortcutsEnabled) {
+          window.electronAPI.setPresentationShortcutsEnabled(true);
+        }
       }
 
-      this.runAutomationForItem(item);
+        await this.runAutomationForItem(item);
+
+        if (shouldTransition) {
+          await this.$nextTick();
+          const audioFadeIn = this.fadeCurrentLiturgyAudioIn(item, musicMode, phaseDurationMs);
+          this.setLiturgyProjectionTransition(false, phaseDurationMs);
+          await Promise.all([this.waitForLiturgyTransition(phaseDurationMs), audioFadeIn]);
+        }
+      } finally {
+        if (shouldTransition) {
+          this.setLiturgyProjectionTransition(false, phaseDurationMs);
+        }
+        this.liturgyTransitionInProgress = false;
+      }
+    },
+
+    async openMusicLyric(item) {
+      if (!item?.musicId) return;
+      await this.$media.openLyric({ id_music: item.musicId });
+    },
+
+    getLiturgyTransitionDurationMs() {
+      const seconds = Number(this.$userdata.get("modules.config.media_liturgy_transition_duration"));
+      const normalizedSeconds = Number.isFinite(seconds) ? Math.min(3, Math.max(0, seconds)) : 0.6;
+      return Math.round(normalizedSeconds * 1000);
+    },
+
+    hasActiveLiturgyItem() {
+      const popups = this.$appdata.get("popups") || [];
+      return Boolean(
+        this.$appdata.get("modules.media.id_music") ||
+        this.$appdata.get("modules.external_media.filePath") ||
+        this.$appdata.get("popup_module") ||
+        popups.some(popup => popup && !popup.closed),
+      );
+    },
+
+    setLiturgyProjectionTransition(active, durationMs) {
+      this.$appdata.set("projection_transition", {
+        active,
+        durationMs,
+        updatedAt: Date.now(),
+      });
+    },
+
+    waitForLiturgyTransition(durationMs) {
+      return new Promise(resolve => window.setTimeout(resolve, Math.max(0, durationMs) + 40));
+    },
+
+    getLiturgyExternalVolume() {
+      const volume = Number(this.$appdata.get("modules.external_media.config.volume"));
+      return Number.isFinite(volume) ? Math.min(100, Math.max(0, volume)) : 100;
+    },
+
+    fadeCurrentLiturgyAudioOut(durationMs) {
+      const audio = this.$media.getElement?.();
+      if (audio && !audio.paused && this.$appdata.get("modules.media.id_music")) {
+        return this.$media.fadeOut(audio, durationMs);
+      }
+
+      if (this.$appdata.get("modules.external_media.filePath")) {
+        return this.fadeExternalMediaVolume(this.liturgyExternalTargetVolume, 0, durationMs);
+      }
+
+      return Promise.resolve();
+    },
+
+    fadeCurrentLiturgyAudioIn(item, musicMode, durationMs) {
+      if (item?.type === "music" && ["audio", "instrumental"].includes(musicMode) && this.$appdata.get("modules.media.id_music")) {
+        const audio = this.$media.getElement?.();
+        if (!audio) return Promise.resolve();
+        const configuredVolume = Number(this.$appdata.get("modules.media.config.volume"));
+        const targetVolume = Number.isFinite(configuredVolume) ? configuredVolume / 100 : 1;
+        return this.$media.fadeIn(audio, targetVolume, durationMs);
+      }
+
+      if (["media", "link"].includes(item?.type) && this.$appdata.get("modules.external_media.filePath")) {
+        return this.fadeExternalMediaVolume(0, this.liturgyExternalTargetVolume, durationMs);
+      }
+
+      return Promise.resolve();
+    },
+
+    async fadeExternalMediaVolume(from, to, durationMs) {
+      this.setExternalMediaVolume(from);
+      const steps = Math.max(1, Math.ceil(Math.max(0, durationMs) / 50));
+      for (let step = 1; step <= steps; step++) {
+        const volume = Math.round(from + ((to - from) * step) / steps);
+        this.setExternalMediaVolume(volume);
+        if (step < steps) {
+          await new Promise(resolve => window.setTimeout(resolve, 50));
+        }
+      }
+    },
+
+    setExternalMediaVolume(volume) {
+      this.$appdata.set("modules.external_media.config.volume", volume);
+      this.$appdata.set("modules.external_media.config.request_action", {
+        action: "set_volume",
+        value: volume,
+        time: Date.now(),
+      });
+    },
+
+    async stopActiveLiturgyPlayback(nextItem) {
+      const nextIsCurrentMusic = nextItem?.type === "music" &&
+        nextItem.musicId === this.$appdata.get("modules.media.id_music");
+
+      if (this.$appdata.get("modules.media.id_music") && !nextIsCurrentMusic) {
+        await this.$media.close(true, { preserveProjection: true });
+      }
+
+      if (this.$appdata.get("modules.external_media.filePath")) {
+        this.$appdata.set("modules.external_media.show", false);
+        this.$appdata.set("modules.external_media.minimized", false);
+        this.$appdata.set("modules.external_media.filePath", "");
+        this.$appdata.set("modules.external_media.title", "");
+        this.$appdata.set("modules.external_media.subtitle", "");
+        this.$appdata.set("modules.external_media.config.volume", this.liturgyExternalTargetVolume);
+        await this.$automation.restore("external_media_closed");
+      }
     },
 
     async runAutomationForItem(item) {
-      if (!item?.automationTriggerId) return;
+      if (!this.supportsAutomationTrigger(item?.type) || !item?.automationTriggerId) return;
 
       try {
         const result = await this.$automation.runItemTrigger(item, {
@@ -1677,6 +1948,8 @@ export default {
               name: m.name,
               album_names: m.albums ? m.albums.map(a => a.name).join(", ") : "",
               albums: m.albums,
+              has_instrumental_music: m.has_instrumental_music,
+              url_instrumental_music: m.url_instrumental_music,
             };
           });
         }

@@ -42,7 +42,8 @@
           <v-tabs-window-item :value="1" class="h-100">
             <div class="h-100 overflow-auto px-6 pb-6">
               <div class="settings-container mx-auto pb-4" style="max-width: 600px;">
-                <v-card class="settings-card rounded-xl pa-2 mb-6" flat style="background: var(--card-bg); box-shadow: var(--shadow);">
+                <CollapsiblePanel :title="t('system_theme')" :subtitle="t('system_theme_desc')" icon="mdi-palette" class="mb-6">
+                <v-card class="settings-card legacy-panel-content rounded-xl pa-2 mb-6" flat style="background: var(--card-bg); box-shadow: var(--shadow);">
                   <v-card-text class="pa-6">
                     <div class="d-flex align-center mb-6">
                       <v-icon color="primary" class="mr-3" size="28">
@@ -58,28 +59,7 @@
                       </div>
                     </div>
                     
-                    <v-btn-toggle
-                      v-model="active_theme_mode"
-                      color="primary"
-                      variant="tonal"
-                      mandatory
-                      class="rounded-xl w-100 d-flex"
-                      style="height: 48px; background: var(--card-bg); box-shadow: inset 0 0 0 1px var(--border-color);"
-                    >
-                      <v-btn value="light" class="flex-grow-1 text-none font-weight-bold">
-                        <v-icon start size="20">
-                          mdi-white-balance-sunny
-                        </v-icon> {{ t('light_mode') }}
-                      </v-btn>
-                      <v-btn value="dark" class="flex-grow-1 text-none font-weight-bold">
-                        <v-icon start size="20">
-                          mdi-weather-night
-                        </v-icon> {{ t('dark_mode') }}
-                      </v-btn>
-                    </v-btn-toggle>
-
                     <ConfigMiniPreview
-                      class="mt-5"
                       variant="theme"
                       label="Compare os temas antes de escolher"
                       :active-theme="active_theme_mode"
@@ -112,6 +92,7 @@
                     </div>
                   </v-card-text>
                 </v-card>
+                </CollapsiblePanel>
               </div>
             </div>
           </v-tabs-window-item>
@@ -119,7 +100,8 @@
           <v-tabs-window-item :value="2" class="h-100">
             <div class="h-100 overflow-auto px-6 pb-6">
               <div class="settings-container mx-auto d-flex flex-column" style="max-width: 600px; gap: 24px;">
-                <v-card class="settings-card rounded-xl pa-2 mb-6" flat style="background: var(--card-bg); box-shadow: var(--shadow);">
+                <CollapsiblePanel title="Preferências gerais" subtitle="Idioma, tela inicial e desempenho" icon="mdi-tune-variant" :hide-first="false">
+                <v-card class="settings-card legacy-panel-content rounded-xl pa-2 mb-6" flat style="background: var(--card-bg); box-shadow: var(--shadow);">
                   <v-card-text class="pa-6">
                     <!-- IDIOMA -->
                     <div class="d-flex align-center justify-space-between mb-8">
@@ -308,8 +290,10 @@
                     </div>
                   </v-card-text>
                 </v-card>
+                </CollapsiblePanel>
 
-                <v-card class="settings-card rounded-xl pa-2" flat style="background: var(--card-bg); box-shadow: var(--shadow);">
+                <CollapsiblePanel title="Dados e histórico" subtitle="Limpeza de histórico e dados locais" icon="mdi-database-cog" :hide-first="false">
+                <v-card class="settings-card legacy-panel-content rounded-xl pa-2" flat style="background: var(--card-bg); box-shadow: var(--shadow);">
                   <v-card-text class="pa-6">
                     <!-- RESETAR HISTÓRICO -->
                     <div class="d-flex align-center justify-space-between mb-8">
@@ -364,6 +348,7 @@
                     </div>
                   </v-card-text>
                 </v-card>
+                </CollapsiblePanel>
               </div>
             </div>
           </v-tabs-window-item>
@@ -371,7 +356,8 @@
           <v-tabs-window-item :value="3" class="h-100">
             <div class="h-100 overflow-auto px-6 pb-6">
               <div class="settings-container mx-auto pb-4" style="max-width: 600px;">
-                <v-card class="settings-card rounded-xl pa-2 mb-6 mt-6" flat style="background: var(--card-bg); box-shadow: var(--shadow);">
+                <CollapsiblePanel title="Reprodução" subtitle="Player interno, transições e comportamento de vídeo" icon="mdi-play-network-outline" class="mb-6 mt-6">
+                <v-card class="settings-card legacy-panel-content rounded-xl pa-2 mb-6 mt-6" flat style="background: var(--card-bg); box-shadow: var(--shadow);">
                   <v-card-text class="pa-6">
                     <div class="d-flex align-center mb-4">
                       <v-icon color="primary" class="mr-3" size="28">
@@ -396,6 +382,31 @@
 
                       <v-expand-transition>
                         <div v-show="media_use_internal_player" class="pl-4 mt-4" style="border-left: 2px solid var(--border-color);">
+                          <div class="mb-5">
+                            <div class="d-flex align-center justify-space-between mb-1" style="gap: 12px;">
+                              <div>
+                                <div class="text-body-2 font-weight-bold" style="color: var(--sidebar-text);">
+                                  Transi&ccedil;&atilde;o entre itens da liturgia
+                                </div>
+                                <div class="text-caption" style="color: var(--sidebar-text-secondary);">
+                                  Suaviza a troca quando j&aacute; existe um item em execu&ccedil;&atilde;o.
+                                </div>
+                              </div>
+                              <v-chip size="small" color="primary" variant="tonal" class="font-weight-bold">
+                                {{ Number(media_liturgy_transition_duration).toFixed(1) }} s
+                              </v-chip>
+                            </div>
+                            <v-slider
+                              v-model="media_liturgy_transition_duration"
+                              color="primary"
+                              min="0"
+                              max="3"
+                              step="0.1"
+                              hide-details
+                              density="compact"
+                            />
+                          </div>
+
                           <v-switch
                             v-model="media_sync_projection_settings"
                             label="Replicar configurações de Projeção & Telas"
@@ -530,14 +541,16 @@
                     </div>
                   </v-card-text>
                 </v-card>
+                </CollapsiblePanel>
               </div>
             </div>
           </v-tabs-window-item>
 
           <v-tabs-window-item :value="4" class="h-100">
             <div class="h-100 overflow-auto px-6 pb-6">
-              <div class="settings-container mx-auto pb-4" style="max-width: 600px;">
-                <v-card class="settings-card rounded-xl pa-2 mb-6" flat style="background: var(--card-bg); box-shadow: var(--shadow);">
+              <div class="settings-container projection-settings mx-auto pb-4" style="max-width: 600px;">
+                <CollapsiblePanel :title="t('monitors')" subtitle="Monitores detectados e identificação das telas" icon="mdi-monitor-multiple" class="mb-6">
+                <v-card class="settings-card legacy-panel-content rounded-xl pa-2 mb-6" flat style="background: var(--card-bg); box-shadow: var(--shadow);">
                   <v-card-text class="pa-6">
                     <div class="d-flex align-center mb-6">
                       <v-icon color="primary" class="mr-3" size="28">
@@ -630,8 +643,10 @@
                     </div>
                   </v-card-text>
                 </v-card>
+                </CollapsiblePanel>
 
-                <v-card class="settings-card rounded-xl pa-2 mb-6" flat style="background: var(--card-bg); box-shadow: var(--shadow);">
+                <CollapsiblePanel :title="t('music_slides')" subtitle="Saídas, janela e aparência da projeção" icon="mdi-presentation-play" class="mb-6">
+                <v-card class="settings-card legacy-panel-content rounded-xl pa-2 mb-6" flat style="background: var(--card-bg); box-shadow: var(--shadow);">
                   <v-card-text class="pa-6">
                     <div class="d-flex align-center mb-6">
                       <v-icon color="primary" class="mr-3" size="28">
@@ -645,7 +660,7 @@
                     </div>
                     
                     <!-- MÚLTIPLAS TELAS -->
-                    <div class="mb-8">
+                    <div class="mb-8 projection-block projection-block--outputs">
                       <div class="d-flex align-center mb-4">
                         <v-icon size="20" color="primary" class="mr-2">
                           mdi-monitor-multiple
@@ -702,18 +717,13 @@
                         Nenhum monitor estendido (secundário) detectado no sistema.
                       </v-alert>
                     </div>
+                  </v-card-text>
+                </v-card>
+                </CollapsiblePanel>
 
-                    <v-divider class="mb-8" style="opacity: 0.1;" />
-
-                    <!-- TELA ÚNICA / PRINCIPAL -->
-                    <!-- MONITOR DE RETORNO -->
-                    <div class="mb-8">
-                      <div class="d-flex align-center mb-4">
-                        <v-icon size="20" color="primary" class="mr-2">
-                          mdi-monitor-dashboard
-                        </v-icon>
-                        <span class="text-subtitle-1 font-weight-bold" style="color: var(--sidebar-text);">Monitor de Retorno</span>
-                      </div>
+                <!-- MONITOR DE RETORNO -->
+                    <CollapsiblePanel title="Monitor de Retorno" subtitle="Tela auxiliar para letras, cifras, notas e informações da apresentação" icon="mdi-monitor-dashboard" class="mb-6" :hide-first="false">
+                    <div class="return-monitor-settings">
 
                       <v-switch
                         v-model="return_monitor_enabled"
@@ -774,9 +784,53 @@
                         />
                       </div>
 
+                      <div class="mt-4">
+                        <div class="text-body-2 font-weight-bold mb-2" style="color: var(--sidebar-text);">
+                          Alinhamento do conteudo
+                        </div>
+                        <v-btn-toggle
+                          v-model="return_monitor_text_align"
+                          mandatory
+                          divided
+                          color="primary"
+                          class="w-100"
+                        >
+                          <v-btn value="left" class="flex-grow-1 text-none font-weight-bold">
+                            <v-icon start>
+                              mdi-format-align-left
+                            </v-icon>
+                            Esquerda
+                          </v-btn>
+                          <v-btn value="center" class="flex-grow-1 text-none font-weight-bold">
+                            <v-icon start>
+                              mdi-format-align-center
+                            </v-icon>
+                            Centro
+                          </v-btn>
+                          <v-btn value="right" class="flex-grow-1 text-none font-weight-bold">
+                            <v-icon start>
+                              mdi-format-align-right
+                            </v-icon>
+                            Direita
+                          </v-btn>
+                        </v-btn-toggle>
+                      </div>
+
+                      <v-slider
+                        v-model="return_monitor_notes_font_size"
+                        label="Tamanho das notas"
+                        color="primary"
+                        min="16"
+                        max="96"
+                        step="2"
+                        thumb-label
+                        hide-details
+                        class="mt-4"
+                      />
+
                       <v-slider
                         v-model="return_monitor_current_font_size"
-                        label="Fonte do slide atual"
+                        label="Fonte da letra e cifra atuais"
                         color="primary"
                         min="48"
                         max="150"
@@ -787,7 +841,7 @@
                       />
                       <v-slider
                         v-model="return_monitor_preview_font_size"
-                        label="Fonte da prévia"
+                        label="Fonte da previa (letra e cifra)"
                         color="primary"
                         min="24"
                         max="90"
@@ -841,10 +895,12 @@
                         class="font-weight-medium"
                       />
                     </div>
+                    </CollapsiblePanel>
 
-                    <v-divider class="mb-8" style="opacity: 0.1;" />
-
-                    <div class="mb-8">
+                <CollapsiblePanel title="Aparência dos Slides" subtitle="Janela principal e personalização visual da projeção" icon="mdi-palette-outline" class="mb-6">
+                <v-card class="settings-card legacy-panel-content rounded-xl pa-2 mb-6" flat style="background: var(--card-bg); box-shadow: var(--shadow);">
+                  <v-card-text class="pa-6">
+                    <div class="mb-8 projection-block projection-block--window">
                       <div class="d-flex align-center mb-4">
                         <v-icon size="20" color="primary" class="mr-2">
                           mdi-monitor
@@ -881,7 +937,7 @@
                     <v-divider class="mb-8" style="opacity: 0.1;" />
 
                     <!-- PERSONALIZAÇÃO -->
-                    <div>
+                    <div class="projection-block projection-block--visual">
                       <div class="d-flex align-center mb-4">
                         <v-icon size="20" color="primary" class="mr-2">
                           mdi-palette-outline
@@ -898,6 +954,10 @@
                         :font-size="slide_font_size"
                         :font-color="slide_font_color"
                         :font-weight="slide_font_weight"
+                        :font-family="slide_font_family"
+                        :line-height="slide_line_height"
+                        :letter-spacing="slide_letter_spacing"
+                        :text-box="slide_text_box"
                         :custom-background="slide_custom_bg"
                         :background-color="slide_bg_color"
                         :background-image="slideBgPreviewUrl"
@@ -957,6 +1017,50 @@
                         />
                         <v-expand-transition>
                           <div v-if="slide_custom_text_format" class="mt-4 pa-5 rounded-xl" style="background: var(--main-bg); border: 1px solid var(--border-color);">
+                            <!-- Família da fonte -->
+                            <div class="mb-6">
+                              <div class="d-flex align-center mb-3">
+                                <v-icon size="18" color="primary" class="mr-2">
+                                  mdi-format-font
+                                </v-icon>
+                                <span class="text-body-2 font-weight-bold" style="color: var(--sidebar-text);">Fonte</span>
+                              </div>
+                              <div class="d-flex align-center" style="gap: 10px;">
+                                <v-autocomplete
+                                  v-model="slide_font_family"
+                                  :items="slideFontFamilies"
+                                  :loading="system_fonts_loading"
+                                  variant="outlined"
+                                  density="comfortable"
+                                  no-data-text="Nenhuma fonte encontrada"
+                                  auto-select-first
+                                  hide-details
+                                  :menu-props="{ maxHeight: 420 }"
+                                  class="flex-grow-1"
+                                >
+                                  <template #selection="{ item }">
+                                    <span :style="{ fontFamily: `${item.value}, sans-serif` }">{{ item.title }}</span>
+                                  </template>
+                                  <template #item="{ props, item }">
+                                    <v-list-item v-bind="props" :style="{ fontFamily: `${item.value}, sans-serif` }" />
+                                  </template>
+                                </v-autocomplete>
+                                <v-btn
+                                  icon
+                                  variant="tonal"
+                                  color="primary"
+                                  :loading="system_fonts_loading"
+                                  title="Atualizar fontes instaladas"
+                                  @click="loadSystemFonts"
+                                >
+                                  <v-icon>mdi-refresh</v-icon>
+                                </v-btn>
+                              </div>
+                              <div class="text-caption mt-2" style="color: var(--sidebar-text-secondary);">
+                                {{ slideFontFamilies.length }} fontes instaladas encontradas
+                              </div>
+                            </div>
+
                             <!-- Tamanho do texto -->
                             <div class="mb-6">
                               <div class="d-flex align-center justify-space-between mb-3">
@@ -1011,6 +1115,54 @@
                               </div>
                             </div>
 
+                            <!-- Espaçamento entre linhas -->
+                            <div class="mb-6">
+                              <div class="d-flex align-center justify-space-between mb-3">
+                                <div class="d-flex align-center">
+                                  <v-icon size="18" color="primary" class="mr-2">
+                                    mdi-format-line-spacing
+                                  </v-icon>
+                                  <span class="text-body-2 font-weight-bold" style="color: var(--sidebar-text);">Espaçamento entre linhas</span>
+                                </div>
+                                <v-chip size="small" variant="tonal" color="primary" class="font-weight-bold">
+                                  {{ slide_line_height }}%
+                                </v-chip>
+                              </div>
+                              <v-slider
+                                v-model="slide_line_height"
+                                :min="80"
+                                :max="250"
+                                :step="5"
+                                color="primary"
+                                track-color="grey-lighten-3"
+                                hide-details
+                              />
+                            </div>
+
+                            <!-- Espaçamento entre letras -->
+                            <div class="mb-6">
+                              <div class="d-flex align-center justify-space-between mb-3">
+                                <div class="d-flex align-center">
+                                  <v-icon size="18" color="primary" class="mr-2">
+                                    mdi-format-letter-spacing
+                                  </v-icon>
+                                  <span class="text-body-2 font-weight-bold" style="color: var(--sidebar-text);">Espaçamento entre letras</span>
+                                </div>
+                                <v-chip size="small" variant="tonal" color="primary" class="font-weight-bold">
+                                  {{ slide_letter_spacing }}%
+                                </v-chip>
+                              </div>
+                              <v-slider
+                                v-model="slide_letter_spacing"
+                                :min="-10"
+                                :max="50"
+                                :step="1"
+                                color="primary"
+                                track-color="grey-lighten-3"
+                                hide-details
+                              />
+                            </div>
+
                             <!-- Cor do texto -->
                             <div class="mb-6">
                               <div class="d-flex align-center mb-3">
@@ -1051,7 +1203,7 @@
                             </div>
 
                             <!-- Peso da fonte -->
-                            <div>
+                            <div class="mb-6">
                               <div class="d-flex align-center mb-3">
                                 <v-icon size="18" color="primary" class="mr-2">
                                   mdi-format-bold
@@ -1080,6 +1232,15 @@
                                 </v-btn>
                               </v-btn-toggle>
                             </div>
+
+                            <v-switch
+                              v-model="slide_text_box"
+                              label="Exibir quadro ao fundo da letra"
+                              color="primary"
+                              inset
+                              hide-details
+                              class="font-weight-medium"
+                            />
                           </div>
                         </v-expand-transition>
                       </div>
@@ -1263,6 +1424,7 @@
                     </div>
                   </v-card-text>
                 </v-card>
+                </CollapsiblePanel>
               </div>
             </div>
           </v-tabs-window-item>
@@ -1270,7 +1432,8 @@
           <v-tabs-window-item :value="5" class="h-100">
             <div class="h-100 overflow-auto px-6 pb-6">
               <div class="settings-container mx-auto d-flex flex-column" style="max-width: 720px; gap: 24px;">
-                <v-card class="settings-card rounded-xl pa-2 mt-6" flat style="background: var(--card-bg); box-shadow: var(--shadow);">
+                <CollapsiblePanel title="Controle remoto por rede" subtitle="Servidor local, endereço e inicialização automática" icon="mdi-remote" class="mt-6" :hide-first="false">
+                <v-card class="settings-card legacy-panel-content rounded-xl pa-2 mt-6" flat style="background: var(--card-bg); box-shadow: var(--shadow);">
                   <v-card-text class="pa-6">
                     <div class="d-flex align-center justify-space-between mb-6" style="gap: 16px; flex-wrap: wrap;">
                       <div class="d-flex align-center">
@@ -1322,6 +1485,32 @@
                     >
                       Nenhum endereço disponível. Inicie o servidor e verifique se o computador está conectado à rede.
                     </v-alert>
+
+                    <div
+                      v-if="remote_control_running && remote_control_qr_code"
+                      class="d-flex align-center mb-6 pa-4 rounded-xl"
+                      style="gap: 20px; flex-wrap: wrap; background: var(--main-bg); border: 1px solid var(--border-color);"
+                    >
+                      <img
+                        :src="remote_control_qr_code"
+                        alt="QR Code do controle remoto"
+                        width="148"
+                        height="148"
+                        class="rounded-lg"
+                        style="background: white;"
+                      />
+                      <div style="flex: 1; min-width: 220px;">
+                        <div class="font-weight-bold mb-1" style="color: var(--sidebar-text);">
+                          Conectar pelo celular
+                        </div>
+                        <div class="text-body-2 mb-3" style="color: var(--sidebar-text-secondary);">
+                          Abra a câmera do celular e leia o QR Code. O dispositivo precisa estar na mesma rede do computador.
+                        </div>
+                        <v-chip size="small" color="success" variant="tonal" prepend-icon="mdi-wifi">
+                          Atualização e reconexão automáticas
+                        </v-chip>
+                      </div>
+                    </div>
 
                     <div class="d-flex flex-column" style="gap: 18px;">
                       <div class="d-flex align-center justify-space-between" style="gap: 16px; flex-wrap: wrap;">
@@ -1412,8 +1601,10 @@
                     </div>
                   </v-card-text>
                 </v-card>
+                </CollapsiblePanel>
 
-                <v-card class="settings-card rounded-xl pa-2" flat style="background: var(--card-bg); box-shadow: var(--shadow);">
+                <CollapsiblePanel title="Segurança de acesso" subtitle="Senha e proteção do controle remoto" icon="mdi-shield-key">
+                <v-card class="settings-card legacy-panel-content rounded-xl pa-2" flat style="background: var(--card-bg); box-shadow: var(--shadow);">
                   <v-card-text class="pa-6">
                     <div class="d-flex align-center mb-6">
                       <v-icon color="primary" class="mr-3" size="28">
@@ -1469,6 +1660,7 @@
                     </div>
                   </v-card-text>
                 </v-card>
+                </CollapsiblePanel>
               </div>
             </div>
           </v-tabs-window-item>
@@ -1476,7 +1668,8 @@
           <v-tabs-window-item :value="6" class="h-100">
             <div class="h-100 overflow-auto px-6 pb-6">
               <div class="settings-container mx-auto d-flex flex-column" style="max-width: 760px; gap: 24px;">
-                <v-card class="settings-card rounded-xl pa-2 mt-6" flat style="background: var(--card-bg); box-shadow: var(--shadow);">
+                <CollapsiblePanel title="Gatilhos de automação" subtitle="Ativação e comportamento geral" icon="mdi-lightning-bolt" class="mt-6" :hide-first="false">
+                <v-card class="settings-card legacy-panel-content rounded-xl pa-2 mt-6" flat style="background: var(--card-bg); box-shadow: var(--shadow);">
                   <v-card-text class="pa-6">
                     <div class="d-flex align-center justify-space-between mb-6" style="gap: 16px; flex-wrap: wrap;">
                       <div class="d-flex align-center">
@@ -1521,8 +1714,10 @@
                     </div>
                   </v-card-text>
                 </v-card>
+                </CollapsiblePanel>
 
-                <v-card class="settings-card rounded-xl pa-2" flat style="background: var(--card-bg); box-shadow: var(--shadow);">
+                <CollapsiblePanel title="Dispositivo Soundcraft Ui" subtitle="Conexão com a mesa de áudio" icon="mdi-mixer">
+                <v-card class="settings-card legacy-panel-content rounded-xl pa-2" flat style="background: var(--card-bg); box-shadow: var(--shadow);">
                   <v-card-text class="pa-6">
                     <div class="d-flex align-center justify-space-between mb-5" style="gap: 16px; flex-wrap: wrap;">
                       <div class="d-flex align-center">
@@ -1582,8 +1777,10 @@
                     </div>
                   </v-card-text>
                 </v-card>
+                </CollapsiblePanel>
 
-                <v-card class="settings-card rounded-xl pa-2" flat style="background: var(--card-bg); box-shadow: var(--shadow);">
+                <CollapsiblePanel title="Gatilhos" subtitle="Cenas reutilizáveis associadas aos itens da liturgia" icon="mdi-playlist-check" :hide-first="false">
+                <v-card class="settings-card legacy-panel-content rounded-xl pa-2" flat style="background: var(--card-bg); box-shadow: var(--shadow);">
                   <v-card-text class="pa-6">
                     <div class="d-flex align-center justify-space-between mb-5" style="gap: 16px; flex-wrap: wrap;">
                       <div class="d-flex align-center">
@@ -1754,6 +1951,7 @@
                     </div>
                   </v-card-text>
                 </v-card>
+                </CollapsiblePanel>
               </div>
             </div>
           </v-tabs-window-item>
@@ -1768,6 +1966,7 @@ import manifest from "../manifest.json";
 import MenuToggleButton from "@/components/MenuToggleButton.vue";
 import ModernColorPicker from "@/components/inputs/ModernColorPicker.vue";
 import ConfigMiniPreview from "./ConfigMiniPreview.vue";
+import CollapsiblePanel from "./CollapsiblePanel.vue";
 import $media from "@/helpers/Media";
 
 export default {
@@ -1776,6 +1975,7 @@ export default {
     MenuToggleButton,
     ModernColorPicker,
     ConfigMiniPreview,
+    CollapsiblePanel,
   },
   data: () => ({
     tab: 1,
@@ -1804,6 +2004,7 @@ export default {
     youtube_mode: "Vídeo",
     
     media_use_internal_player: false,
+    media_liturgy_transition_duration: 0.6,
     media_sync_projection_settings: true,
     media_auto_project_video: true,
     media_pause_on_minimize: false,
@@ -1824,6 +2025,12 @@ export default {
     slide_font_size: 100,
     slide_font_color: "#FFFFFF",
     slide_font_weight: "700",
+    slide_font_family: "Roboto",
+    slide_line_height: 140,
+    slide_letter_spacing: 3,
+    slide_text_box: true,
+    system_font_families: [],
+    system_fonts_loading: false,
     slide_bg_color: "#000000",
     slide_bg_image: null,
     slide_bg_type: "image",
@@ -1835,6 +2042,8 @@ export default {
     return_monitor_text_color: "#FFFFFF",
     return_monitor_current_font_size: 92,
     return_monitor_preview_font_size: 38,
+    return_monitor_text_align: "center",
+    return_monitor_notes_font_size: 32,
     return_monitor_show_title: true,
     return_monitor_show_next_label: true,
     return_monitor_show_clock: false,
@@ -1843,6 +2052,7 @@ export default {
     remote_control_loading: false,
     remote_control_running: false,
     remote_control_addresses: [],
+    remote_control_qr_code: "",
     remote_control_network_options: [],
     show_remote_control_password: false,
     remote_control_config: {
@@ -1921,6 +2131,11 @@ export default {
       }
       return this.slide_bg_image;
     },
+    slideFontFamilies() {
+      const fallback = ["Roboto", "Arial", "Segoe UI", "Verdana", "Tahoma", "Georgia", "Times New Roman", "Courier New", "DINCondensedBold"];
+      return [...new Set([...fallback, ...this.system_font_families, this.slide_font_family].filter(Boolean))]
+        .sort((a, b) => a.localeCompare(b, "pt-BR", { sensitivity: "base" }));
+    },
     languagesList() {
       return [
         { code: "pt", name: "Português" },
@@ -1975,6 +2190,10 @@ export default {
     },
     media_use_internal_player(val) {
       this.$userdata.set("modules.config.media_use_internal_player", val);
+    },
+    media_liturgy_transition_duration(val) {
+      const duration = Math.min(3, Math.max(0, Number(val) || 0));
+      this.$userdata.set("modules.config.media_liturgy_transition_duration", duration);
     },
     media_sync_projection_settings(val) {
       this.$userdata.set("modules.config.media_sync_projection_settings", val);
@@ -2044,6 +2263,10 @@ export default {
     slide_font_size(val) { this.$userdata.set("modules.config.slide_font_size", val); },
     slide_font_color(val) { this.$userdata.set("modules.config.slide_font_color", val); },
     slide_font_weight(val) { this.$userdata.set("modules.config.slide_font_weight", val); },
+    slide_font_family(val) { this.$userdata.set("modules.config.slide_font_family", val); },
+    slide_line_height(val) { this.$userdata.set("modules.config.slide_line_height", val); },
+    slide_letter_spacing(val) { this.$userdata.set("modules.config.slide_letter_spacing", val); },
+    slide_text_box(val) { this.$userdata.set("modules.config.slide_text_box", val); },
     slide_custom_bg(val) { this.$userdata.set("modules.config.slide_custom_bg", val); },
     slide_bg_color(val) { this.$userdata.set("modules.config.slide_bg_color", val); },
     slide_bg_image(val) { this.$userdata.set("modules.config.slide_bg_image", val); },
@@ -2067,6 +2290,8 @@ export default {
     return_monitor_text_color(val) { this.$userdata.set("modules.config.return_monitor_text_color", val); },
     return_monitor_current_font_size(val) { this.$userdata.set("modules.config.return_monitor_current_font_size", val); },
     return_monitor_preview_font_size(val) { this.$userdata.set("modules.config.return_monitor_preview_font_size", val); },
+    return_monitor_text_align(val) { this.$userdata.set("modules.config.return_monitor_text_align", val); },
+    return_monitor_notes_font_size(val) { this.$userdata.set("modules.config.return_monitor_notes_font_size", val); },
     return_monitor_show_title(val) { this.$userdata.set("modules.config.return_monitor_show_title", val); },
     return_monitor_show_next_label(val) { this.$userdata.set("modules.config.return_monitor_show_next_label", val); },
     return_monitor_show_clock(val) { this.$userdata.set("modules.config.return_monitor_show_clock", val); },
@@ -2149,13 +2374,15 @@ export default {
     
     const fields = [
       "light_mode", "light_optimize_presentations", "light_limit_projection_windows", "light_disable_hardware_acceleration",
-      "media_use_internal_player", "media_sync_projection_settings", "media_auto_project_video", "media_pause_on_minimize",
+      "media_use_internal_player", "media_liturgy_transition_duration", "media_sync_projection_settings", "media_auto_project_video", "media_pause_on_minimize",
       "media_slide_monitor", "media_slide_fullscreen", "media_slide_disable_main_if_extended", "media_slide_minimize_player",
-      "slide_custom_text_format", "slide_font_size", "slide_font_color", "slide_font_weight",
+      "slide_custom_text_format", "slide_font_size", "slide_font_color", "slide_font_weight", "slide_font_family",
+      "slide_line_height", "slide_letter_spacing", "slide_text_box",
       "slide_custom_bg", "slide_bg_color", "slide_bg_image", "slide_bg_type", "slide_bg_opacity",
       "return_monitor_enabled", "return_monitor", "return_monitor_allow_same",
       "return_monitor_bg_color", "return_monitor_text_color", "return_monitor_current_font_size",
-      "return_monitor_preview_font_size", "return_monitor_show_title", "return_monitor_show_next_label",
+      "return_monitor_preview_font_size", "return_monitor_text_align", "return_monitor_notes_font_size",
+      "return_monitor_show_title", "return_monitor_show_next_label",
       "return_monitor_show_clock", "return_monitor_show_counter", "return_monitor_ratio",
     ];
     fields.forEach(field => {
@@ -2165,12 +2392,38 @@ export default {
       }
     });
 
+    this.loadSystemFonts();
     this.loadRemoteControlStatus();
     this.loadAutomationConfig();
   },
   methods: {
     t(text) {
       return this.$t(`modules.${this.module_id}.${text}`);
+    },
+    async loadSystemFonts() {
+      this.system_fonts_loading = true;
+      try {
+        let fonts = [];
+        if (window.electronAPI?.getSystemFonts) {
+          fonts = await window.electronAPI.getSystemFonts();
+        } else {
+          const queryLocalFonts = window.queryLocalFonts;
+          if (typeof queryLocalFonts === "function") {
+            const faces = await queryLocalFonts.call(window);
+            fonts = faces.map(face => face.family);
+          }
+        }
+
+        this.system_font_families = [...new Set(
+          (Array.isArray(fonts) ? fonts : [])
+            .map(font => String(font || "").trim())
+            .filter(Boolean),
+        )];
+      } catch (error) {
+        console.error("Não foi possível carregar as fontes instaladas", error);
+      } finally {
+        this.system_fonts_loading = false;
+      }
     },
     applyLightModeRuntimeEffects() {
       if (this.light_mode && this.light_limit_projection_windows) {
@@ -2189,6 +2442,7 @@ export default {
       if (!status) return;
       this.remote_control_running = status.running === true;
       this.remote_control_addresses = status.addresses || [];
+      this.remote_control_qr_code = status.qrCode || "";
       this.remote_control_network_options = status.networkOptions || [];
       this.remote_control_config = {
         ...this.remote_control_config,
@@ -2503,6 +2757,10 @@ export default {
       this.slide_font_size = 100;
       this.slide_font_color = "#FFFFFF";
       this.slide_font_weight = "700";
+      this.slide_font_family = "Roboto";
+      this.slide_line_height = 140;
+      this.slide_letter_spacing = 3;
+      this.slide_text_box = true;
       this.slide_custom_bg = false;
       this.slide_bg_color = "#000000";
       this.slide_bg_image = null;
@@ -2515,6 +2773,8 @@ export default {
       this.return_monitor_text_color = "#FFFFFF";
       this.return_monitor_current_font_size = 92;
       this.return_monitor_preview_font_size = 38;
+      this.return_monitor_text_align = "center";
+      this.return_monitor_notes_font_size = 32;
       this.return_monitor_show_title = true;
       this.return_monitor_show_next_label = true;
       this.return_monitor_show_clock = false;
@@ -2525,6 +2785,7 @@ export default {
     resetMediaConfigs() {
       this.media_use_internal_player = false;
       this.media_sync_projection_settings = true;
+      this.media_liturgy_transition_duration = 0.6;
       this.media_auto_project_video = true;
       this.media_pause_on_minimize = false;
       this.media_slide_monitor = [];
@@ -2581,13 +2842,6 @@ export default {
 </script>
 
 <style scoped>
-.settings-card {
-  transition: box-shadow 0.2s ease-in-out, transform 0.2s ease-in-out;
-}
-.settings-card:hover {
-  box-shadow: var(--shadow-hover) !important;
-  transform: translateY(-1px);
-}
 .settings-section h3 {
   opacity: 0.9;
 }
