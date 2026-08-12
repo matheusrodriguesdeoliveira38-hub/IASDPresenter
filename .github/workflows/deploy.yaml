@@ -26,7 +26,7 @@ jobs:
           git config --global user.name "github-actions[bot]"
       - name: fetch CNAME from dist branch
         run: |
-          git fetch origin dist:dist
+          git fetch origin dist:dist || echo "dist branch not found; it will be created"
           git show dist:CNAME > CNAME || echo "CNAME not found, skipping"
       - name: install dependencies
         run: npm install
