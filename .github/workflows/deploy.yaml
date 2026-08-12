@@ -11,11 +11,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
       - name: set up node.js
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v4
         with:
-          node-version: 18
+          node-version: 24
       - name: setup git auth
         env:
           access_token: ${{ secrets.GITHUB_TOKEN }}
@@ -29,7 +29,7 @@ jobs:
           git fetch origin dist:dist || echo "dist branch not found; it will be created"
           git show dist:CNAME > CNAME || echo "CNAME not found, skipping"
       - name: install dependencies
-        run: npm install
+        run: npm ci --ignore-scripts
       - name: build project
         run: npm run build
         env:
