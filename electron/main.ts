@@ -2983,6 +2983,15 @@ autoUpdater.autoDownload = false;
 autoUpdater.autoInstallOnAppQuit = true;
 
 let autoUpdaterInitialized = false;
+let autoUpdaterState = { status: 'idle' };
+
+function setAutoUpdaterState(status, payload = {}) {
+  autoUpdaterState = {
+    ...autoUpdaterState,
+    ...payload,
+    status,
+  };
+}
 
 function sendAutoUpdaterEvent(channel, payload) {
   const mainWin = mainAppWindow && !mainAppWindow.isDestroyed()
@@ -2999,6 +3008,11 @@ function setupAutoUpdater() {
 
   autoUpdater.on('update-available', (info) => {
     console.log('Update available:', info.version);
+    setAutoUpdaterState('available', {
+      version: info.version,
+      releaseDate: info.releaseDate,
+      releaseNotes: info.releaseNotes,
+    });
     sendAutoUpdaterEvent('update-available', {
       version: info.version,
       releaseDate: info.releaseDate,
@@ -3008,12 +3022,16 @@ function setupAutoUpdater() {
 
   autoUpdater.on('update-not-available', (info) => {
     console.log('No update available. Current version is up-to-date.');
+    setAutoUpdaterState('not-available', { version: info.version });
     sendAutoUpdaterEvent('update-not-available', {
       version: info.version,
     });
   });
 
   autoUpdater.on('download-progress', (progress) => {
+    setAutoUpdaterState('downloading', {
+      downloadPercent: Math.round(progress.percent),
+    });
     sendAutoUpdaterEvent('update-download-progress', {
       percent: Math.round(progress.percent),
       bytesPerSecond: progress.bytesPerSecond,
@@ -3024,6 +3042,10 @@ function setupAutoUpdater() {
 
   autoUpdater.on('update-downloaded', (info) => {
     console.log('Update downloaded:', info.version);
+    setAutoUpdaterState('ready', {
+      version: info.version,
+      downloadPercent: 100,
+    });
     sendAutoUpdaterEvent('update-downloaded', {
       version: info.version,
     });
@@ -3031,6 +3053,7 @@ function setupAutoUpdater() {
 
   autoUpdater.on('error', (error) => {
     console.error('Auto-updater error:', error.message);
+    setAutoUpdaterState('error', { error: error.message });
     sendAutoUpdaterEvent('update-error', {
       message: error.message,
     });
@@ -3038,14 +3061,18 @@ function setupAutoUpdater() {
 
   // Verifica atualizações 5 segundos após iniciar
   setTimeout(() => {
+    setAutoUpdaterState('checking', { error: null });
     autoUpdater.checkForUpdates().catch((err) => {
       console.log('Check for updates failed:', err.message);
     });
   }, 5000);
 }
 
+ipcMain.handle('get-update-state', () => autoUpdaterState);
+
 ipcMain.handle('check-for-updates', async () => {
   try {
+    setAutoUpdaterState('checking', { error: null });
     const result = await autoUpdater.checkForUpdates();
     return result;
   } catch (error) {
@@ -3056,6 +3083,7 @@ ipcMain.handle('check-for-updates', async () => {
 
 ipcMain.handle('download-update', async () => {
   try {
+    setAutoUpdaterState('downloading', { downloadPercent: 0, error: null });
     await autoUpdater.downloadUpdate();
     return true;
   } catch (error) {

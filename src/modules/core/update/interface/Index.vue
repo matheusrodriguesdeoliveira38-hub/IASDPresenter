@@ -172,11 +172,6 @@
 <script lang="ts">
 export default {
   name: "UpdateModule",
-  data: () => ({
-    updateVersion: "",
-    downloadPercent: 0,
-    releaseNotes: "",
-  }),
   computed: {
     module_id() {
       return "update";
@@ -197,65 +192,43 @@ export default {
     updateStatus() {
       return this.$appdata.get("modules.update.status") || "idle";
     },
+    updateVersion() {
+      return this.$appdata.get("modules.update.version") || "";
+    },
+    downloadPercent() {
+      return this.$appdata.get("modules.update.downloadPercent") || 0;
+    },
+    releaseNotes() {
+      return this.$appdata.get("modules.update.releaseNotes") || "";
+    },
   },
   watch: {
     show(val) {
       if (val) {
         if (this.updateStatus === "idle" || this.updateStatus === "not-available" || this.updateStatus === "error") {
-          this.$appdata.set("modules.update.status", "checking");
-          if (window.electronAPI) {
-            window.electronAPI.checkForUpdates().then(result => {
-              if (!result) {
-                this.$appdata.set("modules.update.status", "not-available");
-              }
-            }).catch(() => {
-              this.$appdata.set("modules.update.status", "error");
-            });
-          }
+          this.checkForUpdates();
         }
       }
     },
-  },
-  mounted() {
-    this.setupAutoUpdateListeners();
   },
   methods: {
     close() {
       this.$modules.close(this.module_id);
     },
-    setupAutoUpdateListeners() {
+    checkForUpdates() {
       if (!window.electronAPI) return;
       
-      // Reseta o estado sempre que o app inicia para evitar status 'presos' de sessões anteriores
-      this.$appdata.set("modules.update.status", "idle");
-      
-      window.electronAPI.onUpdateAvailable((info) => {
-        this.$appdata.set("modules.update.status", "available");
-        this.updateVersion = info.version;
-        this.releaseNotes = info.releaseNotes || "";
-      });
-      
-      window.electronAPI.onUpdateNotAvailable(() => {
-        this.$appdata.set("modules.update.status", "not-available");
-      });
-      
-      window.electronAPI.onUpdateDownloadProgress((progress) => {
-        this.$appdata.set("modules.update.status", "downloading");
-        this.downloadPercent = progress.percent;
-      });
-      
-      window.electronAPI.onUpdateDownloaded(() => {
-        this.$appdata.set("modules.update.status", "ready");
-      });
-      
-      window.electronAPI.onUpdateError(() => {
+      // O componente principal recebe e persiste os eventos do atualizador.
+      this.$appdata.set("modules.update.status", "checking");
+
+      window.electronAPI.checkForUpdates().catch(() => {
         this.$appdata.set("modules.update.status", "error");
       });
     },
     startDownload() {
       if (window.electronAPI) {
         this.$appdata.set("modules.update.status", "downloading");
-        this.downloadPercent = 0;
+        this.$appdata.set("modules.update.downloadPercent", 0);
         window.electronAPI.downloadUpdate();
       }
     },
@@ -265,16 +238,7 @@ export default {
       }
     },
     retryUpdate() {
-      this.$appdata.set("modules.update.status", "checking");
-      if (window.electronAPI) {
-        window.electronAPI.checkForUpdates().then(result => {
-          if (!result) {
-            this.$appdata.set("modules.update.status", "not-available");
-          }
-        }).catch(() => {
-          this.$appdata.set("modules.update.status", "error");
-        });
-      }
+      this.checkForUpdates();
     },
   },
 };
