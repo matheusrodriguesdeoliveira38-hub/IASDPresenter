@@ -3077,6 +3077,7 @@ function setupAutoUpdater() {
 
   // Verifica atualizações 5 segundos após iniciar
   setTimeout(() => {
+    if (autoUpdaterState.status !== 'idle') return;
     setAutoUpdaterState('checking', { error: null });
     autoUpdater.checkForUpdates().catch((err) => {
       console.log('Check for updates failed:', err.message);
@@ -3088,6 +3089,7 @@ ipcMain.handle('get-update-state', () => autoUpdaterState);
 
 ipcMain.handle('check-for-updates', async () => {
   try {
+    setupAutoUpdater();
     setAutoUpdaterState('checking', { error: null });
     const result = await autoUpdater.checkForUpdates();
     return result;

@@ -4,6 +4,42 @@
     <FirstBootLoader />
     <AppLoading />
     <QuickSearchOverlay />
+    <v-dialog v-model="updateNoticeVisible" max-width="480">
+      <v-card rounded="xl" class="pa-2">
+        <v-card-title class="d-flex align-center pt-5 px-5">
+          <v-icon color="primary" size="32" class="mr-3">
+            {{ updateNoticeStatus === 'ready' ? 'mdi-check-decagram' : 'mdi-cloud-download' }}
+          </v-icon>
+          <span>{{ updateNoticeStatus === 'ready' ? 'Atualização pronta' : 'Nova atualização disponível' }}</span>
+        </v-card-title>
+        <v-card-text class="px-5 pb-2">
+          <p class="mb-2">
+            {{ updateNoticeStatus === 'ready'
+              ? 'A atualização foi baixada e já pode ser instalada.'
+              : `A versão ${updateNoticeVersion ? `v${updateNoticeVersion}` : 'mais recente'} do IASDPresenter está disponível.` }}
+          </p>
+          <p class="text-medium-emphasis mb-0">
+            {{ updateNoticeStatus === 'ready'
+              ? 'O programa será reiniciado para concluir a instalação.'
+              : 'Abra os detalhes para baixar e instalar agora.' }}
+          </p>
+        </v-card-text>
+        <v-card-actions class="justify-end px-5 pb-5">
+          <v-btn variant="text" class="text-none" @click="updateNoticeVisible = false">
+            Depois
+          </v-btn>
+          <v-btn
+            color="primary"
+            variant="flat"
+            class="text-none"
+            :prepend-icon="updateNoticeStatus === 'ready' ? 'mdi-restart' : 'mdi-update'"
+            @click="handleUpdateNoticeAction"
+          >
+            {{ updateNoticeStatus === 'ready' ? 'Reiniciar e instalar' : 'Ver atualização' }}
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
     <v-btn
       v-show="false"
       v-shortkey="['ctrl', 'alt', 'd']"
@@ -30,6 +66,10 @@ export default {
   },
   data: () => ({
     removeUpdateListeners: [],
+    startupUpdateCheckTimer: null,
+    updateNoticeVisible: false,
+    updateNoticeStatus: "idle",
+    updateNoticeVersion: "",
   }),
   created() {
     this.$userdata.load();
@@ -43,6 +83,7 @@ export default {
     window.addEventListener("keydown", this.handleGlobalKeydown);
     window.addEventListener("message", this.handleWindowMessage);
     this.setupAutoUpdateListeners();
+    this.requestStartupUpdateCheck();
 
     if (window.electronAPI?.onPresentationShortcut) {
       this.removePresentationShortcutListener = window.electronAPI.onPresentationShortcut(this.handlePresentationShortcut);
@@ -87,6 +128,10 @@ export default {
     }
     this.removeUpdateListeners.forEach(removeListener => removeListener());
     this.removeUpdateListeners = [];
+    if (this.startupUpdateCheckTimer) {
+      clearTimeout(this.startupUpdateCheckTimer);
+      this.startupUpdateCheckTimer = null;
+    }
   },
   methods: {
     setupAutoUpdateListeners() {
@@ -101,7 +146,8 @@ export default {
       };
 
       register("onUpdateAvailable", info => {
-        this.applyAutoUpdateState({ status: "available", ...info }, true);
+        this.applyAutoUpdateState({ status: "available", ...info });
+        this.showUpdateNotice("available", info?.version);
       });
       register("onUpdateNotAvailable", info => {
         this.applyAutoUpdateState({ status: "not-available", ...info });
@@ -117,7 +163,8 @@ export default {
           status: "ready",
           downloadPercent: 100,
           ...info,
-        }, true);
+        });
+        this.showUpdateNotice("ready", info?.version);
       });
       register("onUpdateError", error => {
         this.applyAutoUpdateState({ status: "error", error: error.message });
@@ -125,9 +172,38 @@ export default {
 
       api.getUpdateState?.().then(state => {
         if (!state || state.status === "idle") return;
-        const shouldOpen = ["available", "downloading", "ready"].includes(state.status);
-        this.applyAutoUpdateState(state, shouldOpen);
+        this.applyAutoUpdateState(state);
+        if (["available", "ready"].includes(state.status)) {
+          this.showUpdateNotice(state.status, state.version);
+        }
       }).catch(() => {});
+    },
+    requestStartupUpdateCheck() {
+      const api = window.electronAPI;
+      if (!api?.checkForUpdates || this.$route.path === "/popup") return;
+
+      this.startupUpdateCheckTimer = window.setTimeout(() => {
+        this.startupUpdateCheckTimer = null;
+        this.$appdata.set("modules.update.status", "checking");
+        api.checkForUpdates().catch(error => {
+          this.applyAutoUpdateState({ status: "error", error: error?.message || "Falha ao verificar atualizações." });
+        });
+      }, 1200);
+    },
+    showUpdateNotice(status, version = "") {
+      this.updateNoticeStatus = status;
+      this.updateNoticeVersion = version || this.$appdata.get("modules.update.version") || "";
+      this.updateNoticeVisible = true;
+    },
+    handleUpdateNoticeAction() {
+      this.updateNoticeVisible = false;
+      if (this.updateNoticeStatus === "ready") {
+        window.electronAPI?.quitAndInstall?.();
+        return;
+      }
+      if (this.$modules.check("update")) {
+        this.$modules.open("update");
+      }
     },
     applyAutoUpdateState(state, openUpdate = false) {
       this.$appdata.set("modules.update.status", state.status || "idle");
