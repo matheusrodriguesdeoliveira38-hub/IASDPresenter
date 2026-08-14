@@ -10,6 +10,7 @@ const { spawn } = require('child_process');
 const { autoUpdater } = require('electron-updater');
 const DbExtractor = require('./DbExtractor');
 const { migrateLocalMusicLibrary } = require('./LocalMusicMigration');
+const { readUserData, writeUserData } = require('./UserDataStorage');
 const {
   readRecoverableFile,
   writeRecoverableFile,
@@ -88,6 +89,7 @@ const remoteControlConfigPath = path.join(userDataPath, 'remote-control.json');
 const automationConfigPath = path.join(userDataPath, 'automation-config.json');
 const performanceConfigPath = path.join(userDataPath, 'performance-config.json');
 const firstBootLogPath = path.join(userDataPath, 'first-boot-error.log');
+const userPreferencesPath = path.join(userDataPath, 'user-data.json');
 const supportedDatabaseLanguages = new Set(['pt', 'en', 'es']);
 
 function normalizeDatabaseLanguage(language) {
@@ -1689,6 +1691,20 @@ ipcMain.handle('read-presentation-file', async (event, filePath) => {
 
 ipcMain.handle('set-presentation-shortcuts-enabled', async (event, enabled) => {
   return setPresentationShortcutsEnabled(enabled === true);
+});
+
+ipcMain.on('get-user-data', (event) => {
+  event.returnValue = readUserData(userPreferencesPath);
+});
+
+ipcMain.handle('save-user-data', async (event, data) => {
+  try {
+    writeUserData(userPreferencesPath, data);
+    return { ok: true };
+  } catch (error) {
+    console.error('Erro ao salvar dados do usuario:', error);
+    return { ok: false, error: error.message };
+  }
 });
 
 ipcMain.handle('clear-all-data', async () => {

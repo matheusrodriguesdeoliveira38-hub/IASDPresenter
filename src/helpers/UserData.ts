@@ -10,16 +10,32 @@ const helper: Record<string, any> = {
           IPC.send('save_data', JSON.stringify(store.state.data));
       }*/
 
-    //Salvar no Storage
-    $storage.set("user_data", $appdata.get("user_data"));
+    const data = JSON.parse(JSON.stringify($appdata.get("user_data")));
+
+    // Mantem o storage web para o navegador e grava um arquivo estavel no Electron.
+    $storage.set("user_data", data);
+    if (window.electronAPI?.saveUserData) {
+      window.electronAPI.saveUserData(data).catch((error) => {
+        console.error("Erro ao salvar dados do usuario:", error);
+      });
+    }
   },
   load() {
     $dev.write("carregando dados");
-    const data = $appdata.flatten($storage.get("user_data"));
+    const fileData = window.electronAPI?.getUserData?.();
+    const savedData = fileData || $storage.get("user_data") || {};
+    const data = $appdata.flatten(savedData);
 
     Object.keys(data).map((item) => {
       $appdata.set(`user_data.${item}`, data[item]);
     });
+
+    // Migra automaticamente os dados existentes para o arquivo persistente.
+    if (!fileData && Object.keys(data).length > 0 && window.electronAPI?.saveUserData) {
+      window.electronAPI.saveUserData(savedData).catch((error) => {
+        console.error("Erro ao migrar dados do usuario:", error);
+      });
+    }
   },
 
   set(param, value) {
