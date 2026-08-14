@@ -87,22 +87,33 @@ contextBridge.exposeInMainWorld('electronAPI', {
   savePerformanceConfig: (config) => ipcRenderer.invoke('save-performance-config', config),
   
   // Auto-Update
+  getUpdateState: () => ipcRenderer.invoke('get-update-state'),
   checkForUpdates: () => ipcRenderer.invoke('check-for-updates'),
   downloadUpdate: () => ipcRenderer.invoke('download-update'),
   quitAndInstall: () => ipcRenderer.invoke('quit-and-install'),
   onUpdateAvailable: (callback) => {
-    ipcRenderer.on('update-available', (_event, info) => callback(info));
+    const listener = (_event, info) => callback(info);
+    ipcRenderer.on('update-available', listener);
+    return () => ipcRenderer.removeListener('update-available', listener);
   },
   onUpdateNotAvailable: (callback) => {
-    ipcRenderer.on('update-not-available', (_event, info) => callback(info));
+    const listener = (_event, info) => callback(info);
+    ipcRenderer.on('update-not-available', listener);
+    return () => ipcRenderer.removeListener('update-not-available', listener);
   },
   onUpdateDownloadProgress: (callback) => {
-    ipcRenderer.on('update-download-progress', (_event, progress) => callback(progress));
+    const listener = (_event, progress) => callback(progress);
+    ipcRenderer.on('update-download-progress', listener);
+    return () => ipcRenderer.removeListener('update-download-progress', listener);
   },
   onUpdateDownloaded: (callback) => {
-    ipcRenderer.on('update-downloaded', (_event, info) => callback(info));
+    const listener = (_event, info) => callback(info);
+    ipcRenderer.on('update-downloaded', listener);
+    return () => ipcRenderer.removeListener('update-downloaded', listener);
   },
   onUpdateError: (callback) => {
-    ipcRenderer.on('update-error', (_event, error) => callback(error));
+    const listener = (_event, error) => callback(error);
+    ipcRenderer.on('update-error', listener);
+    return () => ipcRenderer.removeListener('update-error', listener);
   },
 });

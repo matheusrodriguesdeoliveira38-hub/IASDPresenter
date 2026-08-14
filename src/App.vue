@@ -28,6 +28,9 @@ export default {
     AppTitlebar,
     QuickSearchOverlay,
   },
+  data: () => ({
+    removeUpdateListeners: [],
+  }),
   created() {
     this.$userdata.load();
     const theme = this.$userdata.get("theme");
@@ -39,6 +42,7 @@ export default {
   mounted() {
     window.addEventListener("keydown", this.handleGlobalKeydown);
     window.addEventListener("message", this.handleWindowMessage);
+    this.setupAutoUpdateListeners();
 
     if (window.electronAPI?.onPresentationShortcut) {
       this.removePresentationShortcutListener = window.electronAPI.onPresentationShortcut(this.handlePresentationShortcut);
@@ -81,8 +85,68 @@ export default {
     if (this.removePresentationShortcutListener) {
       this.removePresentationShortcutListener();
     }
+    this.removeUpdateListeners.forEach(removeListener => removeListener());
+    this.removeUpdateListeners = [];
   },
   methods: {
+    setupAutoUpdateListeners() {
+      const api = window.electronAPI;
+      if (!api || this.$route.path === "/popup") return;
+
+      const register = (methodName, callback) => {
+        const removeListener = api[methodName]?.(callback);
+        if (typeof removeListener === "function") {
+          this.removeUpdateListeners.push(removeListener);
+        }
+      };
+
+      register("onUpdateAvailable", info => {
+        this.applyAutoUpdateState({ status: "available", ...info }, true);
+      });
+      register("onUpdateNotAvailable", info => {
+        this.applyAutoUpdateState({ status: "not-available", ...info });
+      });
+      register("onUpdateDownloadProgress", progress => {
+        this.applyAutoUpdateState({
+          status: "downloading",
+          downloadPercent: progress.percent,
+        });
+      });
+      register("onUpdateDownloaded", info => {
+        this.applyAutoUpdateState({
+          status: "ready",
+          downloadPercent: 100,
+          ...info,
+        }, true);
+      });
+      register("onUpdateError", error => {
+        this.applyAutoUpdateState({ status: "error", error: error.message });
+      });
+
+      api.getUpdateState?.().then(state => {
+        if (!state || state.status === "idle") return;
+        const shouldOpen = ["available", "downloading", "ready"].includes(state.status);
+        this.applyAutoUpdateState(state, shouldOpen);
+      }).catch(() => {});
+    },
+    applyAutoUpdateState(state, openUpdate = false) {
+      this.$appdata.set("modules.update.status", state.status || "idle");
+      if (state.version !== undefined) {
+        this.$appdata.set("modules.update.version", state.version || "");
+      }
+      if (state.releaseNotes !== undefined) {
+        this.$appdata.set("modules.update.releaseNotes", state.releaseNotes || "");
+      }
+      if (state.downloadPercent !== undefined) {
+        this.$appdata.set("modules.update.downloadPercent", Math.round(state.downloadPercent || 0));
+      }
+      if (state.error !== undefined) {
+        this.$appdata.set("modules.update.error", state.error || "");
+      }
+      if (openUpdate && this.$modules.check("update")) {
+        this.$modules.open("update");
+      }
+    },
     handleKeydown() {
       console.log("click ");
       this.$dev.toogle();
