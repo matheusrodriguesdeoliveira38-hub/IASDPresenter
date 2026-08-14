@@ -73,6 +73,10 @@ export default {
   }),
   created() {
     this.$userdata.load();
+    // O player interno agora é o modo oficial e deve iniciar habilitado.
+    if (this.$userdata.get("modules.config.media_use_internal_player") !== true) {
+      this.$userdata.set("modules.config.media_use_internal_player", true);
+    }
     const theme = this.$userdata.get("theme");
     if (theme !== "") {
       this.$vuetify.theme.global.name = theme;

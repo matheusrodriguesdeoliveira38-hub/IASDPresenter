@@ -11,6 +11,7 @@ const { autoUpdater } = require('electron-updater');
 const DbExtractor = require('./DbExtractor');
 const { migrateLocalMusicLibrary } = require('./LocalMusicMigration');
 const { readUserData, writeUserData } = require('./UserDataStorage');
+const { normalizeSmartSearchText, smartTokenScore } = require('./SmartSearch');
 const {
   readRecoverableFile,
   writeRecoverableFile,
@@ -587,13 +588,7 @@ async function extractDatabaseFromPath(dbPath, language = 'pt', sourceLanguage =
 }
 
 function cleanRemoteSearchText(value) {
-  return String(value || '')
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .toLowerCase()
-    .replace(/[^a-z0-9\s]/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
+  return normalizeSmartSearchText(value);
 }
 
 function normalizeRemoteSong(item, source, sourceLabel) {
@@ -641,7 +636,6 @@ function getRemoteSearchLibrary() {
 function searchRemoteSongs(query, limit = 30) {
   const cleanQuery = cleanRemoteSearchText(query);
   const numericQuery = /^\d+$/.test(cleanQuery) ? Number(cleanQuery) : null;
-  const terms = cleanQuery.split(' ').filter(Boolean);
 
   if (!cleanQuery) return [];
 
@@ -649,19 +643,24 @@ function searchRemoteSongs(query, limit = 30) {
     .map((song) => {
       const track = Number(song.track);
       const name = cleanRemoteSearchText(song.name);
+      const metadata = cleanRemoteSearchText(`${song.album_name || ''} ${song.albums_names || ''} ${song.source_label || ''}`);
       const isHymnal = song.source === 'hymnal' || song.source === 'hymnal_1996';
       let score = 0;
+      let match_hint = '';
 
       if (numericQuery !== null) {
-        if (isHymnal && track === numericQuery) score += 100;
+        if (isHymnal && track === numericQuery) score = 120;
+        else if (String(song.track || '').startsWith(cleanQuery)) score = 55;
       } else {
-        if (name === cleanQuery) score += 80;
-        if (name.startsWith(cleanQuery)) score += 50;
-        if (name.includes(cleanQuery)) score += 30;
-        if (terms.length && terms.every(term => name.includes(term))) score += 20;
+        const nameScore = smartTokenScore(cleanQuery, name);
+        const metadataScore = Math.round(smartTokenScore(cleanQuery, metadata) * 0.65);
+        score = Math.max(nameScore, metadataScore);
+        if (score > 0 && !name.includes(cleanQuery) && nameScore < 82) {
+          match_hint = 'Resultado aproximado';
+        }
       }
 
-      return { ...song, score };
+      return { ...song, score, match_hint };
     })
     .filter(song => song.score > 0)
     .sort((a, b) => b.score - a.score || String(a.name).localeCompare(String(b.name)))
@@ -735,6 +734,22 @@ function findRemoteBibleBook(input, books) {
             : compactInput.slice(name.length).trim(),
         };
       }
+    }
+  }
+
+  // Aceita pequenos erros no nome do livro, inclusive quando seguido da referencia.
+  const fuzzyReference = normalizedInput.match(/^(.*?)(\d+(?:\s*[: ]\s*.*)?)$/);
+  const fuzzyBookText = (fuzzyReference?.[1] || normalizedInput).trim();
+  const fuzzyRest = fuzzyReference?.[2]?.trim() || '';
+  if (fuzzyBookText.length >= 3) {
+    const candidates = bookEntries
+      .map((entry) => ({
+        entry,
+        score: Math.max(...entry.names.map(name => smartTokenScore(fuzzyBookText, name))),
+      }))
+      .sort((a, b) => b.score - a.score);
+    if (candidates[0]?.score >= 68) {
+      return { book: candidates[0].entry.book, rest: fuzzyRest, fuzzy: true };
     }
   }
 
@@ -888,10 +903,10 @@ function searchRemoteBible(query, locale = 'pt') {
       .map((book) => {
         const normalizedName = normalizeRemoteBibleText(book.name);
         const normalizedAbbreviation = normalizeRemoteBibleText(book.abbreviation);
-        let score = 0;
-        if (normalizedName === normalizedQuery || normalizedAbbreviation === normalizedQuery) score += 100;
-        if (normalizedName.startsWith(normalizedQuery) || normalizedAbbreviation.startsWith(normalizedQuery)) score += 60;
-        if (normalizedName.includes(normalizedQuery) || normalizedAbbreviation.includes(normalizedQuery)) score += 25;
+        const score = Math.max(
+          smartTokenScore(normalizedQuery, normalizedName),
+          smartTokenScore(normalizedQuery, normalizedAbbreviation),
+        );
         return { type: 'book', book, score };
       })
       .filter(item => item.score > 0)
@@ -911,18 +926,30 @@ function searchRemoteBible(query, locale = 'pt') {
       chapter,
       version,
       results: parsed.chapter
-        ? Object.entries(getRemoteBibleChapter(version.id_bible_version, targetBook.id_bible_book, chapter)).map(([num, text]) => ({
-          type: 'verse',
-          book: targetBook,
-          chapter,
-          verseNumbers: [Number(num)],
-          text,
-          version,
-        }))
+        ? Object.entries(getRemoteBibleChapter(version.id_bible_version, targetBook.id_bible_book, chapter)).map(([num, text]) => {
+          const verseNumber = Number(num);
+          return {
+            type: 'verse',
+            book: targetBook,
+            chapter,
+            verseNumbers: [verseNumber],
+            text,
+            version,
+            reference: `${targetBook.name} ${chapter}:${verseNumber}`,
+            payload: buildRemoteBiblePayload({
+              versionId: version.id_bible_version,
+              bookId: targetBook.id_bible_book,
+              chapter,
+              verseNumbers: [verseNumber],
+              locale,
+            }),
+          };
+        })
         : Array.from({ length: Number(targetBook.chapters || 1) }, (_, index) => ({
           type: 'chapter',
           book: targetBook,
           chapter: index + 1,
+          reference: `${targetBook.name} ${index + 1}`,
         })),
     };
   }
@@ -1073,35 +1100,73 @@ function getRemoteControlHtml() {
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-  <meta name="theme-color" content="#081526">
+  <meta name="theme-color" content="#f4f7fb">
   <title>Controle IASDPresenter</title>
   <style>
     :root{font-family:Inter,system-ui,-apple-system,sans-serif;color:#f8fafc;background:#06101d;color-scheme:dark;--blue:#0097d7;--card:#102033;--muted:#91a4ba;--line:#22364c;--danger:#ef4444;--ok:#22c55e;--warn:#f6c32a}*{box-sizing:border-box}body{margin:0;min-height:100vh;background:radial-gradient(circle at top,#12304a 0,#081526 38%,#06101d 100%)}button,input,select{font:inherit}.app{width:min(720px,100%);margin:auto;padding:calc(14px + env(safe-area-inset-top)) 14px calc(88px + env(safe-area-inset-bottom))}.top{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px}.brand{display:flex;align-items:center;gap:10px;font-weight:850}.brand img{width:34px;height:34px}.status{display:flex;align-items:center;gap:7px;color:var(--muted);font-size:12px}.dot{width:9px;height:9px;border-radius:50%;background:var(--danger);box-shadow:0 0 0 4px rgba(239,68,68,.12)}.online .dot{background:var(--ok);box-shadow:0 0 0 4px rgba(34,197,94,.12)}.role{border:1px solid var(--line);border-radius:10px;background:#0b1929;color:#fff;padding:8px}.card{background:linear-gradient(145deg,rgba(18,39,62,.96),rgba(11,27,44,.96));border:1px solid var(--line);border-radius:20px;padding:18px;box-shadow:0 18px 50px rgba(0,0,0,.2)}.onair{color:#69d99a;font-size:11px;font-weight:900;letter-spacing:.13em}.title{font-size:22px;font-weight:850;margin:7px 0 4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.slide{color:#d8e5f2;line-height:1.4;min-height:42px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}.next{margin-top:14px;padding-top:13px;border-top:1px solid var(--line);color:var(--muted);font-size:13px}.next strong{display:block;color:#f8fafc;margin-top:4px}.bar{height:5px;background:#26394d;border-radius:99px;margin-top:15px;overflow:hidden}.bar i{display:block;height:100%;width:0;background:var(--blue);transition:width .3s}.controls{display:grid;grid-template-columns:1fr 1.25fr 1fr;gap:12px;margin:15px 0}.btn{border:1px solid var(--line);background:var(--card);color:#fff;border-radius:16px;padding:14px 10px;font-weight:800;min-height:54px}.btn:active{transform:scale(.97)}.btn.primary{background:var(--blue);border-color:var(--blue);font-size:20px}.emergency{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:15px}.emergency .btn{font-size:11px;padding:10px 5px;min-height:48px}.emergency .danger{color:#fecaca;border-color:#7f1d1d}.emergency .active{background:var(--warn);color:#111827;border-color:var(--warn)}.tabs{position:fixed;z-index:8;bottom:0;left:50%;transform:translateX(-50%);width:min(720px,100%);display:grid;grid-template-columns:repeat(4,1fr);background:rgba(5,15,27,.96);backdrop-filter:blur(16px);border-top:1px solid var(--line);padding:8px 8px calc(8px + env(safe-area-inset-bottom))}.tab{border:0;background:transparent;color:var(--muted);padding:9px 3px;font-size:11px;font-weight:750}.tab.active{color:#5cc8f6}.view{display:none}.view.active{display:block}.section{margin-top:12px}.searchbox{display:flex;gap:8px}.searchbox input,.login input{width:100%;border:1px solid var(--line);border-radius:14px;background:#0a1929;color:white;padding:14px}.results{display:grid;gap:8px;margin-top:12px}.result{width:100%;text-align:left;border:1px solid var(--line);background:var(--card);color:#fff;border-radius:14px;padding:13px}.result small{display:block;color:var(--muted);margin-top:4px}.empty{color:var(--muted);text-align:center;padding:26px}.toast{position:fixed;z-index:20;left:50%;bottom:90px;transform:translateX(-50%);background:#17283b;border:1px solid var(--line);padding:10px 16px;border-radius:99px;font-size:13px;opacity:0;pointer-events:none;transition:.2s}.toast.show{opacity:1}.login{position:fixed;z-index:30;inset:0;background:#071321;display:none;place-items:center;padding:24px}.login.show{display:grid}.login .card{width:min(420px,100%)}.login h1{margin-top:0}.login label{display:block;color:var(--muted);font-size:13px;margin:12px 0 6px}.login .btn{width:100%;margin-top:14px}.meta{display:flex;justify-content:space-between;color:var(--muted);font-size:12px;margin-top:10px}@media(max-width:420px){.app{padding-left:10px;padding-right:10px}.emergency{grid-template-columns:repeat(3,1fr)}.role{max-width:125px}.title{font-size:19px}}
   </style>
+  <style>
+    :root{--bg:#050a14;--surface:#0c1525;--surface-2:#111e31;--surface-3:#17263a;--text:#f6f8fc;--muted:#8fa1b8;--line:rgba(148,163,184,.16);--blue:#18a7e0;--blue-2:#087fb4;--violet:#7567ff;--danger:#ff5d68;--ok:#36d399;--warn:#ffc857;--shadow:0 22px 70px rgba(0,0,0,.34)}
+    *{-webkit-tap-highlight-color:transparent}
+    html{background:var(--bg)}
+    body{min-height:100dvh;background:radial-gradient(circle at 15% -10%,rgba(24,167,224,.18),transparent 34%),radial-gradient(circle at 100% 20%,rgba(117,103,255,.12),transparent 30%),linear-gradient(180deg,#08111f 0%,var(--bg) 52%);color:var(--text);overflow-x:hidden}
+    body:before{content:"";position:fixed;inset:0;pointer-events:none;opacity:.15;background-image:linear-gradient(rgba(255,255,255,.018) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.018) 1px,transparent 1px);background-size:30px 30px;mask-image:linear-gradient(to bottom,#000,transparent 70%)}
+    button,input,select{font:inherit}button{cursor:pointer}button:focus-visible,input:focus-visible,select:focus-visible{outline:3px solid rgba(24,167,224,.3);outline-offset:2px}
+    .app{position:relative;width:min(760px,100%);padding:0 18px calc(108px + env(safe-area-inset-bottom))}
+    .top{position:sticky;z-index:10;top:0;margin:0 -18px 18px;padding:calc(13px + env(safe-area-inset-top)) 18px 13px;background:linear-gradient(180deg,rgba(5,10,20,.97) 65%,rgba(5,10,20,0));backdrop-filter:blur(18px);align-items:center}
+    .brand{gap:11px;font-size:15px;letter-spacing:-.01em}.brand-mark{display:grid;width:40px;height:40px;place-items:center;border:1px solid rgba(255,255,255,.12);border-radius:13px;background:linear-gradient(145deg,rgba(24,167,224,.25),rgba(117,103,255,.18));box-shadow:inset 0 1px rgba(255,255,255,.12)}.brand img{width:28px;height:28px}.brand-copy small{display:block;color:var(--muted);font-size:10px;font-weight:650;letter-spacing:.08em;text-transform:uppercase;margin-top:2px}
+    .header-actions{display:flex;align-items:center;gap:8px}.status{gap:8px}.status-pill{min-height:38px;padding:0 11px;border:1px solid var(--line);border-radius:13px;background:rgba(12,21,37,.74);font-size:0}.status-pill #connectionText{display:none}.dot{width:8px;height:8px}.role{min-height:40px;border-color:var(--line);border-radius:13px;background:rgba(12,21,37,.9);padding:0 32px 0 12px;font-size:12px;font-weight:750}
+    .page-heading{display:flex;align-items:end;justify-content:space-between;gap:16px;margin:4px 2px 14px}.eyebrow{color:#65c9f2;font-size:10px;font-weight:850;letter-spacing:.15em;text-transform:uppercase}.page-heading h1{font-size:25px;line-height:1.1;letter-spacing:-.04em;margin:5px 0 0}.page-heading p{max-width:300px;color:var(--muted);font-size:12px;line-height:1.5;margin:0;text-align:right}
+    .card{border-color:var(--line);border-radius:24px;background:linear-gradient(145deg,rgba(18,32,51,.96),rgba(9,17,30,.98));box-shadow:var(--shadow)}
+    .now-card{position:relative;overflow:hidden;padding:22px}.now-card:before{content:"";position:absolute;width:220px;height:220px;right:-100px;top:-120px;border-radius:50%;background:rgba(24,167,224,.12);filter:blur(2px)}.now-top{position:relative;display:flex;justify-content:space-between;align-items:center}.onair{display:inline-flex;align-items:center;gap:7px;color:var(--muted);font-size:10px}.onair:before{content:"";width:7px;height:7px;border-radius:50%;background:currentColor;box-shadow:0 0 0 5px rgba(143,161,184,.08)}.onair.live{color:#69e4b4}.onair.live:before{animation:pulse 1.7s infinite}.live-chip{padding:6px 9px;border:1px solid var(--line);border-radius:999px;color:var(--muted);font-size:10px;font-weight:750;background:rgba(255,255,255,.03)}
+    .title{position:relative;margin:20px 0 7px;font-size:clamp(23px,6vw,32px);letter-spacing:-.04em}.slide{position:relative;min-height:54px;color:#c9d5e5;font-size:15px;line-height:1.6;-webkit-line-clamp:3}.next{position:relative;margin-top:20px;padding:14px 15px;border:1px solid var(--line);border-radius:16px;background:rgba(255,255,255,.025);font-size:9px;font-weight:800;letter-spacing:.14em}.next strong{font-size:13px;line-height:1.45;letter-spacing:0}.bar{position:relative;height:6px;margin-top:20px;background:rgba(148,163,184,.13)}.bar i{background:linear-gradient(90deg,var(--blue),#63d5ff);box-shadow:0 0 16px rgba(24,167,224,.45)}.meta{position:relative;font-size:11px;margin-top:11px}
+    .controls{grid-template-columns:1fr 1.12fr 1fr;gap:10px;margin:14px 0 22px}.btn{position:relative;min-height:56px;border-color:var(--line);border-radius:17px;background:linear-gradient(145deg,rgba(20,34,53,.94),rgba(12,22,38,.96));font-size:13px;transition:transform .15s ease,border-color .2s ease,background .2s ease,box-shadow .2s ease}.btn:hover{border-color:rgba(24,167,224,.38);background:var(--surface-3)}.btn:active{transform:scale(.965)}.btn.primary{border-color:rgba(59,195,250,.35);background:linear-gradient(145deg,#1daee7,#087fb4);box-shadow:0 14px 32px rgba(8,127,180,.28);font-size:24px}.btn .button-icon{display:block;font-size:18px;margin-bottom:3px}.transport .btn:not(.primary){color:#d6deea}
+    .operator-panel{padding:16px;border:1px solid var(--line);border-radius:22px;background:rgba(9,17,30,.68)}.section-label{display:flex;align-items:center;justify-content:space-between;margin:0 2px 12px;color:#dce6f4;font-size:12px;font-weight:800}.section-label small{color:var(--muted);font-size:10px;font-weight:600}.emergency{grid-template-columns:repeat(3,1fr);gap:8px;margin:0}.emergency .btn{min-height:58px;padding:9px 6px;color:#b9c7d9;font-size:11px}.emergency .btn.active{border-color:rgba(255,200,87,.5);background:rgba(255,200,87,.14);color:#ffe09a}.emergency .danger{border-color:rgba(255,93,104,.24);color:#ffabb1;background:rgba(255,93,104,.07)}
+    .view{animation:viewIn .23s ease}.view.active{display:block}.section{margin-top:0}.search-hero,.liturgy-hero{padding:19px;margin-bottom:12px}.search-hero h1,.liturgy-hero h1{font-size:22px;letter-spacing:-.03em;margin:3px 0 5px}.search-hero p,.liturgy-hero p{color:var(--muted);font-size:12px;margin:0}.searchbox{position:relative;gap:9px;margin-top:16px}.searchbox input,.login input{min-height:54px;border-color:var(--line);border-radius:16px;background:rgba(5,11,21,.76);padding:0 16px;color:var(--text);transition:border-color .2s,box-shadow .2s}.searchbox input:focus,.login input:focus{border-color:rgba(24,167,224,.65);box-shadow:0 0 0 4px rgba(24,167,224,.1)}.searchbox .btn{min-width:92px;background:linear-gradient(145deg,#1daee7,#087fb4)}
+    .results{gap:9px;margin-top:10px}.result{position:relative;min-height:66px;border-color:var(--line);border-radius:18px;background:linear-gradient(145deg,rgba(17,30,49,.94),rgba(9,17,30,.96));padding:14px 44px 14px 16px;transition:transform .15s,border-color .2s}.result:after{content:"›";position:absolute;right:17px;top:50%;transform:translateY(-50%);color:#59c8f3;font-size:25px}.result:hover{border-color:rgba(24,167,224,.4);transform:translateY(-1px)}.result:disabled{opacity:.5;cursor:not-allowed}.result:disabled:after{display:none}.result strong{display:block;font-size:14px}.result small{color:var(--muted);font-size:11px;line-height:1.45;margin-top:5px}.empty{border:1px dashed var(--line);border-radius:18px;background:rgba(12,21,37,.4);padding:34px 20px}
+    .tabs{z-index:15;bottom:10px;width:min(724px,calc(100% - 20px));grid-template-columns:repeat(4,1fr);padding:7px 8px calc(7px + env(safe-area-inset-bottom));border:1px solid rgba(148,163,184,.16);border-radius:22px;background:rgba(8,15,27,.9);box-shadow:0 20px 55px rgba(0,0,0,.45);backdrop-filter:blur(24px)}.tab{position:relative;display:flex;min-height:56px;flex-direction:column;align-items:center;justify-content:center;gap:3px;border-radius:15px;font-size:10px;transition:.2s}.tab-icon{font-size:18px;line-height:1}.tab.active{color:#eaf8ff;background:linear-gradient(145deg,rgba(24,167,224,.2),rgba(117,103,255,.12));box-shadow:inset 0 0 0 1px rgba(24,167,224,.13)}
+    .toast{z-index:40;bottom:102px;max-width:calc(100% - 28px);border-color:rgba(255,255,255,.12);background:rgba(20,35,54,.96);box-shadow:0 15px 40px rgba(0,0,0,.4);padding:12px 18px}.login{background:radial-gradient(circle at 50% 0,rgba(24,167,224,.2),transparent 34%),rgba(5,10,20,.98);backdrop-filter:blur(18px)}.login .card{padding:26px}.login-badge{display:grid;width:58px;height:58px;place-items:center;margin-bottom:18px;border:1px solid rgba(255,255,255,.12);border-radius:19px;background:linear-gradient(145deg,rgba(24,167,224,.25),rgba(117,103,255,.22));font-size:25px}.login h1{font-size:27px;letter-spacing:-.04em;margin-bottom:7px}.login label{margin-top:17px}.login .role{min-height:52px}.login .btn{min-height:54px}
+    @keyframes pulse{0%,100%{box-shadow:0 0 0 4px rgba(54,211,153,.1)}50%{box-shadow:0 0 0 9px rgba(54,211,153,0)}}@keyframes viewIn{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:none}}
+    @media(min-width:680px){.status-pill{font-size:11px}.status-pill #connectionText{display:inline}.emergency{grid-template-columns:repeat(6,1fr)}.page-heading{margin-top:12px}.now-card{padding:27px}}
+    @media(max-width:480px){.app{padding-left:12px;padding-right:12px}.top{margin-left:-12px;margin-right:-12px;padding-left:12px;padding-right:12px}.brand-copy small{display:none}.page-heading p{display:none}.page-heading h1{font-size:22px}.role{max-width:116px}.now-card{padding:18px}.controls{gap:7px}.controls .btn{padding-left:5px;padding-right:5px}.operator-panel{padding:12px}.emergency{grid-template-columns:repeat(3,1fr)}.tabs{bottom:6px}.searchbox{align-items:stretch;flex-direction:column}.searchbox .btn{width:100%}}
+    @media(prefers-reduced-motion:reduce){*,*:before,*:after{animation:none!important;transition:none!important}}
+  </style>
+  <style>
+    :root{color-scheme:light;--bg:#edf3f8;--surface:#ffffff;--surface-2:#f7f9fc;--surface-3:#eef4f8;--text:#172033;--muted:#68788d;--line:rgba(45,67,91,.13);--blue:#087fb4;--blue-2:#05648f;--violet:#6558e8;--danger:#d83a4b;--ok:#159b69;--warn:#d69a12;--card:#fff;--shadow:0 18px 48px rgba(44,68,94,.12)}
+    html{background:var(--bg)}body{background:radial-gradient(circle at 8% -10%,rgba(49,181,232,.2),transparent 30%),radial-gradient(circle at 100% 15%,rgba(101,88,232,.1),transparent 28%),linear-gradient(180deg,#f8fbfd 0%,var(--bg) 58%);color:var(--text)}body:before{opacity:.35;background-image:linear-gradient(rgba(44,68,94,.035) 1px,transparent 1px),linear-gradient(90deg,rgba(44,68,94,.035) 1px,transparent 1px)}
+    .top{background:linear-gradient(180deg,rgba(248,251,253,.97) 66%,rgba(248,251,253,0))}.brand-mark{border-color:rgba(8,127,180,.12);background:linear-gradient(145deg,rgba(49,181,232,.2),rgba(101,88,232,.1));box-shadow:inset 0 1px rgba(255,255,255,.9)}.status-pill,.role{border-color:var(--line);background:rgba(255,255,255,.88);color:var(--text);box-shadow:0 7px 20px rgba(44,68,94,.07)}
+    .eyebrow{color:#087fac}.page-heading h1,.search-hero h1,.liturgy-hero h1{color:var(--text)}.card{border-color:rgba(45,67,91,.12);background:linear-gradient(145deg,rgba(255,255,255,.98),rgba(247,250,252,.98));box-shadow:var(--shadow)}.now-card:before{background:rgba(49,181,232,.12)}.live-chip{border-color:var(--line);background:#f4f8fb;color:var(--muted)}.onair{color:#718096}.onair.live{color:var(--ok)}
+    .projection-preview{position:relative;margin:18px auto 16px;aspect-ratio:16/9;max-width:520px;overflow:hidden;border:5px solid #dfe7ee;border-radius:17px;background:#111827;box-shadow:0 16px 35px rgba(23,32,51,.2),inset 0 0 0 1px rgba(255,255,255,.08)}.projection-preview:after{content:"PRÉVIA";position:absolute;right:9px;top:8px;padding:4px 7px;border:1px solid rgba(255,255,255,.14);border-radius:999px;background:rgba(3,7,18,.5);color:rgba(255,255,255,.7);font-size:8px;font-weight:850;letter-spacing:.12em}.preview-stage{position:absolute;inset:0;display:grid;place-items:center;padding:12% 8%;text-align:center;background:radial-gradient(circle at 50% 10%,#243b59,#080d17 72%);transition:.2s}.preview-copy{max-width:100%;color:#fff;text-shadow:0 2px 12px rgba(0,0,0,.55)}.preview-title{margin-bottom:8px;color:#71d2f5;font-size:clamp(8px,2.3vw,13px);font-weight:800;letter-spacing:.06em;text-transform:uppercase}.preview-text{display:-webkit-box;overflow:hidden;font-size:clamp(12px,4vw,24px);font-weight:800;line-height:1.25;-webkit-box-orient:vertical;-webkit-line-clamp:3}.preview-logo{display:none;width:23%;max-width:80px;filter:drop-shadow(0 8px 18px rgba(0,0,0,.35))}.projection-preview.blackout .preview-stage{background:#000}.projection-preview.blackout .preview-copy,.projection-preview.blackout .preview-logo{display:none}.projection-preview.logo .preview-copy{display:none}.projection-preview.logo .preview-logo{display:block}.projection-preview.freeze:before{content:"CONGELADO";position:absolute;z-index:2;left:9px;top:8px;padding:4px 7px;border-radius:999px;background:#fff;color:#314158;font-size:8px;font-weight:900;letter-spacing:.1em}
+    .title{color:var(--text)}.slide{color:#53657b}.next{border-color:var(--line);background:#f6f9fb;color:#77879a}.next strong{color:#26364b}.bar{background:#dfe7ee}.meta{color:#718096}
+    .btn{border-color:var(--line);background:linear-gradient(145deg,#fff,#f3f7fa);color:#2e4056;box-shadow:0 8px 22px rgba(44,68,94,.08)}.btn:hover{border-color:rgba(8,127,180,.3);background:#fff}.btn.primary,.searchbox .btn{border-color:#0b8fc6;background:linear-gradient(145deg,#27b8ee,#087fb4);color:#fff;box-shadow:0 13px 28px rgba(8,127,180,.23)}.transport .btn:not(.primary){color:#314158}.operator-panel{border-color:var(--line);background:rgba(255,255,255,.64);box-shadow:0 12px 35px rgba(44,68,94,.06)}.section-label{color:#304258}.emergency .btn{color:#53657b}.emergency .btn.active{border-color:rgba(214,154,18,.35);background:#fff8e5;color:#9a6a00}.emergency .danger{border-color:rgba(216,58,75,.2);background:#fff5f6;color:#c72f40}
+    .searchbox input,.login input{border-color:var(--line);background:#f7fafc;color:var(--text)}.searchbox input:focus,.login input:focus{background:#fff}.result{border-color:var(--line);background:linear-gradient(145deg,#fff,#f6f9fb);color:var(--text);box-shadow:0 8px 24px rgba(44,68,94,.06)}.result small{color:var(--muted)}.empty{background:rgba(255,255,255,.55)}
+    .smart-row{display:flex;align-items:center;gap:7px;overflow-x:auto;margin-top:12px;padding-bottom:2px;scrollbar-width:none}.smart-row::-webkit-scrollbar{display:none}.smart-chip{flex:0 0 auto;min-height:34px;border:1px solid var(--line);border-radius:999px;background:#fff;color:#52647a;padding:0 12px;font-size:11px;font-weight:700}.smart-chip:hover{border-color:rgba(8,127,180,.35);color:var(--blue)}.search-feedback{min-height:18px;margin:10px 3px 0;color:var(--muted);font-size:11px}.match-hint{display:inline-block;margin-left:6px;border-radius:999px;background:#e9f7fc;color:#087fac;padding:2px 6px;font-size:9px;font-weight:750}
+    .tabs{border-color:rgba(45,67,91,.12);background:rgba(255,255,255,.9);box-shadow:0 18px 50px rgba(44,68,94,.18)}.tab{color:#75859a}.tab.active{color:#076e9c;background:linear-gradient(145deg,rgba(49,181,232,.16),rgba(101,88,232,.08));box-shadow:inset 0 0 0 1px rgba(8,127,180,.1)}.toast{border-color:rgba(45,67,91,.13);background:#fff;color:var(--text);box-shadow:0 15px 40px rgba(44,68,94,.2)}.login{background:radial-gradient(circle at 50% 0,rgba(49,181,232,.22),transparent 35%),rgba(239,245,249,.98)}.login-badge{border-color:rgba(8,127,180,.13);background:linear-gradient(145deg,rgba(49,181,232,.22),rgba(101,88,232,.12))}
+  </style>
 </head>
 <body>
   <main class="app">
-    <header class="top"><div class="brand"><img src="/ico/favicon.png" alt=""><span>IASDPresenter</span></div><div><select id="role" class="role"><option value="operator">Operador</option><option value="presenter">Apresentador</option></select></div></header>
-    <div id="connection" class="status"><span class="dot"></span><span id="connectionText">Conectando...</span></div>
+    <header class="top"><div class="brand"><span class="brand-mark"><img src="/ico/favicon.png" alt=""></span><span class="brand-copy">IASDPresenter<small>Controle remoto</small></span></div><div class="header-actions"><div id="connection" class="status status-pill"><span class="dot"></span><span id="connectionText">Conectando...</span></div><select id="role" class="role" aria-label="Perfil de acesso"><option value="operator">Operador</option><option value="presenter">Apresentador</option></select></div></header>
 
     <section id="home" class="view active">
-      <article class="card section"><div class="onair" id="onair">SEM PROJECAO</div><div class="title" id="currentTitle">Aguardando conteúdo</div><div class="slide" id="currentText">O estado da projeção aparecerá aqui.</div><div class="next">PRÓXIMO<strong id="nextText">—</strong></div><div class="bar"><i id="progress"></i></div><div class="meta"><span id="counter">—</span><span id="time">00:00 / 00:00</span></div></article>
-      <div class="controls"><button class="btn" data-control="prev">◀ Voltar</button><button class="btn primary" id="play" data-control="play_pause">▶</button><button class="btn" data-control="next">Avançar ▶</button></div>
-      <div id="emergency" class="emergency"><button class="btn" data-emergency="blackout">⬛ Tela preta</button><button class="btn" data-emergency="freeze">❄ Congelar</button><button class="btn" data-emergency="logo">◇ Logo</button><button class="btn" data-emergency="clear">✓ Normal</button><button class="btn danger" data-control="close">✕ Encerrar</button><button class="btn" data-control="maximize">⛶ Projetar</button></div>
+      <div class="page-heading"><div><div class="eyebrow">Painel ao vivo</div><h1>Controle da projeção</h1></div><p>Acompanhe o conteúdo e controle a apresentação em tempo real.</p></div>
+      <article class="card now-card"><div class="now-top"><div class="onair" id="onair">SEM PROJEÇÃO</div><span class="live-chip">Sincronizado</span></div><div id="projectionPreview" class="projection-preview"><div class="preview-stage"><img class="preview-logo" src="/ico/favicon.png" alt=""><div class="preview-copy"><div id="previewTitle" class="preview-title">Aguardando projeção</div><div id="previewText" class="preview-text">A prévia aparecerá aqui.</div></div></div></div><div class="title" id="currentTitle">Aguardando conteúdo</div><div class="slide" id="currentText">O estado da projeção aparecerá aqui.</div><div class="next">A SEGUIR<strong id="nextText">—</strong></div><div class="bar"><i id="progress"></i></div><div class="meta"><span id="counter">—</span><span id="time">00:00 / 00:00</span></div></article>
+      <div class="controls transport"><button class="btn" data-control="prev" aria-label="Voltar"><span class="button-icon">←</span>Voltar</button><button class="btn primary" id="play" data-control="play_pause" aria-label="Reproduzir ou pausar"><span id="playIcon">▶</span></button><button class="btn" data-control="next" aria-label="Avançar"><span class="button-icon">→</span>Avançar</button></div>
+      <div id="operatorTools" class="operator-panel"><div class="section-label"><span>Ferramentas do operador</span><small>Comandos rápidos</small></div><div class="emergency"><button class="btn" data-emergency="blackout"><span class="button-icon">⬛</span>Tela preta</button><button class="btn" data-emergency="freeze"><span class="button-icon">❄</span>Congelar</button><button class="btn" data-emergency="logo"><span class="button-icon">◇</span>Logo</button><button class="btn" data-emergency="clear"><span class="button-icon">✓</span>Normal</button><button class="btn danger" data-control="close"><span class="button-icon">×</span>Encerrar</button><button class="btn" data-control="maximize"><span class="button-icon">⛶</span>Projetar</button></div></div>
     </section>
 
-    <section id="music" class="view"><div class="searchbox section"><input id="musicQ" type="search" placeholder="Nome ou número do hino"><button id="musicSearch" class="btn">Buscar</button></div><div id="musicResults" class="results"></div></section>
-    <section id="bible" class="view"><div class="searchbox section"><input id="bibleQ" type="search" placeholder="Ex.: João 3:16"><button id="bibleSearch" class="btn">Buscar</button></div><div id="bibleResults" class="results"></div></section>
-    <section id="liturgy" class="view"><div class="card section"><strong>Liturgia de hoje</strong><div id="liturgyStatus" class="status">Carregando...</div></div><div id="liturgyResults" class="results"></div></section>
+    <section id="music" class="view"><div class="card search-hero"><div class="eyebrow">Biblioteca</div><h1>Encontre uma música</h1><p>Pesquise pelo título ou número do hino. A busca entende acentos e pequenos erros de digitação.</p><div class="searchbox"><input id="musicQ" type="search" inputmode="search" placeholder="Nome ou número do hino" aria-label="Pesquisar música"><button id="musicSearch" class="btn">Buscar</button></div><div class="smart-row" aria-label="Sugestões de músicas"><button class="smart-chip" data-music-query="grandioso">Grandioso</button><button class="smart-chip" data-music-query="96">Hino 96</button><button class="smart-chip" data-music-query="amor">Amor</button></div><div id="musicFeedback" class="search-feedback">Digite ao menos 2 letras para pesquisar.</div></div><div id="musicResults" class="results"></div></section>
+    <section id="bible" class="view"><div class="card search-hero"><div class="eyebrow">Bíblia</div><h1>Abra uma passagem</h1><p>Digite o livro, capítulo ou versículo. A busca também reconhece nomes aproximados.</p><div class="searchbox"><input id="bibleQ" type="search" inputmode="search" placeholder="Ex.: João 3:16" aria-label="Pesquisar passagem"><button id="bibleSearch" class="btn">Buscar</button></div><div class="smart-row" aria-label="Sugestões de passagens"><button class="smart-chip" data-bible-query="João 3:16">João 3:16</button><button class="smart-chip" data-bible-query="Salmo 23">Salmo 23</button><button class="smart-chip" data-bible-query="1 Coríntios 13">1 Coríntios 13</button></div><div id="bibleFeedback" class="search-feedback">Digite um livro ou uma referência bíblica.</div></div><div id="bibleResults" class="results"></div></section>
+    <section id="liturgy" class="view"><div class="card liturgy-hero"><div class="eyebrow">Programação</div><h1>Liturgia de hoje</h1><p id="liturgyStatus">Carregando os itens da programação...</p></div><div id="liturgyResults" class="results"></div></section>
   </main>
-  <nav class="tabs"><button class="tab active" data-view="home">●<br>Controle</button><button class="tab" data-view="music">♫<br>Músicas</button><button class="tab" data-view="bible">▣<br>Bíblia</button><button class="tab" data-view="liturgy">☷<br>Liturgia</button></nav>
+  <nav class="tabs" aria-label="Navegação principal"><button class="tab active" data-view="home" aria-current="page"><span class="tab-icon">⌂</span><span>Controle</span></button><button class="tab" data-view="music"><span class="tab-icon">♫</span><span>Músicas</span></button><button class="tab" data-view="bible"><span class="tab-icon">▣</span><span>Bíblia</span></button><button class="tab" data-view="liturgy"><span class="tab-icon">☷</span><span>Liturgia</span></button></nav>
   <div id="toast" class="toast"></div>
-  <section id="login" class="login"><form id="loginForm" class="card"><h1>Conectar</h1><p style="color:var(--muted)">Use a senha configurada no computador.</p><label>Perfil</label><select id="loginRole" class="role" style="width:100%"><option value="operator">Operador</option><option value="presenter">Apresentador</option></select><label>Senha</label><input id="password" type="password" autocomplete="current-password"><button class="btn primary" type="submit">Entrar</button><div id="loginStatus" class="status"></div></form></section>
+  <section id="login" class="login"><form id="loginForm" class="card"><div class="login-badge">⌁</div><div class="eyebrow">Acesso seguro</div><h1>Conectar ao painel</h1><p style="color:var(--muted);margin-top:0">Use a senha configurada no computador principal.</p><label for="loginRole">Perfil</label><select id="loginRole" class="role" style="width:100%"><option value="operator">Operador</option><option value="presenter">Apresentador</option></select><label for="password">Senha</label><input id="password" type="password" autocomplete="current-password" placeholder="Digite sua senha"><button class="btn primary" type="submit">Entrar no controle</button><div id="loginStatus" class="status"></div></form></section>
 <script>
 (function(){
   var password=sessionStorage.getItem('iasdRemotePassword')||'';
   var role=sessionStorage.getItem('iasdRemoteRole')||new URLSearchParams(location.search).get('role')||'operator';
-  var failures=0,pollTimer=null,currentOverride='none',toastTimer=null;
+  var failures=0,pollTimer=null,currentOverride='none',toastTimer=null,musicSearchTimer=null,bibleSearchTimer=null;
   var roleEl=document.getElementById('role'),loginRole=document.getElementById('loginRole'); roleEl.value=role;loginRole.value=role;
   function headers(json){var h={'X-Remote-Password':password,'X-Remote-Role':role};if(json)h['Content-Type']='application/json';return h}
   function requestId(){return Date.now().toString(36)+Math.random().toString(36).slice(2)}
@@ -1110,18 +1175,18 @@ function getRemoteControlHtml() {
   function setConnected(ok){var el=document.getElementById('connection');el.classList.toggle('online',ok);document.getElementById('connectionText').textContent=ok?'Conectado • atualização automática':'Reconectando...'}
   function text(value){return String(value||'').replace(/<[^>]*>/g,' ').replace(/\\s+/g,' ').trim()}
   function clock(value){var n=Math.max(0,Number(value)||0),m=Math.floor(n/60),s=Math.floor(n%60);return String(m).padStart(2,'0')+':'+String(s).padStart(2,'0')}
-  function renderState(state){failures=0;setConnected(true);var p=state.projection||{},playback=state.playback||{},current=state.current||{},next=state.next||{};currentOverride=p.override||'none';document.getElementById('onair').textContent=p.active?'NO AR • '+String(p.module||'').toUpperCase():'SEM PROJEÇÃO';document.getElementById('currentTitle').textContent=current.title||'Aguardando conteúdo';document.getElementById('currentText').textContent=text(current.text)||'O estado da projeção aparecerá aqui.';document.getElementById('nextText').textContent=text(next.text)||next.title||'—';document.getElementById('progress').style.width=Math.max(0,Math.min(100,Number(playback.progress)||0))+'%';document.getElementById('time').textContent=clock(playback.currentTime)+' / '+clock(playback.duration);document.getElementById('counter').textContent=current.number&&current.total?current.number+' de '+current.total:'—';document.getElementById('play').textContent=playback.paused?'▶':'Ⅱ';document.querySelectorAll('[data-emergency]').forEach(function(btn){var action=btn.dataset.emergency;btn.classList.toggle('active',(action==='clear'&&currentOverride==='none')||action===currentOverride)});document.getElementById('emergency').style.display=role==='operator'?'grid':'none'}
+  function renderState(state){failures=0;setConnected(true);var p=state.projection||{},playback=state.playback||{},current=state.current||{},next=state.next||{},onair=document.getElementById('onair'),play=document.getElementById('play'),preview=document.getElementById('projectionPreview');currentOverride=p.override||'none';onair.textContent=p.active?'NO AR • '+String(p.module||'').toUpperCase():'SEM PROJEÇÃO';onair.classList.toggle('live',Boolean(p.active));preview.classList.toggle('blackout',currentOverride==='blackout');preview.classList.toggle('freeze',currentOverride==='freeze');preview.classList.toggle('logo',currentOverride==='logo');document.getElementById('previewTitle').textContent=p.active?(current.title||String(p.module||'Projeção')):'Sem projeção';document.getElementById('previewText').textContent=p.active?(text(current.text)||'Conteúdo em exibição'):'A prévia aparecerá quando uma projeção for iniciada.';document.getElementById('currentTitle').textContent=current.title||'Aguardando conteúdo';document.getElementById('currentText').textContent=text(current.text)||'O estado da projeção aparecerá aqui.';document.getElementById('nextText').textContent=text(next.text)||next.title||'—';document.getElementById('progress').style.width=Math.max(0,Math.min(100,Number(playback.progress)||0))+'%';document.getElementById('time').textContent=clock(playback.currentTime)+' / '+clock(playback.duration);document.getElementById('counter').textContent=current.number&&current.total?current.number+' de '+current.total:'—';document.getElementById('playIcon').textContent=playback.paused?'▶':'Ⅱ';play.setAttribute('aria-label',playback.paused?'Reproduzir':'Pausar');document.querySelectorAll('[data-emergency]').forEach(function(btn){var action=btn.dataset.emergency;btn.classList.toggle('active',(action==='clear'&&currentOverride==='none')||action===currentOverride)});document.getElementById('operatorTools').style.display=role==='operator'?'block':'none'}
   async function poll(){try{var data=await api('/api/state');renderState(data.state||{})}catch(e){failures++;if(failures>1)setConnected(false)}finally{pollTimer=setTimeout(poll,1500)}}
-  async function command(endpoint,body){body.requestId=requestId();try{await api(endpoint,{method:'POST',body:JSON.stringify(body)});toast('Comando enviado');setTimeout(poll,120)}catch(e){toast(e.message)}}
+  async function command(endpoint,body){body.requestId=requestId();if(navigator.vibrate)navigator.vibrate(18);try{await api(endpoint,{method:'POST',body:JSON.stringify(body)});toast('Comando enviado');clearTimeout(pollTimer);pollTimer=setTimeout(poll,120)}catch(e){toast(e.message)}}
   document.querySelectorAll('[data-control]').forEach(function(btn){btn.addEventListener('click',function(){command('/api/control',{action:btn.dataset.control})})});
   document.querySelectorAll('[data-emergency]').forEach(function(btn){btn.addEventListener('click',function(){command('/api/emergency',{action:btn.dataset.emergency})})});
-  document.querySelectorAll('[data-view]').forEach(function(btn){btn.addEventListener('click',function(){document.querySelectorAll('.view').forEach(function(v){v.classList.remove('active')});document.querySelectorAll('.tab').forEach(function(v){v.classList.remove('active')});document.getElementById(btn.dataset.view).classList.add('active');btn.classList.add('active');if(btn.dataset.view==='liturgy')loadLiturgy()})});
-  roleEl.addEventListener('change',function(){role=roleEl.value;loginRole.value=role;sessionStorage.setItem('iasdRemoteRole',role);renderState({projection:{override:currentOverride}});poll()});
-  async function searchMusic(){var box=document.getElementById('musicResults');box.innerHTML='<div class="empty">Buscando...</div>';try{var data=await api('/api/search?q='+encodeURIComponent(document.getElementById('musicQ').value));box.innerHTML='';(data.results||[]).forEach(function(item){var b=document.createElement('button');b.className='result';b.innerHTML='<strong>'+escapeHtml((item.track?item.track+' • ':'')+item.name)+'</strong><small>'+escapeHtml(item.album_name||item.source_label||'')+'</small>';b.onclick=function(){command('/api/play',{id_music:item.id_music,id_album:item.id_album,mode:'audio'})};box.appendChild(b)});if(!box.children.length)box.innerHTML='<div class="empty">Nenhuma música encontrada.</div>'}catch(e){box.innerHTML='<div class="empty">'+escapeHtml(e.message)+'</div>'}}
-  async function searchBible(){var box=document.getElementById('bibleResults');box.innerHTML='<div class="empty">Buscando...</div>';try{var data=await api('/api/bible/search?q='+encodeURIComponent(document.getElementById('bibleQ').value));box.innerHTML='';(data.results||[]).forEach(function(item){var b=document.createElement('button');b.className='result';b.innerHTML='<strong>'+escapeHtml(item.reference||'Versículo')+'</strong><small>'+escapeHtml(item.text||'')+'</small>';b.onclick=function(){command('/api/bible/open',item.payload||{})};box.appendChild(b)});if(!box.children.length)box.innerHTML='<div class="empty">Referência não encontrada.</div>'}catch(e){box.innerHTML='<div class="empty">'+escapeHtml(e.message)+'</div>'}}
+  document.querySelectorAll('[data-view]').forEach(function(btn){btn.addEventListener('click',function(){document.querySelectorAll('.view').forEach(function(v){v.classList.remove('active')});document.querySelectorAll('.tab').forEach(function(v){v.classList.remove('active');v.removeAttribute('aria-current')});document.getElementById(btn.dataset.view).classList.add('active');btn.classList.add('active');btn.setAttribute('aria-current','page');window.scrollTo(0,0);if(btn.dataset.view==='liturgy')loadLiturgy()})});
+  roleEl.addEventListener('change',function(){role=roleEl.value;loginRole.value=role;sessionStorage.setItem('iasdRemoteRole',role);document.getElementById('operatorTools').style.display=role==='operator'?'block':'none';clearTimeout(pollTimer);poll()});
+  async function searchMusic(){var input=document.getElementById('musicQ'),query=input.value.trim(),box=document.getElementById('musicResults'),feedback=document.getElementById('musicFeedback');if(query.length<2&&!/^\d+$/.test(query)){box.innerHTML='';feedback.textContent='Digite ao menos 2 letras para pesquisar.';return}feedback.textContent='Buscando resultados inteligentes...';box.innerHTML='<div class="empty">Buscando...</div>';try{var data=await api('/api/search?q='+encodeURIComponent(query)),results=data.results||[];box.innerHTML='';results.forEach(function(item){var b=document.createElement('button'),hint=item.match_hint?'<span class="match-hint">'+escapeHtml(item.match_hint)+'</span>':'';b.className='result';b.innerHTML='<strong>'+escapeHtml((item.track?item.track+' • ':'')+item.name)+hint+'</strong><small>'+escapeHtml(item.album_name||item.source_label||'')+'</small>';b.onclick=function(){command('/api/play',{id_music:item.id_music,id_album:item.id_album,mode:'audio'})};box.appendChild(b)});feedback.textContent=results.length?results.length+' resultado(s) encontrado(s). A busca aceita nomes aproximados.':'Tente outro título, número ou uma parte do nome.';if(!box.children.length)box.innerHTML='<div class="empty">Nenhuma música encontrada.</div>'}catch(e){feedback.textContent='Não foi possível concluir a busca.';box.innerHTML='<div class="empty">'+escapeHtml(e.message)+'</div>'}}
+  async function searchBible(){var input=document.getElementById('bibleQ'),query=input.value.trim(),box=document.getElementById('bibleResults'),feedback=document.getElementById('bibleFeedback');if(!query){box.innerHTML='';feedback.textContent='Digite um livro ou uma referência bíblica.';return}feedback.textContent='Interpretando a referência...';box.innerHTML='<div class="empty">Buscando...</div>';try{var data=await api('/api/bible/search?q='+encodeURIComponent(query)),results=data.results||[];box.innerHTML='';results.forEach(function(item){var b=document.createElement('button'),book=item.book||{},label=item.reference||item.name||book.name||'Resultado',chapters=item.chapters||book.chapters,details=item.text||(chapters?chapters+' capítulos':'');b.className='result';b.innerHTML='<strong>'+escapeHtml(label)+'</strong><small>'+escapeHtml(details)+'</small>';if(item.payload)b.onclick=function(){command('/api/bible/open',item.payload)};else b.onclick=function(){input.value=item.reference||item.name||book.name||query;searchBible()};box.appendChild(b)});feedback.textContent=results.length?results.length+' resultado(s). Toque para abrir ou detalhar.':'Confira o nome do livro, capítulo e versículo.';if(!box.children.length)box.innerHTML='<div class="empty">Referência não encontrada.</div>'}catch(e){feedback.textContent='Não foi possível concluir a busca.';box.innerHTML='<div class="empty">'+escapeHtml(e.message)+'</div>'}}
   async function loadLiturgy(){var box=document.getElementById('liturgyResults');try{var data=await api('/api/liturgy/today');document.getElementById('liturgyStatus').textContent=data.title+' • '+data.count+' item(ns)';box.innerHTML='';(data.items||[]).forEach(function(item){var b=document.createElement('button');b.className='result';b.disabled=!item.executable;b.innerHTML='<strong>'+escapeHtml((item.number?item.number+'. ':'')+(item.name||item.type_label))+'</strong><small>'+escapeHtml(item.type_label+(item.done?' • concluído':''))+'</small>';if(item.executable)b.onclick=function(){command('/api/liturgy/open',{item:item.payload})};box.appendChild(b)});if(!box.children.length)box.innerHTML='<div class="empty">Nenhum item para hoje.</div>'}catch(e){box.innerHTML='<div class="empty">'+escapeHtml(e.message)+'</div>'}}
   function escapeHtml(value){var d=document.createElement('div');d.textContent=String(value||'');return d.innerHTML}
-  document.getElementById('musicSearch').onclick=searchMusic;document.getElementById('musicQ').addEventListener('keydown',function(e){if(e.key==='Enter')searchMusic()});document.getElementById('bibleSearch').onclick=searchBible;document.getElementById('bibleQ').addEventListener('keydown',function(e){if(e.key==='Enter')searchBible()});
+  document.getElementById('musicSearch').onclick=searchMusic;document.getElementById('musicQ').addEventListener('keydown',function(e){if(e.key==='Enter')searchMusic()});document.getElementById('musicQ').addEventListener('input',function(){clearTimeout(musicSearchTimer);musicSearchTimer=setTimeout(searchMusic,320)});document.getElementById('bibleSearch').onclick=searchBible;document.getElementById('bibleQ').addEventListener('keydown',function(e){if(e.key==='Enter')searchBible()});document.getElementById('bibleQ').addEventListener('input',function(){clearTimeout(bibleSearchTimer);bibleSearchTimer=setTimeout(searchBible,320)});document.querySelectorAll('[data-music-query]').forEach(function(btn){btn.onclick=function(){document.getElementById('musicQ').value=btn.dataset.musicQuery;searchMusic()}});document.querySelectorAll('[data-bible-query]').forEach(function(btn){btn.onclick=function(){document.getElementById('bibleQ').value=btn.dataset.bibleQuery;searchBible()}});
   document.getElementById('loginForm').addEventListener('submit',async function(e){e.preventDefault();role=loginRole.value;var candidate=document.getElementById('password').value;document.getElementById('loginStatus').textContent='Verificando...';try{var response=await fetch('/api/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({password:candidate,role:role})});var data=await response.json();if(!data.ok)throw new Error('Senha incorreta');password=candidate;roleEl.value=role;sessionStorage.setItem('iasdRemotePassword',password);sessionStorage.setItem('iasdRemoteRole',role);document.getElementById('login').classList.remove('show');poll()}catch(err){document.getElementById('loginStatus').textContent=err.message}});
   fetch('/api/info').then(function(r){return r.json()}).then(function(info){if(info.requiresPassword&&!password)document.getElementById('login').classList.add('show');else poll()}).catch(function(){poll()});
 })();
@@ -1130,6 +1195,21 @@ function getRemoteControlHtml() {
 }
 async function handleRemoteControlRequest(request, response) {
   const url = new URL(request.url, `http://${request.headers.host || 'localhost'}`);
+
+  if (request.method === 'GET' && url.pathname === '/ico/favicon.png') {
+    const iconPath = path.join(__dirname, '..', 'dist', 'ico', 'favicon.png');
+    if (!fs.existsSync(iconPath)) {
+      response.writeHead(404);
+      response.end();
+      return;
+    }
+    response.writeHead(200, {
+      'Content-Type': 'image/png',
+      'Cache-Control': 'public, max-age=86400',
+    });
+    fs.createReadStream(iconPath).pipe(response);
+    return;
+  }
 
   if (request.method === 'GET' && url.pathname === '/') {
     response.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' });

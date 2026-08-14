@@ -373,7 +373,7 @@
                     <div class="mt-4">
                       <v-switch
                         v-model="media_use_internal_player"
-                        label="Reproduzir mídias internamente (em teste)"
+                        label="Reproduzir mídias internamente"
                         color="primary"
                         hide-details
                         inset
@@ -2003,7 +2003,7 @@ export default {
     online_fullscreen: true,
     youtube_mode: "Vídeo",
     
-    media_use_internal_player: false,
+    media_use_internal_player: true,
     media_liturgy_transition_duration: 0.6,
     media_sync_projection_settings: true,
     media_auto_project_video: true,
@@ -2783,7 +2783,7 @@ export default {
       this.accent_color = this.$theme.defaultPrimary;
     },
     resetMediaConfigs() {
-      this.media_use_internal_player = false;
+      this.media_use_internal_player = true;
       this.media_sync_projection_settings = true;
       this.media_liturgy_transition_duration = 0.6;
       this.media_auto_project_video = true;
