@@ -11,22 +11,21 @@
       loop
       playsinline
     />
+    <div
+      v-if="currentSlide && !(customBg && customBgType === 'video' && customBgImage)"
+      class="position-absolute top-0 left-0 w-100 h-100"
+      :style="style_bg(currentSlide)"
+    />
     <transition
-      v-for="(slide, index) in slides.slice().reverse()"
-      :key="index"
-      name="fade"
+      name="slide-content"
+      mode="in-out"
     >
       <div
-        v-if="!slide.destroy"
-        v-show="slide.active"
+        v-if="currentSlide"
+        :key="currentSlide.id"
         class="position-absolute top-0 left-0 w-100 h-100"
-        style="overflow: hidden; background-color: rgb(0,0,0);"
+        style="overflow: hidden;"
       >
-        <div
-          v-if="!(customBg && customBgType === 'video' && customBgImage)"
-          class="position-absolute top-0 left-0 w-100 h-100"
-          :style="style_bg(slide)"
-        />
         <div
           class="position-absolute top-0 left-0 w-100 h-100 d-flex justify-center"
           :class="slideAlignClass"
@@ -34,14 +33,14 @@
         >
           <div class="d-flex flex-column align-center justify-center w-100">
             <div
-              v-if="slide.aux_text"
-              :style="style_aux_text(slide)"
-              v-html="slide.aux_text"
+              v-if="currentSlide.aux_text"
+              :style="style_aux_text(currentSlide)"
+              v-html="currentSlide.aux_text"
             />
             <div
-              v-if="slide.text"
-              :style="style_text(slide)"
-              v-html="slide.text"
+              v-if="currentSlide.text"
+              :style="style_text(currentSlide)"
+              v-html="currentSlide.text"
             />
           </div>
         </div>
@@ -66,7 +65,8 @@ export default {
     },
   },
   data: () => ({
-    slides: [{}, {}],
+    currentSlide: null,
+    slideSequence: 0,
     repeat: false,
     width: 0,
     height: 0,
@@ -85,7 +85,6 @@ export default {
     customBgType: "image",
     customBgOpacity: 100,
     resizeObserver: null,
-    slideCleanupTimers: [],
   }),
   computed: {
     props_slide() {
@@ -140,8 +139,6 @@ export default {
     window.removeEventListener("resize", this.windowResize);
     window.removeEventListener("storage", this.updateSettings);
     this.resizeObserver?.disconnect();
-    this.slideCleanupTimers.forEach((timer) => window.clearTimeout(timer));
-    this.slideCleanupTimers = [];
   },
   methods: {
     updateSettings() {
@@ -173,35 +170,25 @@ export default {
     },
     setSlide() {
       this.updateSettings();
+      const previousSlide = this.currentSlide || {};
       if (
-        this.$string.clean(this.slides[1].text) ==
+        this.$string.clean(previousSlide.text) ==
         this.$string.clean(this.props_slide.text) &&
-        this.$string.clean(this.slides[1].aux_text) ==
+        this.$string.clean(previousSlide.aux_text) ==
         this.$string.clean(this.props_slide.aux_text) &&
-        this.slides[1].image == this.props_slide.image &&
-        this.slides[1].cover == this.props_slide.cover
+        previousSlide.image == this.props_slide.image &&
+        previousSlide.cover == this.props_slide.cover
       ) {
         this.repeat = !this.repeat;
       } else {
         this.repeat = false;
       }
 
-      this.slides.unshift({});
-      this.slides[1] = {
+      this.currentSlide = {
         ...this.props_slide,
-        active: true,
+        id: ++this.slideSequence,
+        repeat: this.repeat,
       };
-
-      if (this.slides.length > 3) {
-        const expiredSlide = this.slides[3];
-        expiredSlide.destroy = true;
-        const timer = window.setTimeout(() => {
-          const index = this.slides.indexOf(expiredSlide);
-          if (index >= 0) this.slides.splice(index, 1);
-          this.slideCleanupTimers = this.slideCleanupTimers.filter((item) => item !== timer);
-        }, 550);
-        this.slideCleanupTimers.push(timer);
-      }
     },
     style_bg(slide) {
       if (this.customBg) {
@@ -284,7 +271,7 @@ export default {
           textAlign: "center",
           textTransform: "uppercase",
           fontSize: `${this.fontSizePc(15) * sizeMultiplier}px`,
-          color: this.repeat ? "#f6c32a" : this.customFontColor,
+          color: slide.repeat ? "#f6c32a" : this.customFontColor,
           fontWeight: this.customFontWeight,
           fontFamily: `${this.customFontFamily}, sans-serif`,
           letterSpacing: `${this.customLetterSpacing / 100}em`,
@@ -300,7 +287,7 @@ export default {
         textAlign: "center",
         textTransform: "uppercase",
         fontSize: `${this.fontSizePc(15)}px`,
-        color: this.repeat ? "#f6c32a" : "#ffffff",
+        color: slide.repeat ? "#f6c32a" : "#ffffff",
         fontWeight: "700",
         letterSpacing: "0.03em",
         lineHeight: "1.4",
@@ -337,12 +324,12 @@ export default {
   overflow: hidden;
 }
 
-.fade-enter-active,
-.fade-leave-active {
-  transition: opacity 0.5s ease;
+.slide-content-enter-active,
+.slide-content-leave-active {
+  transition: opacity 0.2s ease-in-out;
 }
-.fade-enter-from,
-.fade-leave-to {
+.slide-content-enter-from,
+.slide-content-leave-to {
   opacity: 0;
 }
 </style>
