@@ -64,6 +64,9 @@ export default {
         lazy_load: true,
         fade_audio: true,
       },
+      config: {
+        primary_hymnal: "hymnal",
+      },
     },
   },
 };

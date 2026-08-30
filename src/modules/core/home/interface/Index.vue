@@ -221,6 +221,7 @@ import manifest from "../manifest.json";
 import MenuToggleButton from "@/components/MenuToggleButton.vue";
 import LTable from "@/components/DataTable.vue";
 import LMusicMenuTable from "@/components/MusicMenuTable.vue";
+import { getPreferredHymnalAlbum } from "@/helpers/HymnalPreference";
 
 import hymnalImg from "@/assets/images/hymnal.jpeg";
 import hymnal1996Img from "@/assets/images/hymnal_1996.jpeg";
@@ -567,13 +568,8 @@ export default {
     },
     
     getHymnalTrack(item) {
-      if (item && item.albums) {
-        const hymnalAlbum = item.albums.find(a => a.type === "hymnal");
-        if (hymnalAlbum && hymnalAlbum.pivot && hymnalAlbum.pivot.track) {
-          return hymnalAlbum.pivot.track;
-        }
-      }
-      return null;
+      const album = getPreferredHymnalAlbum(item);
+      return album?.pivot?.track ?? album?.track ?? null;
     },
     
     openAlbum(id_album) {

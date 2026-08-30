@@ -63,6 +63,26 @@
           Próxima
         </v-tooltip>
       </v-btn>
+      <v-btn
+        v-if="media.config.audio"
+        icon
+        variant="text"
+        :color="repeatMode === 'off' ? defaultTextColor : repeatActiveColor"
+        size="small"
+        class="mx-1"
+        :aria-label="repeatTooltip"
+        @click="cycleRepeatMode"
+      >
+        <v-icon>{{ repeatMode === 'one' ? 'mdi-repeat-once' : 'mdi-repeat' }}</v-icon>
+        <v-tooltip
+          activator="parent"
+          location="top"
+          open-delay="300"
+          content-class="modern-glass-menu elevation-0 font-weight-medium text-white"
+        >
+          {{ repeatTooltip }}
+        </v-tooltip>
+      </v-btn>
     </div>
 
     <div v-if="media.config.audio" class="player-timeline-wrapper d-flex align-center flex-grow-1 mr-6" style="min-width: 150px;">
@@ -271,14 +291,14 @@
         class="ml-2" 
         @click="togglePlaylist" 
       >
-        <v-icon>mdi-format-list-bulleted</v-icon>
+        <v-icon>{{ $media.hasQueue() ? 'mdi-playlist-music' : 'mdi-format-list-bulleted' }}</v-icon>
         <v-tooltip
           activator="parent"
           location="top"
           open-delay="300"
           content-class="modern-glass-menu elevation-0 font-weight-medium text-white"
         >
-          Lista de Slides
+          {{ $media.hasQueue() ? 'Fila de reprodução e slides' : 'Lista de Slides' }}
         </v-tooltip>
       </v-btn>
     </div>
@@ -337,6 +357,22 @@ export default {
     isPlaylistOpen() {
       return this.$appdata.get("modules.media.show_playlist") || false;
     },
+    repeatMode() {
+      return this.$media.repeatMode();
+    },
+    repeatActiveColor() {
+      return this.location === "footer" ? "var(--accent-blue)" : "var(--accent-yellow)";
+    },
+    repeatTooltip() {
+      switch (this.repeatMode) {
+      case "one":
+        return "Repetir música atual";
+      case "all":
+        return "Repetir lista de reprodução";
+      default:
+        return "Repetição desativada";
+      }
+    },
     menu_modes() {
       return [
         {
@@ -349,8 +385,10 @@ export default {
           click: () =>
             this.open({
               id_music: this.media.id_music,
+              id_album: this.media.id_album,
               mode: "audio",
               minimized: this.media.minimized,
+              preserve_queue: true,
             }),
         },
         {
@@ -364,8 +402,10 @@ export default {
           click: () =>
             this.open({
               id_music: this.media.id_music,
+              id_album: this.media.id_album,
               mode: "instrumental",
               minimized: this.media.minimized,
+              preserve_queue: true,
             }),
         },
         {
@@ -378,7 +418,9 @@ export default {
           click: () =>
             this.open({
               id_music: this.media.id_music,
+              id_album: this.media.id_album,
               minimized: this.media.minimized,
+              preserve_queue: true,
             }),
         },
         { title: "-" },
@@ -450,10 +492,15 @@ export default {
       }
     },
     prev() {
-      this.$media.prevSlide();
+      if (this.$media.hasQueue()) this.$media.prevTrack();
+      else this.$media.prevSlide();
     },
     next() {
-      this.$media.nextSlide();
+      if (this.$media.hasQueue()) this.$media.nextTrack();
+      else this.$media.nextSlide();
+    },
+    cycleRepeatMode() {
+      this.$media.cycleRepeatMode();
     },
     open(data) {
       this.$media.open(data);

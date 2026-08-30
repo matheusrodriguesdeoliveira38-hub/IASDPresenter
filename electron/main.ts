@@ -80,7 +80,14 @@ let remoteControlState = {
   projection: { active: false, module: '', override: 'none' },
   current: null,
   next: null,
-  playback: { paused: true, progress: 0, currentTime: 0, duration: 0 },
+  playback: {
+    paused: true,
+    progress: 0,
+    currentTime: 0,
+    duration: 0,
+    repeatMode: 'off',
+    repeatAvailable: false,
+  },
 };
 let remoteCommandLockUntil = 0;
 const recentRemoteCommandIds = new Map();
@@ -122,6 +129,7 @@ const defaultRemoteControlConfig = {
 };
 let remoteControlConfig = loadRemoteControlConfig();
 let performanceConfig = loadPerformanceConfig();
+const appliedPerformanceConfig = { ...performanceConfig };
 let automationConfig = loadAutomationConfig();
 const soundcraftConnections = new Map();
 const pendingAutomationRestores = [];
@@ -244,7 +252,7 @@ function sanitizeAutomationConfig(config = {}) {
       actions: Array.isArray(trigger.actions) ? trigger.actions.map(action => ({
         id: String(action.id || ''),
         deviceId: String(action.deviceId || ''),
-        target: ['input', 'master'].includes(action.target) ? action.target : 'input',
+        target: ['input', 'line-left', 'line-right', 'master'].includes(action.target) ? action.target : 'input',
         channel: Number(action.channel) || 1,
         operation: ['setFaderLevelDB', 'fadeToDB', 'mute', 'unmute'].includes(action.operation) ? action.operation : 'fadeToDB',
         valueDB: Number(action.valueDB),
@@ -332,6 +340,8 @@ async function getSoundcraftConnection(device) {
 
 function getSoundcraftTarget(conn, action) {
   if (action.target === 'master') return conn.master;
+  if (action.target === 'line-left') return conn.master.line(1);
+  if (action.target === 'line-right') return conn.master.line(2);
   return conn.master.input(Number(action.channel) || 1);
 }
 
@@ -462,7 +472,7 @@ function getRemoteControlRole(request) {
 
 function isRemoteControlActionAllowed(role, endpoint, action = '') {
   if (role === 'operator') return true;
-  if (endpoint === 'control') return ['play_pause', 'next', 'prev'].includes(action);
+  if (endpoint === 'control') return ['play_pause', 'next', 'prev', 'repeat'].includes(action);
   return endpoint === 'liturgy_open';
 }
 
@@ -591,6 +601,18 @@ function cleanRemoteSearchText(value) {
   return normalizeSmartSearchText(value);
 }
 
+function getPrimaryHymnalSource() {
+  try {
+    const preferences = readUserData(userPreferencesPath);
+    return preferences?.modules?.config?.primary_hymnal === 'hymnal_1996'
+      ? 'hymnal_1996'
+      : 'hymnal';
+  } catch (error) {
+    console.error('[RemoteControl] Erro lendo o hinario principal:', error.message);
+    return 'hymnal';
+  }
+}
+
 function normalizeRemoteSong(item, source, sourceLabel) {
   const albums = Array.isArray(item.albums) ? item.albums : [];
   const firstAlbum = albums[0] || {};
@@ -636,6 +658,7 @@ function getRemoteSearchLibrary() {
 function searchRemoteSongs(query, limit = 30) {
   const cleanQuery = cleanRemoteSearchText(query);
   const numericQuery = /^\d+$/.test(cleanQuery) ? Number(cleanQuery) : null;
+  const primaryHymnal = getPrimaryHymnalSource();
 
   if (!cleanQuery) return [];
 
@@ -649,7 +672,9 @@ function searchRemoteSongs(query, limit = 30) {
       let match_hint = '';
 
       if (numericQuery !== null) {
-        if (isHymnal && track === numericQuery) score = 120;
+        if (isHymnal && track === numericQuery) {
+          score = song.source === primaryHymnal ? 122 : 121;
+        }
         else if (String(song.track || '').startsWith(cleanQuery)) score = 55;
       } else {
         const nameScore = smartTokenScore(cleanQuery, name);
@@ -1120,7 +1145,7 @@ function getRemoteControlHtml() {
     .card{border-color:var(--line);border-radius:24px;background:linear-gradient(145deg,rgba(18,32,51,.96),rgba(9,17,30,.98));box-shadow:var(--shadow)}
     .now-card{position:relative;overflow:hidden;padding:22px}.now-card:before{content:"";position:absolute;width:220px;height:220px;right:-100px;top:-120px;border-radius:50%;background:rgba(24,167,224,.12);filter:blur(2px)}.now-top{position:relative;display:flex;justify-content:space-between;align-items:center}.onair{display:inline-flex;align-items:center;gap:7px;color:var(--muted);font-size:10px}.onair:before{content:"";width:7px;height:7px;border-radius:50%;background:currentColor;box-shadow:0 0 0 5px rgba(143,161,184,.08)}.onair.live{color:#69e4b4}.onair.live:before{animation:pulse 1.7s infinite}.live-chip{padding:6px 9px;border:1px solid var(--line);border-radius:999px;color:var(--muted);font-size:10px;font-weight:750;background:rgba(255,255,255,.03)}
     .title{position:relative;margin:20px 0 7px;font-size:clamp(23px,6vw,32px);letter-spacing:-.04em}.slide{position:relative;min-height:54px;color:#c9d5e5;font-size:15px;line-height:1.6;-webkit-line-clamp:3}.next{position:relative;margin-top:20px;padding:14px 15px;border:1px solid var(--line);border-radius:16px;background:rgba(255,255,255,.025);font-size:9px;font-weight:800;letter-spacing:.14em}.next strong{font-size:13px;line-height:1.45;letter-spacing:0}.bar{position:relative;height:6px;margin-top:20px;background:rgba(148,163,184,.13)}.bar i{background:linear-gradient(90deg,var(--blue),#63d5ff);box-shadow:0 0 16px rgba(24,167,224,.45)}.meta{position:relative;font-size:11px;margin-top:11px}
-    .controls{grid-template-columns:1fr 1.12fr 1fr;gap:10px;margin:14px 0 22px}.btn{position:relative;min-height:56px;border-color:var(--line);border-radius:17px;background:linear-gradient(145deg,rgba(20,34,53,.94),rgba(12,22,38,.96));font-size:13px;transition:transform .15s ease,border-color .2s ease,background .2s ease,box-shadow .2s ease}.btn:hover{border-color:rgba(24,167,224,.38);background:var(--surface-3)}.btn:active{transform:scale(.965)}.btn.primary{border-color:rgba(59,195,250,.35);background:linear-gradient(145deg,#1daee7,#087fb4);box-shadow:0 14px 32px rgba(8,127,180,.28);font-size:24px}.btn .button-icon{display:block;font-size:18px;margin-bottom:3px}.transport .btn:not(.primary){color:#d6deea}
+    .controls{grid-template-columns:1fr 1.12fr 1fr;gap:10px;margin:14px 0 10px}.btn{position:relative;min-height:56px;border-color:var(--line);border-radius:17px;background:linear-gradient(145deg,rgba(20,34,53,.94),rgba(12,22,38,.96));font-size:13px;transition:transform .15s ease,border-color .2s ease,background .2s ease,box-shadow .2s ease}.btn:hover{border-color:rgba(24,167,224,.38);background:var(--surface-3)}.btn:active{transform:scale(.965)}.btn:disabled{cursor:not-allowed;opacity:.45;transform:none}.btn.primary{border-color:rgba(59,195,250,.35);background:linear-gradient(145deg,#1daee7,#087fb4);box-shadow:0 14px 32px rgba(8,127,180,.28);font-size:24px}.btn .button-icon{display:block;font-size:18px;margin-bottom:3px}.transport .btn:not(.primary){color:#d6deea}.playback-options{display:flex;justify-content:center;margin:0 0 22px}.repeat-btn{display:flex;min-height:42px;align-items:center;justify-content:center;gap:8px;padding:8px 16px;border-radius:14px;color:var(--muted);font-size:11px}.repeat-btn .button-icon{margin:0;font-size:17px}.repeat-btn.active{border-color:rgba(24,167,224,.42);background:rgba(24,167,224,.13);color:#7bd8fa;box-shadow:inset 0 0 0 1px rgba(24,167,224,.08)}
     .operator-panel{padding:16px;border:1px solid var(--line);border-radius:22px;background:rgba(9,17,30,.68)}.section-label{display:flex;align-items:center;justify-content:space-between;margin:0 2px 12px;color:#dce6f4;font-size:12px;font-weight:800}.section-label small{color:var(--muted);font-size:10px;font-weight:600}.emergency{grid-template-columns:repeat(3,1fr);gap:8px;margin:0}.emergency .btn{min-height:58px;padding:9px 6px;color:#b9c7d9;font-size:11px}.emergency .btn.active{border-color:rgba(255,200,87,.5);background:rgba(255,200,87,.14);color:#ffe09a}.emergency .danger{border-color:rgba(255,93,104,.24);color:#ffabb1;background:rgba(255,93,104,.07)}
     .view{animation:viewIn .23s ease}.view.active{display:block}.section{margin-top:0}.search-hero,.liturgy-hero{padding:19px;margin-bottom:12px}.search-hero h1,.liturgy-hero h1{font-size:22px;letter-spacing:-.03em;margin:3px 0 5px}.search-hero p,.liturgy-hero p{color:var(--muted);font-size:12px;margin:0}.searchbox{position:relative;gap:9px;margin-top:16px}.searchbox input,.login input{min-height:54px;border-color:var(--line);border-radius:16px;background:rgba(5,11,21,.76);padding:0 16px;color:var(--text);transition:border-color .2s,box-shadow .2s}.searchbox input:focus,.login input:focus{border-color:rgba(24,167,224,.65);box-shadow:0 0 0 4px rgba(24,167,224,.1)}.searchbox .btn{min-width:92px;background:linear-gradient(145deg,#1daee7,#087fb4)}
     .results{gap:9px;margin-top:10px}.result{position:relative;min-height:66px;border-color:var(--line);border-radius:18px;background:linear-gradient(145deg,rgba(17,30,49,.94),rgba(9,17,30,.96));padding:14px 44px 14px 16px;transition:transform .15s,border-color .2s}.result:after{content:"›";position:absolute;right:17px;top:50%;transform:translateY(-50%);color:#59c8f3;font-size:25px}.result:hover{border-color:rgba(24,167,224,.4);transform:translateY(-1px)}.result:disabled{opacity:.5;cursor:not-allowed}.result:disabled:after{display:none}.result strong{display:block;font-size:14px}.result small{color:var(--muted);font-size:11px;line-height:1.45;margin-top:5px}.empty{border:1px dashed var(--line);border-radius:18px;background:rgba(12,21,37,.4);padding:34px 20px}
@@ -1138,7 +1163,7 @@ function getRemoteControlHtml() {
     .eyebrow{color:#087fac}.page-heading h1,.search-hero h1,.liturgy-hero h1{color:var(--text)}.card{border-color:rgba(45,67,91,.12);background:linear-gradient(145deg,rgba(255,255,255,.98),rgba(247,250,252,.98));box-shadow:var(--shadow)}.now-card:before{background:rgba(49,181,232,.12)}.live-chip{border-color:var(--line);background:#f4f8fb;color:var(--muted)}.onair{color:#718096}.onair.live{color:var(--ok)}
     .projection-preview{position:relative;margin:18px auto 16px;aspect-ratio:16/9;max-width:520px;overflow:hidden;border:5px solid #dfe7ee;border-radius:17px;background:#111827;box-shadow:0 16px 35px rgba(23,32,51,.2),inset 0 0 0 1px rgba(255,255,255,.08)}.projection-preview:after{content:"PRÉVIA";position:absolute;right:9px;top:8px;padding:4px 7px;border:1px solid rgba(255,255,255,.14);border-radius:999px;background:rgba(3,7,18,.5);color:rgba(255,255,255,.7);font-size:8px;font-weight:850;letter-spacing:.12em}.preview-stage{position:absolute;inset:0;display:grid;place-items:center;padding:12% 8%;text-align:center;background:radial-gradient(circle at 50% 10%,#243b59,#080d17 72%);transition:.2s}.preview-copy{max-width:100%;color:#fff;text-shadow:0 2px 12px rgba(0,0,0,.55)}.preview-title{margin-bottom:8px;color:#71d2f5;font-size:clamp(8px,2.3vw,13px);font-weight:800;letter-spacing:.06em;text-transform:uppercase}.preview-text{display:-webkit-box;overflow:hidden;font-size:clamp(12px,4vw,24px);font-weight:800;line-height:1.25;-webkit-box-orient:vertical;-webkit-line-clamp:3}.preview-logo{display:none;width:23%;max-width:80px;filter:drop-shadow(0 8px 18px rgba(0,0,0,.35))}.projection-preview.blackout .preview-stage{background:#000}.projection-preview.blackout .preview-copy,.projection-preview.blackout .preview-logo{display:none}.projection-preview.logo .preview-copy{display:none}.projection-preview.logo .preview-logo{display:block}.projection-preview.freeze:before{content:"CONGELADO";position:absolute;z-index:2;left:9px;top:8px;padding:4px 7px;border-radius:999px;background:#fff;color:#314158;font-size:8px;font-weight:900;letter-spacing:.1em}
     .title{color:var(--text)}.slide{color:#53657b}.next{border-color:var(--line);background:#f6f9fb;color:#77879a}.next strong{color:#26364b}.bar{background:#dfe7ee}.meta{color:#718096}
-    .btn{border-color:var(--line);background:linear-gradient(145deg,#fff,#f3f7fa);color:#2e4056;box-shadow:0 8px 22px rgba(44,68,94,.08)}.btn:hover{border-color:rgba(8,127,180,.3);background:#fff}.btn.primary,.searchbox .btn{border-color:#0b8fc6;background:linear-gradient(145deg,#27b8ee,#087fb4);color:#fff;box-shadow:0 13px 28px rgba(8,127,180,.23)}.transport .btn:not(.primary){color:#314158}.operator-panel{border-color:var(--line);background:rgba(255,255,255,.64);box-shadow:0 12px 35px rgba(44,68,94,.06)}.section-label{color:#304258}.emergency .btn{color:#53657b}.emergency .btn.active{border-color:rgba(214,154,18,.35);background:#fff8e5;color:#9a6a00}.emergency .danger{border-color:rgba(216,58,75,.2);background:#fff5f6;color:#c72f40}
+    .btn{border-color:var(--line);background:linear-gradient(145deg,#fff,#f3f7fa);color:#2e4056;box-shadow:0 8px 22px rgba(44,68,94,.08)}.btn:hover{border-color:rgba(8,127,180,.3);background:#fff}.btn.primary,.searchbox .btn{border-color:#0b8fc6;background:linear-gradient(145deg,#27b8ee,#087fb4);color:#fff;box-shadow:0 13px 28px rgba(8,127,180,.23)}.transport .btn:not(.primary){color:#314158}.repeat-btn.active{border-color:rgba(8,127,180,.3);background:#e9f7fc;color:#087fac}.operator-panel{border-color:var(--line);background:rgba(255,255,255,.64);box-shadow:0 12px 35px rgba(44,68,94,.06)}.section-label{color:#304258}.emergency .btn{color:#53657b}.emergency .btn.active{border-color:rgba(214,154,18,.35);background:#fff8e5;color:#9a6a00}.emergency .danger{border-color:rgba(216,58,75,.2);background:#fff5f6;color:#c72f40}
     .searchbox input,.login input{border-color:var(--line);background:#f7fafc;color:var(--text)}.searchbox input:focus,.login input:focus{background:#fff}.result{border-color:var(--line);background:linear-gradient(145deg,#fff,#f6f9fb);color:var(--text);box-shadow:0 8px 24px rgba(44,68,94,.06)}.result small{color:var(--muted)}.empty{background:rgba(255,255,255,.55)}
     .smart-row{display:flex;align-items:center;gap:7px;overflow-x:auto;margin-top:12px;padding-bottom:2px;scrollbar-width:none}.smart-row::-webkit-scrollbar{display:none}.smart-chip{flex:0 0 auto;min-height:34px;border:1px solid var(--line);border-radius:999px;background:#fff;color:#52647a;padding:0 12px;font-size:11px;font-weight:700}.smart-chip:hover{border-color:rgba(8,127,180,.35);color:var(--blue)}.search-feedback{min-height:18px;margin:10px 3px 0;color:var(--muted);font-size:11px}.match-hint{display:inline-block;margin-left:6px;border-radius:999px;background:#e9f7fc;color:#087fac;padding:2px 6px;font-size:9px;font-weight:750}
     .tabs{border-color:rgba(45,67,91,.12);background:rgba(255,255,255,.9);box-shadow:0 18px 50px rgba(44,68,94,.18)}.tab{color:#75859a}.tab.active{color:#076e9c;background:linear-gradient(145deg,rgba(49,181,232,.16),rgba(101,88,232,.08));box-shadow:inset 0 0 0 1px rgba(8,127,180,.1)}.toast{border-color:rgba(45,67,91,.13);background:#fff;color:var(--text);box-shadow:0 15px 40px rgba(44,68,94,.2)}.login{background:radial-gradient(circle at 50% 0,rgba(49,181,232,.22),transparent 35%),rgba(239,245,249,.98)}.login-badge{border-color:rgba(8,127,180,.13);background:linear-gradient(145deg,rgba(49,181,232,.22),rgba(101,88,232,.12))}
@@ -1152,6 +1177,7 @@ function getRemoteControlHtml() {
       <div class="page-heading"><div><div class="eyebrow">Painel ao vivo</div><h1>Controle da projeção</h1></div><p>Acompanhe o conteúdo e controle a apresentação em tempo real.</p></div>
       <article class="card now-card"><div class="now-top"><div class="onair" id="onair">SEM PROJEÇÃO</div><span class="live-chip">Sincronizado</span></div><div id="projectionPreview" class="projection-preview"><div class="preview-stage"><img class="preview-logo" src="/ico/favicon.png" alt=""><div class="preview-copy"><div id="previewTitle" class="preview-title">Aguardando projeção</div><div id="previewText" class="preview-text">A prévia aparecerá aqui.</div></div></div></div><div class="title" id="currentTitle">Aguardando conteúdo</div><div class="slide" id="currentText">O estado da projeção aparecerá aqui.</div><div class="next">A SEGUIR<strong id="nextText">—</strong></div><div class="bar"><i id="progress"></i></div><div class="meta"><span id="counter">—</span><span id="time">00:00 / 00:00</span></div></article>
       <div class="controls transport"><button class="btn" data-control="prev" aria-label="Voltar"><span class="button-icon">←</span>Voltar</button><button class="btn primary" id="play" data-control="play_pause" aria-label="Reproduzir ou pausar"><span id="playIcon">▶</span></button><button class="btn" data-control="next" aria-label="Avançar"><span class="button-icon">→</span>Avançar</button></div>
+      <div class="playback-options"><button class="btn repeat-btn" id="repeat" data-control="repeat" aria-label="Repetição desativada" aria-pressed="false"><span class="button-icon" id="repeatIcon">↻</span><span id="repeatLabel">Repetição desativada</span></button></div>
       <div id="operatorTools" class="operator-panel"><div class="section-label"><span>Ferramentas do operador</span><small>Comandos rápidos</small></div><div class="emergency"><button class="btn" data-emergency="blackout"><span class="button-icon">⬛</span>Tela preta</button><button class="btn" data-emergency="freeze"><span class="button-icon">❄</span>Congelar</button><button class="btn" data-emergency="logo"><span class="button-icon">◇</span>Logo</button><button class="btn" data-emergency="clear"><span class="button-icon">✓</span>Normal</button><button class="btn danger" data-control="close"><span class="button-icon">×</span>Encerrar</button><button class="btn" data-control="maximize"><span class="button-icon">⛶</span>Projetar</button></div></div>
     </section>
 
@@ -1175,14 +1201,14 @@ function getRemoteControlHtml() {
   function setConnected(ok){var el=document.getElementById('connection');el.classList.toggle('online',ok);document.getElementById('connectionText').textContent=ok?'Conectado • atualização automática':'Reconectando...'}
   function text(value){return String(value||'').replace(/<[^>]*>/g,' ').replace(/\\s+/g,' ').trim()}
   function clock(value){var n=Math.max(0,Number(value)||0),m=Math.floor(n/60),s=Math.floor(n%60);return String(m).padStart(2,'0')+':'+String(s).padStart(2,'0')}
-  function renderState(state){failures=0;setConnected(true);var p=state.projection||{},playback=state.playback||{},current=state.current||{},next=state.next||{},onair=document.getElementById('onair'),play=document.getElementById('play'),preview=document.getElementById('projectionPreview');currentOverride=p.override||'none';onair.textContent=p.active?'NO AR • '+String(p.module||'').toUpperCase():'SEM PROJEÇÃO';onair.classList.toggle('live',Boolean(p.active));preview.classList.toggle('blackout',currentOverride==='blackout');preview.classList.toggle('freeze',currentOverride==='freeze');preview.classList.toggle('logo',currentOverride==='logo');document.getElementById('previewTitle').textContent=p.active?(current.title||String(p.module||'Projeção')):'Sem projeção';document.getElementById('previewText').textContent=p.active?(text(current.text)||'Conteúdo em exibição'):'A prévia aparecerá quando uma projeção for iniciada.';document.getElementById('currentTitle').textContent=current.title||'Aguardando conteúdo';document.getElementById('currentText').textContent=text(current.text)||'O estado da projeção aparecerá aqui.';document.getElementById('nextText').textContent=text(next.text)||next.title||'—';document.getElementById('progress').style.width=Math.max(0,Math.min(100,Number(playback.progress)||0))+'%';document.getElementById('time').textContent=clock(playback.currentTime)+' / '+clock(playback.duration);document.getElementById('counter').textContent=current.number&&current.total?current.number+' de '+current.total:'—';document.getElementById('playIcon').textContent=playback.paused?'▶':'Ⅱ';play.setAttribute('aria-label',playback.paused?'Reproduzir':'Pausar');document.querySelectorAll('[data-emergency]').forEach(function(btn){var action=btn.dataset.emergency;btn.classList.toggle('active',(action==='clear'&&currentOverride==='none')||action===currentOverride)});document.getElementById('operatorTools').style.display=role==='operator'?'block':'none'}
+  function renderState(state){failures=0;setConnected(true);var p=state.projection||{},playback=state.playback||{},current=state.current||{},next=state.next||{},onair=document.getElementById('onair'),play=document.getElementById('play'),repeat=document.getElementById('repeat'),repeatMode=['one','all'].includes(playback.repeatMode)?playback.repeatMode:'off',preview=document.getElementById('projectionPreview');currentOverride=p.override||'none';onair.textContent=p.active?'NO AR • '+String(p.module||'').toUpperCase():'SEM PROJEÇÃO';onair.classList.toggle('live',Boolean(p.active));preview.classList.toggle('blackout',currentOverride==='blackout');preview.classList.toggle('freeze',currentOverride==='freeze');preview.classList.toggle('logo',currentOverride==='logo');document.getElementById('previewTitle').textContent=p.active?(current.title||String(p.module||'Projeção')):'Sem projeção';document.getElementById('previewText').textContent=p.active?(text(current.text)||'Conteúdo em exibição'):'A prévia aparecerá quando uma projeção for iniciada.';document.getElementById('currentTitle').textContent=current.title||'Aguardando conteúdo';document.getElementById('currentText').textContent=text(current.text)||'O estado da projeção aparecerá aqui.';document.getElementById('nextText').textContent=text(next.text)||next.title||'—';document.getElementById('progress').style.width=Math.max(0,Math.min(100,Number(playback.progress)||0))+'%';document.getElementById('time').textContent=clock(playback.currentTime)+' / '+clock(playback.duration);document.getElementById('counter').textContent=current.number&&current.total?current.number+' de '+current.total:'—';document.getElementById('playIcon').textContent=playback.paused?'▶':'Ⅱ';play.setAttribute('aria-label',playback.paused?'Reproduzir':'Pausar');repeat.classList.toggle('active',repeatMode!=='off');repeat.disabled=playback.repeatAvailable!==true;repeat.setAttribute('aria-pressed',repeatMode!=='off'?'true':'false');repeat.setAttribute('aria-label',repeatMode==='one'?'Repetir música atual':repeatMode==='all'?'Repetir lista de reprodução':'Repetição desativada');document.getElementById('repeatIcon').textContent=repeatMode==='one'?'↻¹':'↻';document.getElementById('repeatLabel').textContent=repeatMode==='one'?'Repetir música':repeatMode==='all'?'Repetir lista':'Repetição desativada';document.querySelectorAll('[data-emergency]').forEach(function(btn){var action=btn.dataset.emergency;btn.classList.toggle('active',(action==='clear'&&currentOverride==='none')||action===currentOverride)});document.getElementById('operatorTools').style.display=role==='operator'?'block':'none'}
   async function poll(){try{var data=await api('/api/state');renderState(data.state||{})}catch(e){failures++;if(failures>1)setConnected(false)}finally{pollTimer=setTimeout(poll,1500)}}
   async function command(endpoint,body){body.requestId=requestId();if(navigator.vibrate)navigator.vibrate(18);try{await api(endpoint,{method:'POST',body:JSON.stringify(body)});toast('Comando enviado');clearTimeout(pollTimer);pollTimer=setTimeout(poll,120)}catch(e){toast(e.message)}}
   document.querySelectorAll('[data-control]').forEach(function(btn){btn.addEventListener('click',function(){command('/api/control',{action:btn.dataset.control})})});
   document.querySelectorAll('[data-emergency]').forEach(function(btn){btn.addEventListener('click',function(){command('/api/emergency',{action:btn.dataset.emergency})})});
   document.querySelectorAll('[data-view]').forEach(function(btn){btn.addEventListener('click',function(){document.querySelectorAll('.view').forEach(function(v){v.classList.remove('active')});document.querySelectorAll('.tab').forEach(function(v){v.classList.remove('active');v.removeAttribute('aria-current')});document.getElementById(btn.dataset.view).classList.add('active');btn.classList.add('active');btn.setAttribute('aria-current','page');window.scrollTo(0,0);if(btn.dataset.view==='liturgy')loadLiturgy()})});
   roleEl.addEventListener('change',function(){role=roleEl.value;loginRole.value=role;sessionStorage.setItem('iasdRemoteRole',role);document.getElementById('operatorTools').style.display=role==='operator'?'block':'none';clearTimeout(pollTimer);poll()});
-  async function searchMusic(){var input=document.getElementById('musicQ'),query=input.value.trim(),box=document.getElementById('musicResults'),feedback=document.getElementById('musicFeedback');if(query.length<2&&!/^\d+$/.test(query)){box.innerHTML='';feedback.textContent='Digite ao menos 2 letras para pesquisar.';return}feedback.textContent='Buscando resultados inteligentes...';box.innerHTML='<div class="empty">Buscando...</div>';try{var data=await api('/api/search?q='+encodeURIComponent(query)),results=data.results||[];box.innerHTML='';results.forEach(function(item){var b=document.createElement('button'),hint=item.match_hint?'<span class="match-hint">'+escapeHtml(item.match_hint)+'</span>':'';b.className='result';b.innerHTML='<strong>'+escapeHtml((item.track?item.track+' • ':'')+item.name)+hint+'</strong><small>'+escapeHtml(item.album_name||item.source_label||'')+'</small>';b.onclick=function(){command('/api/play',{id_music:item.id_music,id_album:item.id_album,mode:'audio'})};box.appendChild(b)});feedback.textContent=results.length?results.length+' resultado(s) encontrado(s). A busca aceita nomes aproximados.':'Tente outro título, número ou uma parte do nome.';if(!box.children.length)box.innerHTML='<div class="empty">Nenhuma música encontrada.</div>'}catch(e){feedback.textContent='Não foi possível concluir a busca.';box.innerHTML='<div class="empty">'+escapeHtml(e.message)+'</div>'}}
+  async function searchMusic(){var input=document.getElementById('musicQ'),query=input.value.trim(),box=document.getElementById('musicResults'),feedback=document.getElementById('musicFeedback');if(query.length<2&&!/^\\d+$/.test(query)){box.innerHTML='';feedback.textContent='Digite ao menos 2 letras para pesquisar.';return}feedback.textContent='Buscando resultados inteligentes...';box.innerHTML='<div class="empty">Buscando...</div>';try{var data=await api('/api/search?q='+encodeURIComponent(query)),results=data.results||[];box.innerHTML='';results.forEach(function(item){var b=document.createElement('button'),hint=item.match_hint?'<span class="match-hint">'+escapeHtml(item.match_hint)+'</span>':'';b.className='result';b.innerHTML='<strong>'+escapeHtml((item.track?item.track+' • ':'')+item.name)+hint+'</strong><small>'+escapeHtml(item.album_name||item.source_label||'')+'</small>';b.onclick=function(){command('/api/play',{id_music:item.id_music,id_album:item.id_album,mode:'audio'})};box.appendChild(b)});feedback.textContent=results.length?results.length+' resultado(s) encontrado(s). A busca aceita nomes aproximados.':'Tente outro título, número ou uma parte do nome.';if(!box.children.length)box.innerHTML='<div class="empty">Nenhuma música encontrada.</div>'}catch(e){feedback.textContent='Não foi possível concluir a busca.';box.innerHTML='<div class="empty">'+escapeHtml(e.message)+'</div>'}}
   async function searchBible(){var input=document.getElementById('bibleQ'),query=input.value.trim(),box=document.getElementById('bibleResults'),feedback=document.getElementById('bibleFeedback');if(!query){box.innerHTML='';feedback.textContent='Digite um livro ou uma referência bíblica.';return}feedback.textContent='Interpretando a referência...';box.innerHTML='<div class="empty">Buscando...</div>';try{var data=await api('/api/bible/search?q='+encodeURIComponent(query)),results=data.results||[];box.innerHTML='';results.forEach(function(item){var b=document.createElement('button'),book=item.book||{},label=item.reference||item.name||book.name||'Resultado',chapters=item.chapters||book.chapters,details=item.text||(chapters?chapters+' capítulos':'');b.className='result';b.innerHTML='<strong>'+escapeHtml(label)+'</strong><small>'+escapeHtml(details)+'</small>';if(item.payload)b.onclick=function(){command('/api/bible/open',item.payload)};else b.onclick=function(){input.value=item.reference||item.name||book.name||query;searchBible()};box.appendChild(b)});feedback.textContent=results.length?results.length+' resultado(s). Toque para abrir ou detalhar.':'Confira o nome do livro, capítulo e versículo.';if(!box.children.length)box.innerHTML='<div class="empty">Referência não encontrada.</div>'}catch(e){feedback.textContent='Não foi possível concluir a busca.';box.innerHTML='<div class="empty">'+escapeHtml(e.message)+'</div>'}}
   async function loadLiturgy(){var box=document.getElementById('liturgyResults');try{var data=await api('/api/liturgy/today');document.getElementById('liturgyStatus').textContent=data.title+' • '+data.count+' item(ns)';box.innerHTML='';(data.items||[]).forEach(function(item){var b=document.createElement('button');b.className='result';b.disabled=!item.executable;b.innerHTML='<strong>'+escapeHtml((item.number?item.number+'. ':'')+(item.name||item.type_label))+'</strong><small>'+escapeHtml(item.type_label+(item.done?' • concluído':''))+'</small>';if(item.executable)b.onclick=function(){command('/api/liturgy/open',{item:item.payload})};box.appendChild(b)});if(!box.children.length)box.innerHTML='<div class="empty">Nenhum item para hoje.</div>'}catch(e){box.innerHTML='<div class="empty">'+escapeHtml(e.message)+'</div>'}}
   function escapeHtml(value){var d=document.createElement('div');d.textContent=String(value||'');return d.innerHTML}
@@ -1376,7 +1402,7 @@ async function handleRemoteControlRequest(request, response) {
   if (request.method === 'POST' && url.pathname === '/api/control') {
     const body = await readRequestJson(request);
     const action = String(body.action || '');
-    if (!['play_pause', 'next', 'prev', 'close', 'maximize'].includes(action)) {
+    if (!['play_pause', 'next', 'prev', 'repeat', 'close', 'maximize'].includes(action)) {
       sendJson(response, 400, { ok: false, error: 'Comando invalido.' });
       return;
     }
@@ -2467,9 +2493,25 @@ ipcMain.handle('run-automation-trigger', async (event, triggerId, context = {}) 
 
 ipcMain.handle('restore-automation', async (event, reason = '') => restorePendingAutomation(reason));
 
-ipcMain.handle('get-performance-config', () => performanceConfig);
+ipcMain.handle('get-performance-config', () => ({
+  ...performanceConfig,
+  appliedDisableHardwareAcceleration: appliedPerformanceConfig.disableHardwareAcceleration,
+}));
 
 ipcMain.handle('save-performance-config', (event, config) => savePerformanceConfig(config));
+
+ipcMain.handle('restart-app', (event, config) => {
+  // Persiste a configuração imediatamente antes de encerrar, evitando que o
+  // reinício aconteça enquanto uma gravação assíncrona ainda está pendente.
+  if (config && typeof config === 'object') {
+    savePerformanceConfig(config);
+  }
+
+  global.isQuitting = true;
+  app.relaunch();
+  app.quit();
+  return true;
+});
 
 ipcMain.handle('save-remote-control-config', async (event, config) => {
   const nextConfig = { ...config };

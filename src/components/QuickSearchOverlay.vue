@@ -99,6 +99,7 @@ import {
   parseBibleSearch,
   parseBibleVerseNumbers,
 } from "@/helpers/BibleSearch";
+import { getHymnalSearchPriority, getPreferredHymnalAlbum } from "@/helpers/HymnalPreference";
 
 export default {
   name: "QuickSearchOverlay",
@@ -269,7 +270,8 @@ export default {
       }
     },
     musicTrack(music) {
-      return music.albums?.find((item) => item.type === "hymnal" && item.pivot?.track)?.pivot?.track || music.track || "";
+      const album = getPreferredHymnalAlbum(music);
+      return album?.pivot?.track ?? album?.track ?? music.track ?? "";
     },
     musicSubtitle(music) {
       return music.albums?.map((album) => album.name).filter(Boolean).join(" - ") || this.labels.music;
@@ -277,7 +279,7 @@ export default {
     musicScore(music, query, number) {
       const name = normalizeBibleSearchText(music.name);
       let score = name === query ? 100 : name.startsWith(query) ? 50 : 10;
-      if (number !== null && music.albums?.some((album) => Number(album.pivot?.track) === number)) score += 200;
+      if (number !== null) score += getHymnalSearchPriority(music, number) * 100;
       return score;
     },
     handleBibleQueryChange() {

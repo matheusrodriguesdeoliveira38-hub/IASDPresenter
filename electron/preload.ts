@@ -87,6 +87,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   restoreAutomation: (reason) => ipcRenderer.invoke('restore-automation', reason),
   getPerformanceConfig: () => ipcRenderer.invoke('get-performance-config'),
   savePerformanceConfig: (config) => ipcRenderer.invoke('save-performance-config', config),
+  restartApp: (config) => ipcRenderer.invoke('restart-app', config),
   
   // Auto-Update
   getUpdateState: () => ipcRenderer.invoke('get-update-state'),

@@ -16,7 +16,14 @@
                   {{ updateStatus === 'not-available' ? 'Tudo atualizado!' : 'Nova Versão Disponível' }}
                 </div>
                 <div class="text-caption mt-1" style="color: var(--sidebar-text-secondary);">
-                  {{ updateVersion ? 'v' + updateVersion : (updateStatus === 'not-available' ? 'Nenhuma atualização pendente.' : 'Processando informações...') }}
+                  Versão instalada: v{{ currentVersion }}
+                </div>
+                <div
+                  v-if="updateVersion && updateVersion !== currentVersion && ['available', 'downloading', 'ready'].includes(updateStatus)"
+                  class="text-caption"
+                  style="color: var(--accent-blue);"
+                >
+                  Versão disponível: v{{ updateVersion }}
                 </div>
               </div>
             </div>
@@ -170,6 +177,8 @@
 </template>
 
 <script lang="ts">
+import packageJson from "../../../../../package.json";
+
 export default {
   name: "UpdateModule",
   computed: {
@@ -191,6 +200,9 @@ export default {
     },
     updateStatus() {
       return this.$appdata.get("modules.update.status") || "idle";
+    },
+    currentVersion() {
+      return packageJson.version;
     },
     updateVersion() {
       return this.$appdata.get("modules.update.version") || "";

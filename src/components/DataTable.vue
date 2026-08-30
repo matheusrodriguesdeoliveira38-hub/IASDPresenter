@@ -25,6 +25,8 @@
 </template>
 
 <script lang="ts">
+import { getHymnalSearchPriority } from "@/helpers/HymnalPreference";
+
 export default {
   name: "DataTableComponent",
   props: {
@@ -159,14 +161,9 @@ export default {
 
       if (!isNaN(value) && value !== "") {
         const numValue = Number(value);
-        this.filter_data.sort((a, b) => {
-          const getScore = (item) => {
-            if (item.albums?.some(al => al.type === "hymnal" && al.name === "Hinário Adventista" && Number(al.pivot?.track) === numValue)) return 2;
-            if (item.albums?.some(al => al.type === "hymnal" && al.name === "Hinário Adventista 1996" && Number(al.pivot?.track) === numValue)) return 1;
-            return 0;
-          };
-          return getScore(b) - getScore(a);
-        });
+        this.filter_data.sort((a, b) => (
+          getHymnalSearchPriority(b, numValue) - getHymnalSearchPriority(a, numValue)
+        ));
       }
 
       this.paginateData();

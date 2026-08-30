@@ -5,10 +5,11 @@
     @click="closeSidebar"
   />
 
-  <div class="dashboard-sidebar" :class="{ open: isOpen }">
+  <div class="dashboard-sidebar" :class="{ open: isOpen, 'auto-collapse': autoCollapse }">
     <div class="sidebar-header">
       <div class="logo-container">
         <img src="/ico/logo-horizontal.png" alt="IASDPresenter" class="logo-horizontal" />
+        <img src="/ico/favicon-256x256.png" alt="" class="logo-compact" />
       </div>
     </div>
 
@@ -168,6 +169,10 @@ export default {
   },
   props: {
     modelValue: {
+      type: Boolean,
+      default: false,
+    },
+    autoCollapse: {
       type: Boolean,
       default: false,
     },

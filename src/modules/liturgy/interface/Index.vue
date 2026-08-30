@@ -813,6 +813,7 @@
 </template>
 
 <script lang="ts">
+import { getHymnalSearchPriority, getPreferredHymnalAlbum } from "@/helpers/HymnalPreference";
 import manifest from "../manifest.json";
 import MenuToggleButton from "@/components/MenuToggleButton.vue";
 import draggable from "vuedraggable";
@@ -908,14 +909,9 @@ export default {
       });
       
       if (isNum) {
-        results.sort((a, b) => {
-          const getScore = (item) => {
-            if (item.albums?.some(al => al.type === "hymnal" && al.name === "Hinário Adventista" && Number(al.pivot?.track) === numQuery)) return 2;
-            if (item.albums?.some(al => al.type === "hymnal" && al.name === "Hinário Adventista 1996" && Number(al.pivot?.track) === numQuery)) return 1;
-            return 0;
-          };
-          return getScore(b) - getScore(a);
-        });
+        results.sort((a, b) => (
+          getHymnalSearchPriority(b, numQuery) - getHymnalSearchPriority(a, numQuery)
+        ));
       }
       
       return results.slice(0, 50); // limit to 50 results to keep the menu fast
@@ -1940,8 +1936,8 @@ export default {
         const musicData = await this.$database.get(`${this.$i18n.locale}_musics`, { silent: true });
         if (musicData && Array.isArray(musicData)) {
           this.musicList = musicData.map(m => {
-            const hymnalAlbum = m.albums ? m.albums.find(a => a.type === "hymnal") : null;
-            const hymnalTrack = hymnalAlbum && hymnalAlbum.pivot ? hymnalAlbum.pivot.track : null;
+            const hymnalAlbum = getPreferredHymnalAlbum(m);
+            const hymnalTrack = hymnalAlbum?.pivot?.track ?? hymnalAlbum?.track ?? null;
             return {
               id_music: m.id_music,
               hymnal_track: hymnalTrack,

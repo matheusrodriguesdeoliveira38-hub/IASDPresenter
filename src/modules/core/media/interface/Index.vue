@@ -122,7 +122,50 @@
       </div>
 
       <div class="player-playlist-area transition-all" :class="{'playlist-open': isPlaylistOpen, 'playlist-closed': !isPlaylistOpen}">
-        <v-list class="playlist-scroll h-100 pa-4 bg-transparent pt-6" :width="340" theme="dark">
+        <div class="playlist-panel-header d-flex align-center px-4 pt-4" style="width: 340px;">
+          <v-btn-toggle v-model="panelView" mandatory density="compact" variant="text" color="white">
+            <v-btn value="queue" size="small" :disabled="queue.length === 0">
+              <v-icon start>mdi-playlist-music</v-icon>
+              Fila <span v-if="queue.length" class="ml-1">({{ queue.length }})</span>
+            </v-btn>
+            <v-btn value="slides" size="small">
+              <v-icon start>mdi-view-carousel-outline</v-icon>
+              Slides
+            </v-btn>
+          </v-btn-toggle>
+          <v-spacer />
+          <v-btn
+            v-if="panelView === 'queue' && queue.length"
+            icon="mdi-playlist-remove"
+            variant="text"
+            size="small"
+            color="white"
+            @click="$media.clearQueue()"
+          >
+            <v-tooltip activator="parent" location="top">Limpar fila</v-tooltip>
+          </v-btn>
+        </div>
+
+        <v-list v-if="panelView === 'queue' && queue.length" class="playlist-scroll queue-scroll bg-transparent px-4 pb-4" :width="340" theme="dark">
+          <v-list-item
+            v-for="(item, index) in queue"
+            :key="`${item.id_music}-${index}`"
+            link
+            :active="queueIndex === index"
+            class="playlist-item"
+            :height="60"
+            @click="$media.playQueueIndex(index)"
+          >
+            <template #prepend>
+              <v-icon v-if="queueIndex === index" color="white" size="small">mdi-volume-high</v-icon>
+              <div v-else class="slide-number-chip">{{ item.track || index + 1 }}</div>
+            </template>
+            <v-list-item-title class="slide-title">{{ item.name }}</v-list-item-title>
+            <v-list-item-subtitle>{{ item.mode === 'instrumental' ? 'Playback' : 'Cantado' }}</v-list-item-subtitle>
+          </v-list-item>
+        </v-list>
+
+        <v-list v-else class="playlist-scroll bg-transparent px-4 pb-4" :width="340" theme="dark">
           <v-list-item
             v-for="(item, index) in slides"
             :key="index"
@@ -198,6 +241,7 @@ export default {
     scrollPos: 0,
     preferredFullscreenRequest: 0,
     preferredFullscreenTimer: null,
+    panelView: "slides",
   }),
   computed: {
     module_id() {
@@ -254,8 +298,20 @@ export default {
     isPlaylistOpen() {
       return this.$appdata.get("modules.media.show_playlist") || false;
     },
+    queue() {
+      return this.$media.queue();
+    },
+    queueIndex() {
+      return this.$media.queueIndex();
+    },
   },
   watch: {
+    "queue.length": {
+      immediate: true,
+      handler(length) {
+        this.panelView = length ? "queue" : "slides";
+      },
+    },
     "module.show": {
       immediate: true,
       handler(newVal) {

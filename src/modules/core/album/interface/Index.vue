@@ -37,6 +37,36 @@
             {{ module?.data?.name }}
           </h2>
         </div>
+
+        <v-menu location="bottom end">
+          <template #activator="{ props }">
+            <v-btn
+              v-bind="props"
+              color="primary"
+              variant="flat"
+              prepend-icon="mdi-play"
+              append-icon="mdi-chevron-down"
+              rounded="lg"
+            >
+              Reproduzir todas
+            </v-btn>
+          </template>
+          <v-list density="comfortable" class="mt-2" rounded="lg">
+            <v-list-item
+              prepend-icon="mdi-account-voice"
+              title="Cantado"
+              :disabled="!hasSungTracks"
+              @click="playAll('audio')"
+            />
+            <v-list-item
+              prepend-icon="mdi-music-note"
+              title="Playback"
+              :subtitle="hasPlaybackTracks ? 'Somente faixas com playback' : 'Não disponível neste álbum'"
+              :disabled="!hasPlaybackTracks"
+              @click="playAll('instrumental')"
+            />
+          </v-list>
+        </v-menu>
       </div>
 
       <div class="content-main d-flex flex-column flex-grow-1" style="overflow: hidden; padding-top: 16px;">
@@ -135,6 +165,12 @@ export default {
     isCustomAlbum() {
       return this.module?.id_album === CUSTOM_ALBUM_ID || this.module?.data?.id_album === CUSTOM_ALBUM_ID;
     },
+    hasSungTracks() {
+      return (this.module?.data?.musics || []).some((music) => music.has_music !== 0);
+    },
+    hasPlaybackTracks() {
+      return (this.module?.data?.musics || []).some((music) => Boolean(music.has_instrumental_music));
+    },
   },
   methods: {
     /* METHODS OBRIGATÓRIOS - INÍCIO */
@@ -148,6 +184,12 @@ export default {
       if (mainEl) {
         mainEl.dispatchEvent(new CustomEvent("toggle-sidebar"));
       }
+    },
+    playAll(mode) {
+      this.$media.playQueue(this.module?.data?.musics || [], {
+        id_album: this.module?.data?.id_album,
+        mode,
+      });
     },
     confirmDeleteMusic(item) {
       this.$alert.yesno({

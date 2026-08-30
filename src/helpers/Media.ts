@@ -12,6 +12,8 @@ import $automation from "@/helpers/Automation";
 import $popup from "@/helpers/Popup";
 
 const helper: Record<string, any> = {
+  queueTransitioning: false,
+
   async open(params) {
     if (typeof params !== "object") {
       params = { id_music: params };
@@ -29,6 +31,12 @@ const helper: Record<string, any> = {
       
       $appdata.set("modules.external_media.filePath", "");
       $appdata.set("modules.external_media.show", false);
+    }
+
+    // Uma reprodução avulsa substitui a fila atual. As trocas feitas pela
+    // própria fila e a alteração de cantado/playback preservam-na.
+    if (!params.from_queue && !params.preserve_queue) {
+      this.clearQueue();
     }
 
     const mode = params.mode ? params.mode : "no_audio";
@@ -325,6 +333,7 @@ const helper: Record<string, any> = {
     $automation.restore("media_closed");
     this.stopAudio();
     this.clearVariables();
+    this.clearQueue();
     $appdata.set("modules.media.show", false);
     $appdata.set("modules.media.minimized", false);
 
@@ -437,6 +446,132 @@ const helper: Record<string, any> = {
     window.open($path.file(url), "_blank");
 
     $appdata.set("loading", false);
+  },
+
+  queue() {
+    const queue = $appdata.get("modules.media.queue", []);
+    return Array.isArray(queue) ? queue : [];
+  },
+
+  queueIndex() {
+    return Number($appdata.get("modules.media.queue_index", -1));
+  },
+
+  hasQueue() {
+    return this.queueIndex() >= 0 && this.queue().length > 0;
+  },
+
+  repeatMode() {
+    const mode = $appdata.get("modules.media.config.repeat_mode", "off");
+    return ["off", "one", "all"].includes(mode) ? mode : "off";
+  },
+
+  setRepeatMode(mode) {
+    const normalizedMode = ["one", "all"].includes(mode) ? mode : "off";
+    $appdata.set("modules.media.config.repeat_mode", normalizedMode);
+    return normalizedMode;
+  },
+
+  cycleRepeatMode() {
+    const mode = this.repeatMode();
+    const nextMode = mode === "off"
+      ? "one"
+      : mode === "one" && this.hasQueue()
+        ? "all"
+        : "off";
+    return this.setRepeatMode(nextMode);
+  },
+
+  async playQueue(musics, options: { id_album?: number; mode?: string } = {}) {
+    const mode = options.mode === "instrumental" ? "instrumental" : "audio";
+    const queue = (Array.isArray(musics) ? musics : [])
+      .filter((music) => mode === "instrumental"
+        ? Boolean(music.has_instrumental_music)
+        : music.has_music !== 0)
+      .map((music) => ({
+        id_music: music.id_music,
+        id_album: options.id_album ?? music.id_album ?? null,
+        name: music.name || "",
+        track: music.track || "",
+        mode,
+      }));
+
+    if (!queue.length) {
+      $alert.info({
+        text: mode === "instrumental"
+          ? "Este álbum não possui playbacks disponíveis."
+          : "Este álbum não possui faixas cantadas disponíveis.",
+        translate: false,
+      });
+      return;
+    }
+
+    $appdata.set("modules.media.queue", queue);
+    $appdata.set("modules.media.queue_index", 0);
+    $appdata.set("modules.media.show_playlist", true);
+    await this.open({ ...queue[0], from_queue: true });
+  },
+
+  async playQueueIndex(index) {
+    const queue = this.queue();
+    if (index < 0 || index >= queue.length) return false;
+
+    $appdata.set("modules.media.queue_index", index);
+    await this.open({ ...queue[index], from_queue: true });
+    return true;
+  },
+
+  async nextTrack() {
+    const nextIndex = this.queueIndex() + 1;
+    if (nextIndex < this.queue().length) {
+      return this.playQueueIndex(nextIndex);
+    }
+    if (this.repeatMode() === "all" && this.hasQueue()) {
+      return this.playQueueIndex(0);
+    }
+    await this.close(true);
+    return false;
+  },
+
+  async prevTrack() {
+    const previousIndex = this.queueIndex() - 1;
+    if (previousIndex >= 0) {
+      return this.playQueueIndex(previousIndex);
+    }
+    if (this.repeatMode() === "all" && this.hasQueue()) {
+      return this.playQueueIndex(this.queue().length - 1);
+    }
+    this.goToTime(0);
+    return false;
+  },
+
+  clearQueue() {
+    $appdata.set("modules.media.queue", []);
+    $appdata.set("modules.media.queue_index", -1);
+    if (this.repeatMode() === "all") {
+      this.setRepeatMode("off");
+    }
+  },
+
+  async handleTrackEnded() {
+    if (this.queueTransitioning) return;
+    this.queueTransitioning = true;
+    try {
+      if (this.repeatMode() === "one") {
+        this.goToTime(0);
+        this.play();
+        return;
+      }
+      if (this.queueIndex() >= 0 && this.queueIndex() < this.queue().length - 1) {
+        await this.playQueueIndex(this.queueIndex() + 1);
+      } else if (this.repeatMode() === "all" && this.hasQueue()) {
+        await this.playQueueIndex(0);
+      } else {
+        await this.close(true);
+      }
+    } finally {
+      this.queueTransitioning = false;
+    }
   },
 
   stopAudio() {
@@ -746,7 +881,7 @@ ${data.name}` : data.name)
     const current_time = $appdata.get("modules.media.config.current_time");
     const duration = $appdata.get("modules.media.config.duration");
     if (!is_paused && current_time >= duration && duration > 0) {
-      this.close(true);
+      this.handleTrackEnded();
     }
   },
   async fadeOut(audio, durationMs = 1000) {
@@ -811,6 +946,12 @@ ${data.name}` : data.name)
         const currentActive = $appdata.get("modules.media.config.active_audio") || "a";
         if (this.id === `__audio_${currentActive}`) {
           self.timeUpdate.bind(self)();
+        }
+      });
+      el.addEventListener("ended", function () {
+        const currentActive = $appdata.get("modules.media.config.active_audio") || "a";
+        if (this.id === `__audio_${currentActive}`) {
+          self.handleTrackEnded.bind(self)();
         }
       });
     }

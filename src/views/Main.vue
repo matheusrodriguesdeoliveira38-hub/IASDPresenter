@@ -1,9 +1,21 @@
 <template>
-  <AppSidebar v-if="!isLauncherLayout" v-model="sidebarOpen" />
+  <AppSidebar
+    v-if="!isLauncherLayout"
+    v-model="sidebarOpen"
+    :auto-collapse="sidebarAutoCollapse"
+  />
 
   <AppAlert />
 
-  <div class="main-container" :class="{ 'sidebar-open': sidebarOpen, 'launcher-shell': isLauncherLayout }" @toggle-sidebar="toggleSidebar">
+  <div
+    class="main-container"
+    :class="{
+      'sidebar-open': sidebarOpen,
+      'sidebar-auto-collapse': sidebarAutoCollapse && !isLauncherLayout,
+      'launcher-shell': isLauncherLayout,
+    }"
+    @toggle-sidebar="toggleSidebar"
+  >
     <v-main class="bg-main">
       <AppModules />
       
@@ -179,6 +191,7 @@ export default {
   data() {
     return {
       sidebarOpen: false,
+      sidebarAutoCollapse: false,
       remoteControlUnsubscribe: null,
       remoteControlQueue: Promise.resolve(),
       remoteControlStateTimer: null,
@@ -289,6 +302,8 @@ export default {
     this.closeAllModules();
 
     this.$userdata.load();
+    this.sidebarAutoCollapse = this.$userdata.get("modules.config.sidebar_auto_collapse") === true;
+    window.addEventListener("sidebar-auto-collapse-change", this.handleSidebarAutoCollapseChange);
 
     const theme = this.$userdata.get("theme");
     if (theme !== "") {
@@ -376,6 +391,7 @@ export default {
     }
   },
   beforeUnmount() {
+    window.removeEventListener("sidebar-auto-collapse-change", this.handleSidebarAutoCollapseChange);
     if (this.remoteControlUnsubscribe) {
       this.remoteControlUnsubscribe();
     }
@@ -384,6 +400,9 @@ export default {
     }
   },
   methods: {
+    handleSidebarAutoCollapseChange(event) {
+      this.sidebarAutoCollapse = event.detail === true;
+    },
     toggleSidebar() {
       if (this.isLauncherLayout) return;
       this.sidebarOpen = !this.sidebarOpen;
@@ -439,6 +458,8 @@ export default {
           progress: Number(mediaConfig.progress || 0),
           currentTime: Number(mediaConfig.current_time || 0),
           duration: Number(mediaConfig.duration || 0),
+          repeatMode: this.$media.repeatMode(),
+          repeatAvailable: Boolean(mediaConfig.audio),
         },
       }).catch(() => {});
     },
@@ -486,6 +507,14 @@ export default {
       }
 
       if (command.type !== "control") return;
+
+      if (command.action === "repeat") {
+        if (this.$media.config()?.audio) {
+          this.$media.cycleRepeatMode();
+          this.publishRemoteControlState();
+        }
+        return;
+      }
 
       if (this.$appdata.get("popup_module") === "bible") {
         await this.handleRemoteBibleControl(command.action);
@@ -912,6 +941,10 @@ export default {
 
 .main-container.launcher-shell {
   margin-left: 0;
+}
+
+.main-container.sidebar-auto-collapse {
+  margin-left: var(--sidebar-collapsed-width, 84px);
 }
 
 @media (max-width: 1024px) {

@@ -12,6 +12,7 @@
   overflow: hidden;
   border-right: 1px solid var(--sidebar-border);
   box-shadow: 2px 0 10px rgba(0, 0, 0, 0.1);
+  transition: width 0.3s ease, transform 0.3s ease;
 
   .sidebar-header {
     padding: 24px 24px;
@@ -28,6 +29,13 @@
         height: 40px;
         object-fit: contain;
         display: block;
+      }
+
+      .logo-compact {
+        display: none;
+        width: 40px;
+        height: 40px;
+        object-fit: contain;
       }
     }
   }
@@ -218,6 +226,46 @@
       }
     }
   }
+
+  &.auto-collapse:not(:hover) {
+    width: var(--sidebar-collapsed-width, 84px);
+
+    .sidebar-header {
+      padding-left: 16px;
+      padding-right: 16px;
+
+      .logo-horizontal {
+        display: none;
+      }
+
+      .logo-compact {
+        display: block;
+      }
+    }
+
+    .nav-item,
+    .nav-item.main-item {
+      margin-left: 12px;
+      margin-right: 12px;
+
+      .nav-link {
+        justify-content: center;
+        gap: 0;
+        padding-left: 12px;
+        padding-right: 12px;
+
+        .nav-text,
+        .nav-arrow,
+        > div:not(.nav-icon) {
+          display: none;
+        }
+      }
+    }
+
+    .nav-submenu {
+      display: none;
+    }
+  }
 }
 
 .sidebar-overlay {
@@ -242,10 +290,53 @@
   
   .dashboard-sidebar {
     transform: translateX(-100%);
-    transition: transform 0.3s ease;
+    width: var(--sidebar-width);
     
     &.open {
       transform: translateX(0);
+    }
+
+    &.auto-collapse:not(:hover) {
+      width: var(--sidebar-width);
+
+      .sidebar-header {
+        padding-left: 24px;
+        padding-right: 24px;
+
+        .logo-horizontal {
+          display: block;
+        }
+
+        .logo-compact {
+          display: none;
+        }
+      }
+
+      .nav-item,
+      .nav-item.main-item {
+        margin-left: 16px;
+        margin-right: 16px;
+
+        .nav-link {
+          justify-content: flex-start;
+          gap: 16px;
+          padding-left: 16px;
+          padding-right: 16px;
+
+          .nav-text,
+          .nav-arrow {
+            display: initial;
+          }
+
+          > div:not(.nav-icon) {
+            display: block;
+          }
+        }
+      }
+
+      .nav-submenu {
+        display: block;
+      }
     }
   }
 }

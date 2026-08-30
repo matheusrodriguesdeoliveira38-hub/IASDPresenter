@@ -90,6 +90,71 @@
                         <ModernColorPicker v-model="accent_color" />
                       </div>
                     </div>
+
+                    <v-divider class="my-8" style="opacity: 0.1;" />
+
+                    <div>
+                      <div class="d-flex align-center mb-4">
+                        <v-icon color="primary" class="mr-3" size="24">
+                          mdi-view-dashboard
+                        </v-icon>
+                        <div>
+                          <h3 class="font-weight-bold" style="color: var(--sidebar-text); font-size: 1.1rem; line-height: 1.2;">
+                            {{ t('home_layout') }}
+                          </h3>
+                          <div class="text-caption" style="color: var(--sidebar-text-secondary);">
+                            {{ t('home_layout_desc') }}
+                          </div>
+                        </div>
+                      </div>
+
+                      <v-btn-toggle
+                        v-model="home_layout"
+                        color="primary"
+                        variant="tonal"
+                        mandatory
+                        class="rounded-xl w-100 d-flex"
+                        style="min-height: 48px; background: var(--card-bg); box-shadow: inset 0 0 0 1px var(--border-color);"
+                      >
+                        <v-btn value="classic" class="flex-grow-1 text-none font-weight-bold">
+                          <v-icon start size="20">
+                            mdi-magnify
+                          </v-icon>
+                          {{ t('home_layout_classic') }}
+                        </v-btn>
+                        <v-btn value="launcher" class="flex-grow-1 text-none font-weight-bold">
+                          <v-icon start size="20">
+                            mdi-apps
+                          </v-icon>
+                          {{ t('home_layout_launcher') }}
+                        </v-btn>
+                      </v-btn-toggle>
+                    </div>
+
+                    <v-divider class="my-8" style="opacity: 0.1;" />
+
+                    <div class="d-flex align-center justify-space-between">
+                      <div class="d-flex align-center mr-4">
+                        <v-icon color="primary" class="mr-3" size="24">
+                          mdi-dock-left
+                        </v-icon>
+                        <div>
+                          <h3 class="font-weight-bold" style="color: var(--sidebar-text); font-size: 1.1rem; line-height: 1.2;">
+                            {{ t('sidebar_auto_collapse') }}
+                          </h3>
+                          <div class="text-caption" style="color: var(--sidebar-text-secondary);">
+                            {{ t('sidebar_auto_collapse_desc') }}
+                          </div>
+                        </div>
+                      </div>
+                      <v-switch
+                        v-model="sidebar_auto_collapse"
+                        color="primary"
+                        inset
+                        hide-details
+                        class="font-weight-medium"
+                      />
+                    </div>
                   </v-card-text>
                 </v-card>
                 </CollapsiblePanel>
@@ -158,42 +223,32 @@
 
                     <v-divider class="mb-8" style="opacity: 0.1;" />
 
-                    <div>
-                      <div class="d-flex align-center mb-4">
+                    <!-- HINÁRIO PRINCIPAL -->
+                    <div class="d-flex align-center justify-space-between" style="gap: 24px;">
+                      <div class="d-flex align-center">
                         <v-icon color="primary" class="mr-3" size="24">
-                          mdi-view-dashboard
+                          mdi-book-music
                         </v-icon>
                         <div>
                           <h3 class="font-weight-bold" style="color: var(--sidebar-text); font-size: 1.1rem; line-height: 1.2;">
-                            {{ t('home_layout') }}
+                            {{ t('primary_hymnal') }}
                           </h3>
                           <div class="text-caption" style="color: var(--sidebar-text-secondary);">
-                            {{ t('home_layout_desc') }}
+                            {{ t('primary_hymnal_desc') }}
                           </div>
                         </div>
                       </div>
-
-                      <v-btn-toggle
-                        v-model="home_layout"
-                        color="primary"
-                        variant="tonal"
-                        mandatory
-                        class="rounded-xl w-100 d-flex"
-                        style="min-height: 48px; background: var(--card-bg); box-shadow: inset 0 0 0 1px var(--border-color);"
-                      >
-                        <v-btn value="classic" class="flex-grow-1 text-none font-weight-bold">
-                          <v-icon start size="20">
-                            mdi-magnify
-                          </v-icon>
-                          {{ t('home_layout_classic') }}
-                        </v-btn>
-                        <v-btn value="launcher" class="flex-grow-1 text-none font-weight-bold">
-                          <v-icon start size="20">
-                            mdi-apps
-                          </v-icon>
-                          {{ t('home_layout_launcher') }}
-                        </v-btn>
-                      </v-btn-toggle>
+                      <v-select
+                        v-model="primary_hymnal"
+                        :items="primaryHymnalOptions"
+                        item-title="title"
+                        item-value="value"
+                        variant="outlined"
+                        density="comfortable"
+                        hide-details
+                        class="flex-shrink-0"
+                        style="max-width: 230px;"
+                      />
                     </div>
 
                     <v-divider class="my-8" style="opacity: 0.1;" />
@@ -277,13 +332,31 @@
                             density="compact"
                           />
                           <v-alert
-                            v-if="light_disable_hardware_acceleration"
+                            v-if="performanceRestartRequired"
                             type="info"
                             variant="tonal"
                             density="compact"
                             class="mt-3 rounded-lg"
                           >
-                            Essa alteração passa a valer depois de reiniciar o aplicativo.
+                            <div>
+                              {{ light_disable_hardware_acceleration
+                                ? 'Reinicie o aplicativo para desativar a aceleração de hardware.'
+                                : 'Reinicie o aplicativo para reativar a aceleração de hardware.' }}
+                            </div>
+                            <div v-if="performance_restart_error" class="text-caption mt-2">
+                              {{ performance_restart_error }}
+                            </div>
+                            <v-btn
+                              class="mt-3 text-none"
+                              color="primary"
+                              variant="flat"
+                              size="small"
+                              prepend-icon="mdi-restart"
+                              :loading="performance_restart_loading"
+                              @click="restartForPerformanceChange"
+                            >
+                              Reiniciar agora
+                            </v-btn>
                           </v-alert>
                         </div>
                       </v-expand-transition>
@@ -645,7 +718,7 @@
                 </v-card>
                 </CollapsiblePanel>
 
-                <CollapsiblePanel :title="t('music_slides')" subtitle="Saídas, janela e aparência da projeção" icon="mdi-presentation-play" class="mb-6">
+                <CollapsiblePanel :title="t('music_slides')" subtitle="Saídas e janela da projeção" icon="mdi-presentation-play" class="mb-6">
                 <v-card class="settings-card legacy-panel-content rounded-xl pa-2 mb-6" flat style="background: var(--card-bg); box-shadow: var(--shadow);">
                   <v-card-text class="pa-6">
                     <div class="d-flex align-center mb-6">
@@ -716,6 +789,43 @@
                       >
                         Nenhum monitor estendido (secundário) detectado no sistema.
                       </v-alert>
+                    </div>
+
+                    <v-divider class="mb-8" style="opacity: 0.1;" />
+
+                    <!-- TELA ÚNICA / PRINCIPAL -->
+                    <div class="projection-block projection-block--window">
+                      <div class="d-flex align-center mb-4">
+                        <v-icon size="20" color="primary" class="mr-2">
+                          mdi-monitor
+                        </v-icon>
+                        <span class="text-subtitle-1 font-weight-bold" style="color: var(--sidebar-text);">{{ t('main_screen') }}</span>
+                      </div>
+
+                      <v-switch
+                        v-model="slide_fullscreen"
+                        label="Abrir música em tela cheia na tela principal"
+                        color="primary"
+                        inset
+                        hide-details
+                        class="mb-2 font-weight-medium"
+                      />
+                      <v-switch
+                        v-model="slide_disable_main_if_extended"
+                        label="Desativar tela principal caso haja monitor estendido"
+                        color="primary"
+                        inset
+                        hide-details
+                        class="mb-2 font-weight-medium"
+                      />
+                      <v-switch
+                        v-model="slide_minimize_player"
+                        label="Minimizar o player automaticamente"
+                        color="primary"
+                        inset
+                        hide-details
+                        class="font-weight-medium"
+                      />
                     </div>
                   </v-card-text>
                 </v-card>
@@ -897,45 +1007,9 @@
                     </div>
                     </CollapsiblePanel>
 
-                <CollapsiblePanel title="Aparência dos Slides" subtitle="Janela principal e personalização visual da projeção" icon="mdi-palette-outline" class="mb-6">
+                <CollapsiblePanel title="Aparência dos Slides" subtitle="Personalização visual da projeção" icon="mdi-palette-outline" class="mb-6">
                 <v-card class="settings-card legacy-panel-content rounded-xl pa-2 mb-6" flat style="background: var(--card-bg); box-shadow: var(--shadow);">
                   <v-card-text class="pa-6">
-                    <div class="mb-8 projection-block projection-block--window">
-                      <div class="d-flex align-center mb-4">
-                        <v-icon size="20" color="primary" class="mr-2">
-                          mdi-monitor
-                        </v-icon>
-                        <span class="text-subtitle-1 font-weight-bold" style="color: var(--sidebar-text);">{{ t('main_screen') }}</span>
-                      </div>
-
-                      <v-switch
-                        v-model="slide_fullscreen"
-                        label="Abrir música em tela cheia na tela principal"
-                        color="primary"
-                        inset
-                        hide-details
-                        class="mb-2 font-weight-medium"
-                      />
-                      <v-switch
-                        v-model="slide_disable_main_if_extended"
-                        label="Desativar tela principal caso haja monitor estendido"
-                        color="primary"
-                        inset
-                        hide-details
-                        class="mb-2 font-weight-medium"
-                      />
-                      <v-switch
-                        v-model="slide_minimize_player"
-                        label="Minimizar o player automaticamente"
-                        color="primary"
-                        inset
-                        hide-details
-                        class="font-weight-medium"
-                      />
-                    </div>
-
-                    <v-divider class="mb-8" style="opacity: 0.1;" />
-
                     <!-- PERSONALIZAÇÃO -->
                     <div class="projection-block projection-block--visual">
                       <div class="d-flex align-center mb-4">
@@ -1982,12 +2056,17 @@ export default {
     language: "pt",
     accent_color: "#0097d7",
     home_layout: "classic",
+    sidebar_auto_collapse: false,
     show_home_history: true,
+    primary_hymnal: "hymnal",
     hardware_accel: true,
     light_mode: false,
     light_optimize_presentations: true,
     light_limit_projection_windows: true,
     light_disable_hardware_acceleration: false,
+    applied_disable_hardware_acceleration: false,
+    performance_restart_loading: false,
+    performance_restart_error: "",
     fullscreen_mode: false,
     
     fade_effect: false,
@@ -2084,6 +2163,8 @@ export default {
     ],
     automationTargetOptions: [
       { title: "Canal de entrada", value: "input" },
+      { title: "Line In L", value: "line-left" },
+      { title: "Line In R", value: "line-right" },
       { title: "Master", value: "master" },
     ],
     
@@ -2147,6 +2228,16 @@ export default {
       const found = this.languagesList.find(l => l.code === this.language);
       return found ? found.name : "Português";
     },
+    primaryHymnalOptions() {
+      return [
+        { title: this.t("primary_hymnal_current"), value: "hymnal" },
+        { title: this.t("primary_hymnal_1996"), value: "hymnal_1996" },
+      ];
+    },
+    performanceRestartRequired() {
+      const requestedState = this.light_mode === true && this.light_disable_hardware_acceleration === true;
+      return requestedState !== this.applied_disable_hardware_acceleration;
+    },
   },
   watch: {
     language(val) {
@@ -2162,8 +2253,16 @@ export default {
     show_home_history(val) {
       this.$userdata.set("show_home_history", val);
     },
+    primary_hymnal(val) {
+      this.$userdata.set("modules.config.primary_hymnal", val === "hymnal_1996" ? val : "hymnal");
+    },
     home_layout(val) {
       this.$userdata.set("modules.config.home_layout", val || "classic");
+    },
+    sidebar_auto_collapse(val) {
+      const enabled = val === true;
+      this.$userdata.set("modules.config.sidebar_auto_collapse", enabled);
+      window.dispatchEvent(new CustomEvent("sidebar-auto-collapse-change", { detail: enabled }));
     },
     light_mode(val) {
       this.$userdata.set("modules.config.light_mode", val);
@@ -2319,7 +2418,7 @@ export default {
       immediate: true,
     },
   },
-  mounted() {
+  async mounted() {
     if(this.$userdata.get("language")){
       this.language = this.$userdata.get("language");
     }
@@ -2339,6 +2438,16 @@ export default {
     const saved_home_layout = this.$userdata.get("modules.config.home_layout");
     if (saved_home_layout) {
       this.home_layout = saved_home_layout;
+    }
+
+    const saved_primary_hymnal = this.$userdata.get("modules.config.primary_hymnal");
+    if (["hymnal", "hymnal_1996"].includes(saved_primary_hymnal)) {
+      this.primary_hymnal = saved_primary_hymnal;
+    }
+
+    const saved_sidebar_auto_collapse = this.$userdata.get("modules.config.sidebar_auto_collapse");
+    if (saved_sidebar_auto_collapse !== undefined && saved_sidebar_auto_collapse !== null) {
+      this.sidebar_auto_collapse = saved_sidebar_auto_collapse === true;
     }
 
     let savedSlideMonitor = this.$userdata.get("modules.config.slide_monitor");
@@ -2392,6 +2501,24 @@ export default {
       }
     });
 
+    // O arquivo do processo principal é a fonte de verdade para opções que
+    // só podem ser aplicadas antes da inicialização do Electron.
+    if (window.electronAPI?.getPerformanceConfig) {
+      try {
+        const savedPerformanceConfig = await window.electronAPI.getPerformanceConfig();
+        if (typeof savedPerformanceConfig?.lightMode === "boolean") {
+          this.light_mode = savedPerformanceConfig.lightMode;
+        }
+        if (typeof savedPerformanceConfig?.disableHardwareAcceleration === "boolean") {
+          this.light_disable_hardware_acceleration = savedPerformanceConfig.disableHardwareAcceleration;
+        }
+        this.applied_disable_hardware_acceleration =
+          savedPerformanceConfig?.appliedDisableHardwareAcceleration === true;
+      } catch (error) {
+        console.error("Não foi possível restaurar as configurações de desempenho", error);
+      }
+    }
+
     this.loadSystemFonts();
     this.loadRemoteControlStatus();
     this.loadAutomationConfig();
@@ -2433,10 +2560,30 @@ export default {
     },
     async syncElectronPerformanceConfig() {
       if (!window.electronAPI?.savePerformanceConfig) return;
-      await window.electronAPI.savePerformanceConfig({
+      return await window.electronAPI.savePerformanceConfig({
         lightMode: this.light_mode,
         disableHardwareAcceleration: this.light_mode && this.light_disable_hardware_acceleration,
       });
+    },
+    async restartForPerformanceChange() {
+      if (!window.electronAPI?.restartApp) {
+        this.performance_restart_error = "O reinício automático não está disponível.";
+        return;
+      }
+
+      this.performance_restart_loading = true;
+      this.performance_restart_error = "";
+      const performanceConfig = {
+        lightMode: this.light_mode === true,
+        disableHardwareAcceleration: this.light_mode === true && this.light_disable_hardware_acceleration === true,
+      };
+
+      try {
+        await window.electronAPI.restartApp(performanceConfig);
+      } catch (error) {
+        this.performance_restart_error = error?.message || "Não foi possível reiniciar o aplicativo.";
+        this.performance_restart_loading = false;
+      }
     },
     applyRemoteControlStatus(status) {
       if (!status) return;
