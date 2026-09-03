@@ -13,7 +13,13 @@ export default defineConfig(({ mode }) => {
   return {
     base: env.VITE_BASE_URL ?? "/",
     plugins: [
-      vue(),
+      vue({
+        template: {
+          compilerOptions: {
+            isCustomElement: (tag) => tag === "webview",
+          },
+        },
+      }),
       // https://github.com/vuetifyjs/vuetify-loader/tree/next/packages/vite-plugin
       vuetify({
         autoImport: true,

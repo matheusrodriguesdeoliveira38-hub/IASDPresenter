@@ -13,6 +13,7 @@ O IASDPresenter e construido com Electron, Vue 3 e Vuetify, com foco em uso loca
 - Suporte a apresentacoes, PDFs e arquivos multimidia.
 - Modulos para Biblia, hinarios, coletaneas, liturgia, relogio, contador, sorteios e animacoes.
 - Controle remoto local via navegador, usando o endereco da rede.
+- Saida web 1080p para OBS Browser Source e vMix Web Input, sem hardware ou plugins extras.
 - Tema claro/escuro e cor principal personalizavel pelo app.
 - Logo e identidade visual IASDPresenter.
 - Autoatualizacao com `electron-updater` a partir do repositorio oficial.
@@ -161,6 +162,12 @@ O aplicativo usa a identidade **IASDPresenter**, com:
 - cor principal personalizavel em `Configuracoes > Aparencia`.
 
 A cor principal altera os destaques do sistema, incluindo botoes, abas, icones `primary`, selecoes, gradientes e variaveis CSS globais.
+
+## Saida web para OBS e vMix
+
+Com o servidor de rede e a modalidade `Ativar saida web` ligados, o IASDPresenter publica a janela de projecao em `http://IP-DO-COMPUTADOR:1975/output`. As URLs disponiveis aparecem em `Configuracoes > Rede > Saida web para OBS e vMix` e podem ser copiadas diretamente. A modalidade pode ser desativada sem interromper o controle remoto.
+
+No OBS, adicione uma fonte `Browser Source`; no vMix, use `Web Input`. Cole a URL e configure a fonte com 1920 x 1080. O fluxo so captura quadros enquanto houver um cliente conectado.
 
 ## Desenvolvimento Electron
 

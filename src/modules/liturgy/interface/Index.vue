@@ -1,6 +1,6 @@
 <template>
   <v-slide-y-reverse-transition>
-    <div v-if="module?.show" ref="moduleContainer" class="module-full-page dashboard-home d-flex flex-column">
+    <div v-if="module?.show" ref="moduleContainer" class="module-full-page dashboard-home liturgy-page d-flex flex-column">
       <!-- Top Bar -->
       <div class="search-header pb-0 flex-shrink-0" style="padding-top: 24px; padding-left: 24px; padding-right: 24px; display: flex; align-items: center;">
         <MenuToggleButton style="margin-right: 16px;" @toggle-sidebar="toggleSidebar" />
@@ -55,7 +55,7 @@
       </div>
 
       <!-- Segmented Control for Days -->
-      <div class="px-6 py-4 flex-shrink-0" style="border-bottom: 1px solid var(--border-color, rgba(0,0,0,0.05));">
+      <div class="liturgy-page-strip px-6 py-4 flex-shrink-0" style="border-bottom: 1px solid var(--border-color, rgba(0,0,0,0.05));">
         <div 
           style="background: rgba(128, 128, 128, 0.15); border-radius: 12px; padding: 4px; display: flex; gap: 4px; width: 100%; overflow-x: auto;"
           @wheel.prevent="onCustomWheelScroll"
@@ -91,7 +91,7 @@
       <v-expand-transition>
         <div 
           v-if="selectedDay === 'custom'" 
-          class="px-6 py-3 d-flex align-center flex-shrink-0 custom-liturgy-scroll" 
+          class="liturgy-page-strip px-6 py-3 d-flex align-center flex-shrink-0 custom-liturgy-scroll"
           style="gap: 8px; overflow-x: auto; background: rgba(128, 128, 128, 0.1); border-bottom: 1px solid var(--border-color, rgba(0,0,0,0.05)); max-width: 100%;"
           @wheel.prevent="onCustomWheelScroll"
         >
@@ -818,7 +818,7 @@ import manifest from "../manifest.json";
 import MenuToggleButton from "@/components/MenuToggleButton.vue";
 import draggable from "vuedraggable";
 import RichTextEditor from "./RichTextEditor.vue";
-import { isAudioFile, openExternalMedia } from "@/helpers/ExternalMedia";
+import { isAudioFile, isWebUrl, openExternalMedia } from "@/helpers/ExternalMedia";
 import { isYouTubeUrl } from "@/helpers/YouTube";
 
 export default {
@@ -1662,35 +1662,41 @@ export default {
           break;
         case "link":
           if (item.url) {
-            if (isYouTubeUrl(item.url)) {
+            if (isWebUrl(item.url)) {
               openExternalMedia(this.$appdata, {
                 filePath: item.url,
-                title: item.name || "YouTube",
+                title: item.name || (isYouTubeUrl(item.url) ? "YouTube" : "Link"),
                 subtitle: item.subtitle || item.url,
                 volume: shouldTransition ? 0 : this.liturgyExternalTargetVolume,
               });
               this.$appdata.set("modules.external_media.show", true);
               targetModule = "external_media";
-            } else if (window.electronAPI && window.electronAPI.openExternal) {
-              window.electronAPI.openExternal(item.url);
-            } else {
-              window.open(item.url, "_blank");
             }
           }
           break;
       }
 
       if (targetModule) {
+        const usesIndependentMediaSettings = targetModule === "external_media"
+          && this.$userdata.get("modules.config.media_sync_projection_settings") === false;
+        const fullscreen = usesIndependentMediaSettings
+          ? this.$userdata.get("modules.config.media_slide_fullscreen") !== false
+          : this.$userdata.get("modules.config.slide_fullscreen") !== false;
+        const showExternalMediaOnlyInOperator = targetModule === "external_media" && fullscreen;
         const popups = this.$appdata.get("popups") || [];
         const isPopupOpened = popups.some(p => !p.closed);
         const currentModule = this.$appdata.get("popup_module");
 
-        if (!isPopupOpened || currentModule !== targetModule) {
+        if (!showExternalMediaOnlyInOperator && (!isPopupOpened || currentModule !== targetModule)) {
           let selectedMonitors = [];
           if (window.electronAPI && window.electronAPI.getDisplays) {
             const displays = await window.electronAPI.getDisplays();
             if (displays && displays.length > 1) {
-              let configMonitors = this.$userdata.get("modules.config.slide_monitor");
+              let configMonitors = this.$userdata.get(
+                usesIndependentMediaSettings
+                  ? "modules.config.media_slide_monitor"
+                  : "modules.config.slide_monitor",
+              );
               if (!Array.isArray(configMonitors)) {
                 configMonitors = configMonitors ? [configMonitors] : [];
               }
@@ -1700,9 +1706,9 @@ export default {
           }
           
           if (selectedMonitors.length > 0) {
-            await this.$popup.syncMonitors(selectedMonitors, targetModule, true);
-          } else {
-            this.$popup.open({ module: targetModule, fullscreen: true });
+            await this.$popup.syncMonitors(selectedMonitors, targetModule, true, fullscreen);
+          } else if (targetModule !== "external_media") {
+            this.$popup.open({ module: targetModule, fullscreen });
           }
         }
         if (targetModule === "presentation" && window.electronAPI?.setPresentationShortcutsEnabled) {

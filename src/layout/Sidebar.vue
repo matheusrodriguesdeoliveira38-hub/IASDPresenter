@@ -103,7 +103,7 @@
             class="nav-icon" 
             :color="currentModule === 'sync' ? '' : 'primary'"
           >
-            mdi-library
+            mdi-folder
           </v-icon>
           <span class="nav-text font-weight-bold" :style="{ color: currentModule === 'sync' ? '' : 'var(--accent-blue)' }">{{ $t("sidebar.local_library") }}</span>
           

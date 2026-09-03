@@ -195,12 +195,12 @@ export default {
 
 <style scoped>
 .help-page { position: absolute; inset: 0; z-index: 50; overflow: hidden; }
-.help-header { padding: 22px 24px 0; display: flex; align-items: flex-end; justify-content: space-between; gap: 20px; flex-wrap: wrap; background: var(--main-bg); border-bottom: 1px solid var(--border-color); }
+.help-header { padding: 28px var(--page-gutter) 0; display: flex; align-items: center; justify-content: space-between; gap: 20px; flex-wrap: wrap; background: transparent; border-bottom: 1px solid var(--border-color); }
 .section-title { color: var(--sidebar-text); font-size: 24px; font-weight: 650; line-height: 1.1; letter-spacing: -0.02em; }
 .help-subtitle, .secondary-text { color: var(--sidebar-text-secondary); }
 .help-subtitle { margin-top: 4px; font-size: 12px; }
 .help-tabs-wrapper { max-width: 100%; overflow-x: auto; }
-.help-content { min-height: 0; overflow: hidden; background: var(--main-bg); }
+.help-content { min-height: 0; overflow: hidden; background: transparent; }
 .about-scroll { padding-top: 28px; }
 .about-container { max-width: 660px; }
 .settings-card { background: var(--card-bg); box-shadow: var(--shadow); border: 1px solid var(--border-color); }
@@ -228,7 +228,7 @@ export default {
   .manual-nav-item { width: auto; min-width: max-content; grid-template-columns: 22px auto auto; }
 }
 @media (max-width: 650px) {
-  .help-header { padding: 16px 16px 0; gap: 12px; }
+  .help-header { padding: 16px var(--page-gutter) 0; gap: 12px; }
   .help-title-group, .help-tabs-wrapper { width: 100%; }
   .help-subtitle { display: none; }
   .section-title { font-size: 20px; }

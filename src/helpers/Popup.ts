@@ -6,6 +6,7 @@ import { markRaw } from "vue";
 const helper: Record<string, any> = {
   projectionRole: "projection",
   returnRole: "return_monitor",
+  webOutputRole: "web_output",
 
   async open(params) {
     if (typeof params !== "object") {
@@ -62,9 +63,7 @@ const helper: Record<string, any> = {
     }
 
     $appdata.set("popups", popups);
-    if (popups.length > 0) {
-      $appdata.set("popup", popups[0]);
-    }
+    $appdata.set("popup", popups[0] || null);
   },
   async exit() {
     const popups = $appdata.get("popups") || [];
@@ -76,6 +75,56 @@ const helper: Record<string, any> = {
     $appdata.set("popup_module", "");
     $appdata.set("popups", []);
     $appdata.set("popup", null);
+  },
+  closeProjection(moduleName) {
+    let popups = $appdata.get("popups") || [];
+    popups.forEach(popup => {
+      const role = popup?.popupRole || this.projectionRole;
+      if (popup && !popup.closed && role === this.projectionRole && popup.popupModule === moduleName) {
+        popup.close();
+      }
+    });
+    popups = popups.filter(popup => popup && !popup.closed);
+    $appdata.set("popups", popups);
+    $appdata.set("popup", popups[0] || null);
+
+    const sameModuleStillOpen = popups.some(popup => popup.popupModule === moduleName);
+    if (!sameModuleStillOpen && $appdata.get("popup_module") === moduleName) {
+      $appdata.set("popup_module", "");
+    }
+  },
+  async openWebOutput(moduleName) {
+    if (!moduleName) return;
+
+    let popups = ($appdata.get("popups") || []).filter(popup => popup && !popup.closed);
+    const existing = popups.find(popup => popup.popupRole === this.webOutputRole);
+    if (existing && existing.popupModule === moduleName) return;
+
+    if (existing && !existing.closed) existing.close();
+    popups = popups.filter(popup => popup !== existing && !popup.closed);
+
+    $appdata.set("popup_module", moduleName);
+    const newPopup = $window.open(
+      `#/popup?module=${moduleName}&webOutput=1`,
+      "IASDPresenterWebOutput",
+      "width=1920,height=1080,weboutput=yes",
+    );
+    newPopup.popupRole = this.webOutputRole;
+    newPopup.popupModule = moduleName;
+    newPopup.popupFullscreen = false;
+    popups.push(markRaw(newPopup));
+    $appdata.set("popups", popups);
+    if (!$appdata.get("popup")) $appdata.set("popup", newPopup);
+  },
+  closeWebOutput() {
+    let popups = $appdata.get("popups") || [];
+    popups.forEach(popup => {
+      if (popup && !popup.closed && popup.popupRole === this.webOutputRole) popup.close();
+    });
+    popups = popups.filter(popup => popup && !popup.closed && popup.popupRole !== this.webOutputRole);
+    $appdata.set("popups", popups);
+    $appdata.set("popup", popups[0] || null);
+    if (popups.length === 0) $appdata.set("popup_module", "");
   },
   async syncMonitors(monitors, moduleName = "media", forceOpen = false, fullscreen = true) {
     let popups = $appdata.get("popups") || [];

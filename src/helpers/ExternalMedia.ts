@@ -17,6 +17,15 @@ export function isVideoFile(value) {
   return VIDEO_EXTENSIONS.includes(getFileExtension(value));
 }
 
+export function isWebUrl(value) {
+  try {
+    const url = new URL(String(value || ""));
+    return url.protocol === "http:" || url.protocol === "https:";
+  } catch (_error) {
+    return false;
+  }
+}
+
 export function openExternalMedia(appdata, { filePath, title = "", subtitle = "", volume = null }) {
   const currentVolume = appdata.get("modules.external_media.config.volume");
 
@@ -27,6 +36,7 @@ export function openExternalMedia(appdata, { filePath, title = "", subtitle = ""
   appdata.set("modules.external_media.config", {
     is_paused: false,
     current_time: 0,
+    playback_updated_at: Date.now(),
     progress: 0,
     duration: 0,
     volume: volume ?? currentVolume ?? 100,

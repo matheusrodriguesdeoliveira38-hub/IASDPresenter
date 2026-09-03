@@ -1,7 +1,7 @@
 import $appdata from "@/helpers/AppData";
 import $userdata from "@/helpers/UserData";
 
-const DEFAULT_PRIMARY = "#0097d7";
+const DEFAULT_PRIMARY = "#2563eb";
 
 function normalizeHex(color) {
   if (!color || typeof color !== "string") return DEFAULT_PRIMARY;

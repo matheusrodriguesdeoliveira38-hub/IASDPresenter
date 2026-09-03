@@ -565,7 +565,7 @@
                                 
                                 <v-switch
                                   v-model="media_slide_fullscreen"
-                                  label="Abrir mídia em tela cheia na tela principal"
+                                  label="Abrir mídias e links em tela cheia na tela principal"
                                   color="primary"
                                   inset
                                   hide-details
@@ -804,7 +804,7 @@
 
                       <v-switch
                         v-model="slide_fullscreen"
-                        label="Abrir música em tela cheia na tela principal"
+                        label="Abrir músicas, mídias e links em tela cheia na tela principal"
                         color="primary"
                         inset
                         hide-details
@@ -1007,7 +1007,7 @@
                     </div>
                     </CollapsiblePanel>
 
-                <CollapsiblePanel title="Aparência dos Slides" subtitle="Personalização visual da projeção" icon="mdi-palette-outline" class="mb-6">
+                <CollapsiblePanel title="Aparência dos Slides" subtitle="Personalização visual da projeção" icon="mdi-palette-outline" class="mb-6" :hide-first="false">
                 <v-card class="settings-card legacy-panel-content rounded-xl pa-2 mb-6" flat style="background: var(--card-bg); box-shadow: var(--shadow);">
                   <v-card-text class="pa-6">
                     <!-- PERSONALIZAÇÃO -->
@@ -1677,6 +1677,73 @@
                 </v-card>
                 </CollapsiblePanel>
 
+                <CollapsiblePanel title="Saída web para OBS e vMix" subtitle="Vídeo 1080p pela rede local" icon="mdi-broadcast" :hide-first="false">
+                <v-card class="settings-card legacy-panel-content rounded-xl pa-2" flat style="background: var(--card-bg); box-shadow: var(--shadow);">
+                  <v-card-text class="pa-6">
+                    <div class="d-flex align-center mb-5">
+                      <v-icon color="primary" class="mr-3" size="28">
+                        mdi-broadcast
+                      </v-icon>
+                      <div>
+                        <h3 class="font-weight-bold" style="color: var(--sidebar-text); font-size: 1.1rem; line-height: 1.2;">
+                          Saída web nativa
+                        </h3>
+                        <div class="text-caption" style="color: var(--sidebar-text-secondary);">
+                          Espelha a projeção em 1920×1080 e 30 quadros por segundo, sem placa de captura ou plugin.
+                        </div>
+                      </div>
+                    </div>
+
+                    <div class="d-flex align-center justify-space-between mb-5" style="gap: 16px; flex-wrap: wrap;">
+                      <div>
+                        <div class="font-weight-bold" style="color: var(--sidebar-text);">
+                          Ativar saída web
+                        </div>
+                        <div class="text-caption" style="color: var(--sidebar-text-secondary);">
+                          Permite que dispositivos na rede acessem o vídeo da projeção.
+                        </div>
+                      </div>
+                      <v-switch
+                        :model-value="remote_control_config.webOutputEnabled"
+                        color="primary"
+                        inset
+                        hide-details
+                        :loading="remote_control_loading"
+                        @update:model-value="updateWebOutputEnabled"
+                      />
+                    </div>
+
+                    <v-alert v-if="!remote_control_config.webOutputEnabled" type="info" variant="tonal" density="comfortable" class="rounded-lg">
+                      A saída web está desativada. O controle remoto pode continuar funcionando normalmente.
+                    </v-alert>
+                    <v-alert v-else-if="!remote_control_running" type="warning" variant="tonal" density="comfortable" class="rounded-lg">
+                      Inicie o servidor de rede acima para disponibilizar a saída web.
+                    </v-alert>
+                    <div v-else-if="web_output_addresses.length" class="d-flex flex-column" style="gap: 12px;">
+                      <div
+                        v-for="address in web_output_addresses"
+                        :key="address"
+                        class="d-flex align-center pa-3 rounded-lg"
+                        style="gap: 10px; background: var(--main-bg); border: 1px solid var(--border-color);"
+                      >
+                        <code style="min-width: 0; flex: 1; overflow-wrap: anywhere; color: var(--sidebar-text);">{{ address }}</code>
+                        <v-btn
+                          icon="mdi-content-copy"
+                          size="small"
+                          variant="tonal"
+                          color="primary"
+                          title="Copiar URL"
+                          @click="copyWebOutputAddress(address)"
+                        />
+                      </div>
+                      <div class="text-body-2" style="color: var(--sidebar-text-secondary);">
+                        Cole uma das URLs no <strong>Browser Source</strong> do OBS ou no <strong>Web Input</strong> do vMix. Defina a fonte como 1920×1080.
+                      </div>
+                    </div>
+                  </v-card-text>
+                </v-card>
+                </CollapsiblePanel>
+
                 <CollapsiblePanel title="Segurança de acesso" subtitle="Senha e proteção do controle remoto" icon="mdi-shield-key">
                 <v-card class="settings-card legacy-panel-content rounded-xl pa-2" flat style="background: var(--card-bg); box-shadow: var(--shadow);">
                   <v-card-text class="pa-6">
@@ -2131,11 +2198,13 @@ export default {
     remote_control_loading: false,
     remote_control_running: false,
     remote_control_addresses: [],
+    web_output_addresses: [],
     remote_control_qr_code: "",
     remote_control_network_options: [],
     show_remote_control_password: false,
     remote_control_config: {
       enabled: true,
+      webOutputEnabled: true,
       host: "0.0.0.0",
       port: 1975,
       password: "",
@@ -2312,6 +2381,9 @@ export default {
     },
     media_slide_fullscreen(val) {
       this.$userdata.set("modules.config.media_slide_fullscreen", val);
+      if (!this.media_sync_projection_settings) {
+        this.syncExternalMediaMonitors();
+      }
     },
     media_slide_disable_main_if_extended(val) {
       this.$userdata.set("modules.config.media_slide_disable_main_if_extended", val);
@@ -2348,6 +2420,9 @@ export default {
     },
     slide_fullscreen(val) {
       this.$userdata.set("modules.config.slide_fullscreen", val);
+      if (this.media_sync_projection_settings) {
+        this.syncExternalMediaMonitors();
+      }
     },
     slide_disable_main_if_extended(val) {
       this.$userdata.set("modules.config.slide_disable_main_if_extended", val);
@@ -2589,6 +2664,7 @@ export default {
       if (!status) return;
       this.remote_control_running = status.running === true;
       this.remote_control_addresses = status.addresses || [];
+      this.web_output_addresses = status.outputAddresses || [];
       this.remote_control_qr_code = status.qrCode || "";
       this.remote_control_network_options = status.networkOptions || [];
       this.remote_control_config = {
@@ -2605,6 +2681,18 @@ export default {
       } finally {
         this.remote_control_loading = false;
       }
+    },
+    async copyWebOutputAddress(address) {
+      try {
+        await navigator.clipboard.writeText(address);
+        this.$alert.info({ text: "URL da saída web copiada.", translate: false });
+      } catch (error) {
+        this.$alert.error({ text: "Não foi possível copiar a URL.", error, translate: false });
+      }
+    },
+    async updateWebOutputEnabled(value) {
+      this.remote_control_config.webOutputEnabled = value === true;
+      await this.saveRemoteControlConfig();
     },
     async saveRemoteControlConfig() {
       if (!window.electronAPI?.saveRemoteControlConfig) {
@@ -2799,13 +2887,21 @@ export default {
       }
     },
     async syncExternalMediaMonitors() {
-      const isExternalMediaActive = this.$appdata.get("modules.external_media.filePath") != null;
+      const isExternalMediaActive = Boolean(this.$appdata.get("modules.external_media.filePath"));
       if (!isExternalMediaActive) return;
 
       const syncSettings = this.$userdata.get("modules.config.media_sync_projection_settings") !== false;
       let selectedMonitors = syncSettings
         ? this.$userdata.get("modules.config.slide_monitor") || []
         : this.$userdata.get("modules.config.media_slide_monitor") || [];
+      const fullscreen = syncSettings
+        ? this.$userdata.get("modules.config.slide_fullscreen") !== false
+        : this.$userdata.get("modules.config.media_slide_fullscreen") !== false;
+
+      if (fullscreen) {
+        this.$popup.closeProjection("external_media");
+        return;
+      }
         
       if (!Array.isArray(selectedMonitors)) {
         selectedMonitors = selectedMonitors ? [selectedMonitors] : [];
@@ -2817,7 +2913,7 @@ export default {
           const primary = displays.find(d => d.isPrimary) || displays[0];
           selectedMonitors = selectedMonitors.filter(m => m !== primary.id);
           
-          await this.$popup.syncMonitors(selectedMonitors, "external_media", isExternalMediaActive);
+          await this.$popup.syncMonitors(selectedMonitors, "external_media", isExternalMediaActive, fullscreen);
         }
       }
     },

@@ -1,5 +1,5 @@
 <template>
-  <div v-if="import_modules">
+  <div v-if="import_modules" class="modules-container">
     <component
       :is="loadModuleComponent(module)"
       v-for="module in loadedModules"
@@ -87,3 +87,15 @@ export default {
   },
 };
 </script>
+
+<style scoped>
+.modules-container {
+  position: relative;
+  flex: 1 1 auto;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+</style>

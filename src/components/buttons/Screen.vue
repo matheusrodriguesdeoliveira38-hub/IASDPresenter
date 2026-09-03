@@ -66,13 +66,23 @@ export default {
         }
       } else {
         let selectedMonitors = [];
+        let fullscreen = true;
+        const usesIndependentMediaSettings = this.module === "external_media"
+          && $userdata.get("modules.config.media_sync_projection_settings") === false;
+
+        if (usesIndependentMediaSettings) {
+          fullscreen = $userdata.get("modules.config.media_slide_fullscreen") !== false;
+        } else {
+          fullscreen = $userdata.get("modules.config.slide_fullscreen") !== false;
+        }
+
         if (window.electronAPI && window.electronAPI.getDisplays) {
           const displays = await window.electronAPI.getDisplays();
           if (displays && displays.length > 1) {
             let configMonitors = [];
             if (this.monitorConfigKey) {
               configMonitors = $userdata.get(this.monitorConfigKey);
-            } else if (this.module === "external_media" && $userdata.get("modules.config.media_sync_projection_settings") === false) {
+            } else if (usesIndependentMediaSettings) {
               configMonitors = $userdata.get("modules.config.media_slide_monitor");
             } else {
               configMonitors = $userdata.get("modules.config.slide_monitor");
@@ -86,15 +96,8 @@ export default {
         }
         
         if (selectedMonitors.length > 0) {
-          await this.$popup.syncMonitors(selectedMonitors, this.module, true);
+          await this.$popup.syncMonitors(selectedMonitors, this.module, true, fullscreen);
         } else {
-          let fullscreen = true;
-          if (this.module === "external_media" && $userdata.get("modules.config.media_sync_projection_settings") === false) {
-            fullscreen = $userdata.get("modules.config.media_slide_fullscreen") !== false;
-          } else {
-            fullscreen = $userdata.get("modules.config.slide_fullscreen") !== false;
-          }
-
           if (this.module === "external_media") {
             if (fullscreen) {
               this.$emit("fullscreen");

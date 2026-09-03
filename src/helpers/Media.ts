@@ -245,7 +245,8 @@ const helper: Record<string, any> = {
         selectedMonitors = selectedMonitors.filter(m => m !== primary.id);
 
         if (selectedMonitors.length > 0) {
-          await $popup.syncMonitors(selectedMonitors, "media", true);
+          const fullscreen = $userdata.get("modules.config.slide_fullscreen") !== false;
+          await $popup.syncMonitors(selectedMonitors, "media", true, fullscreen);
         }
       }
     }
@@ -267,7 +268,8 @@ const helper: Record<string, any> = {
     const primary = displays.find(d => d.isPrimary) || displays[0];
     selectedMonitors = selectedMonitors.filter(m => m !== primary.id);
 
-    await $popup.syncMonitors(selectedMonitors, "media", forceOpen);
+    const fullscreen = $userdata.get("modules.config.slide_fullscreen") !== false;
+    await $popup.syncMonitors(selectedMonitors, "media", forceOpen, fullscreen);
   },
 
   async syncMonitors() {

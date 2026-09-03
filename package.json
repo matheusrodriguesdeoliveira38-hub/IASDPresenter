@@ -1,6 +1,6 @@
 {
   "name": "iasdpresenter",
-  "version": "1.8.8",
+  "version": "1.8.9",
   "private": true,
   "main": ".electron/main.js",
   "scripts": {
@@ -135,7 +135,9 @@
     },
     "nsis": {
       "oneClick": false,
-      "allowToChangeInstallationDirectory": true
+      "allowToChangeInstallationDirectory": true,
+      "installerSidebar": "build/installerSidebar.bmp",
+      "uninstallerSidebar": "build/installerSidebar.bmp"
     },
     "linux": {
       "target": [

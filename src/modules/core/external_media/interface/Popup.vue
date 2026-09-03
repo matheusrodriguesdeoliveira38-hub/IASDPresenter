@@ -11,6 +11,12 @@
       referrerpolicy="strict-origin-when-cross-origin"
       @load="onYouTubeLoad"
     />
+    <webview
+      v-else-if="isWebLink"
+      class="external-web-frame"
+      :src="rawFilePath"
+      webpreferences="contextIsolation=yes, sandbox=yes"
+    />
     <video
       v-else-if="isVideo && filePath"
       ref="popupVideo"
@@ -54,7 +60,7 @@
 
 <script lang="ts">
 import manifest from "../manifest.json";
-import { getFileExtension, isVideoFile } from "@/helpers/ExternalMedia";
+import { getFileExtension, isVideoFile, isWebUrl } from "@/helpers/ExternalMedia";
 import { getYouTubeEmbedUrl, isYouTubeUrl, YOUTUBE_PLAYER_ORIGIN } from "@/helpers/YouTube";
 
 export default {
@@ -62,6 +68,8 @@ export default {
   data() {
     return {
       hasSyncedInitialTime: false,
+      popupYouTubeCurrentTime: 0,
+      lastYouTubeSyncAt: 0,
     };
   },
   computed: {
@@ -89,6 +97,9 @@ export default {
     },
     isYouTube() {
       return isYouTubeUrl(this.rawFilePath);
+    },
+    isWebLink() {
+      return isWebUrl(this.rawFilePath) && !this.isYouTube;
     },
     youtubeEmbedUrl() {
       return getYouTubeEmbedUrl(this.rawFilePath, { autoplay: true, muted: true });
@@ -118,6 +129,12 @@ export default {
     },
     currentTime() {
       return this.$appdata.get("modules.external_media.config.current_time");
+    },
+    playbackUpdatedAt() {
+      return this.$appdata.get("modules.external_media.config.playback_updated_at") || 0;
+    },
+    isWebOutput() {
+      return new URLSearchParams(window.location.hash.split("?")[1] || "").get("webOutput") === "1";
     },
     requestAction() {
       return this.$appdata.get("modules.external_media.config.request_action");
@@ -155,8 +172,12 @@ export default {
         }
       });
     },
+    playbackUpdatedAt() {
+      this.$nextTick(() => this.syncPlaybackPosition());
+    },
   },
   mounted() {
+    window.addEventListener("message", this.handleYouTubeMessage);
     this.$nextTick(() => {
       if (this.isYouTube) {
         this.onYouTubeLoad();
@@ -174,11 +195,15 @@ export default {
       }
     });
   },
+  beforeUnmount() {
+    window.removeEventListener("message", this.handleYouTubeMessage);
+  },
   methods: {
     onYouTubeLoad() {
       if (!this.isYouTube) return;
       this.sendYouTubeCommand("mute");
-      this.sendYouTubeCommand("seekTo", [this.currentTime || 0, true]);
+      this.sendYouTubeCommand("addEventListener", ["onStateChange"]);
+      this.sendYouTubeCommand("seekTo", [this.getSynchronizedTargetTime(), true]);
       this.sendYouTubeCommand(this.isPaused ? "pauseVideo" : "playVideo");
     },
     sendYouTubeCommand(func, args = []) {
@@ -190,14 +215,29 @@ export default {
         args,
       }), YOUTUBE_PLAYER_ORIGIN);
     },
+    handleYouTubeMessage(event) {
+      if (!this.isYouTube || !String(event.origin || "").includes("youtube")) return;
+      let payload = event.data;
+      if (typeof payload === "string") {
+        try {
+          payload = JSON.parse(payload);
+        } catch (_error) {
+          return;
+        }
+      }
+      if (payload?.event === "infoDelivery" && typeof payload.info?.currentTime === "number") {
+        this.popupYouTubeCurrentTime = payload.info.currentTime;
+      }
+    },
     onCanPlay() {
       if (this.hasSyncedInitialTime) {
+        this.syncPlaybackPosition();
         this.playProjectedVideo();
         return;
       }
       const video = this.$refs.popupVideo;
       if (video && !this.isPaused) {
-        video.currentTime = this.currentTime || 0;
+        video.currentTime = this.getSynchronizedTargetTime();
         this.hasSyncedInitialTime = true;
         video.play().catch((err) => {
           console.warn("Erro ao iniciar mídia no popup:", err);
@@ -210,6 +250,35 @@ export default {
       video.play().catch((err) => {
         console.warn("Erro ao iniciar midia no popup:", err);
       });
+    },
+    getSynchronizedTargetTime() {
+      let target = Number(this.currentTime || 0);
+      const updatedAt = Number(this.playbackUpdatedAt || 0);
+      if (!this.isPaused && updatedAt > 0) {
+        target += Math.max(0, Date.now() - updatedAt) / 1000;
+      }
+      if (this.isWebOutput && !this.isPaused) target += 0.12;
+      const duration = Number(this.$appdata.get("modules.external_media.config.duration") || 0);
+      return duration > 0 ? Math.min(target, Math.max(0, duration - 0.05)) : Math.max(0, target);
+    },
+    syncPlaybackPosition(force = false) {
+      const target = this.getSynchronizedTargetTime();
+      if (this.isYouTube) {
+        const drift = target - Number(this.popupYouTubeCurrentTime || 0);
+        const now = Date.now();
+        if ((force || Math.abs(drift) > 0.35) && now - this.lastYouTubeSyncAt > 900) {
+          this.lastYouTubeSyncAt = now;
+          this.sendYouTubeCommand("seekTo", [target, true]);
+        }
+        return;
+      }
+
+      const video = this.$refs.popupVideo;
+      if (!video || !Number.isFinite(video.currentTime)) return;
+      const drift = target - video.currentTime;
+      if (force || Math.abs(drift) > 0.18) {
+        video.currentTime = target;
+      }
     },
     onEnded() {
       this.$appdata.set("modules.external_media.config.is_paused", true);
@@ -239,5 +308,12 @@ export default {
   border: 0;
   background: #000;
   pointer-events: none;
+}
+
+.external-web-frame {
+  width: 100%;
+  height: 100%;
+  border: 0;
+  background: #fff;
 }
 </style>

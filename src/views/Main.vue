@@ -175,7 +175,7 @@ import AppModules from "@/layout/Modules.vue";
 import AppAlert from "@/layout/Alert.vue";
 import AppTrayArea from "@/layout/TrayArea.vue";
 import LSlide from "@/components/Slide.vue";
-import { isAudioFile, isVideoFile, openExternalMedia } from "@/helpers/ExternalMedia";
+import { isAudioFile, isVideoFile, isWebUrl, openExternalMedia } from "@/helpers/ExternalMedia";
 import { getYouTubeEmbedUrl, isYouTubeUrl } from "@/helpers/YouTube";
 
 export default {
@@ -193,6 +193,10 @@ export default {
       sidebarOpen: false,
       sidebarAutoCollapse: false,
       remoteControlUnsubscribe: null,
+      webOutputDemandUnsubscribe: null,
+      webOutputWebRTCOfferUnsubscribe: null,
+      webOutputWebRTCCloseUnsubscribe: null,
+      webOutputPeerConnections: new Map(),
       remoteControlQueue: Promise.resolve(),
       remoteControlStateTimer: null,
     };
@@ -383,6 +387,21 @@ export default {
           this.enqueueRemoteControlCommand,
         );
       }
+      if (window.electronAPI.onWebOutputDemand) {
+        this.webOutputDemandUnsubscribe = window.electronAPI.onWebOutputDemand(
+          this.handleWebOutputDemand,
+        );
+      }
+      if (window.electronAPI.onWebOutputWebRTCOffer) {
+        this.webOutputWebRTCOfferUnsubscribe = window.electronAPI.onWebOutputWebRTCOffer(
+          this.handleWebOutputWebRTCOffer,
+        );
+      }
+      if (window.electronAPI.onWebOutputWebRTCClose) {
+        this.webOutputWebRTCCloseUnsubscribe = window.electronAPI.onWebOutputWebRTCClose(
+          this.closeWebOutputWebRTCSession,
+        );
+      }
       if (window.electronAPI.setRemoteControlState) {
         this.publishRemoteControlState();
         const publishInterval = this.$performance.isLightMode() ? 2000 : 750;
@@ -395,11 +414,97 @@ export default {
     if (this.remoteControlUnsubscribe) {
       this.remoteControlUnsubscribe();
     }
+    if (this.webOutputDemandUnsubscribe) {
+      this.webOutputDemandUnsubscribe();
+    }
+    if (this.webOutputWebRTCOfferUnsubscribe) this.webOutputWebRTCOfferUnsubscribe();
+    if (this.webOutputWebRTCCloseUnsubscribe) this.webOutputWebRTCCloseUnsubscribe();
+    this.webOutputPeerConnections.forEach((entry) => {
+      entry.peer.close();
+      entry.stream.getTracks().forEach(track => track.stop());
+    });
+    this.webOutputPeerConnections.clear();
     if (this.remoteControlStateTimer) {
       window.clearInterval(this.remoteControlStateTimer);
     }
   },
   methods: {
+    waitForIceGathering(peer) {
+      if (peer.iceGatheringState === "complete") return Promise.resolve();
+      return new Promise((resolve) => {
+        const finish = () => {
+          if (peer.iceGatheringState !== "complete") return;
+          peer.removeEventListener("icegatheringstatechange", finish);
+          resolve();
+        };
+        peer.addEventListener("icegatheringstatechange", finish);
+        window.setTimeout(resolve, 2500);
+      });
+    },
+    async getWebOutputCaptureStream() {
+      return navigator.mediaDevices.getDisplayMedia({
+        audio: true,
+        video: {
+          width: { ideal: 1920, max: 1920 },
+          height: { ideal: 1080, max: 1080 },
+          frameRate: { ideal: 60, min: 30 },
+        },
+      });
+    },
+    async handleWebOutputWebRTCOffer(payload) {
+      const sessionId = String(payload?.sessionId || "");
+      if (!sessionId || !payload?.offer) return;
+      this.closeWebOutputWebRTCSession(sessionId);
+
+      let peer = null;
+      let stream = null;
+      try {
+        stream = await this.getWebOutputCaptureStream();
+        peer = new RTCPeerConnection({ iceServers: [] });
+        stream.getTracks().forEach(track => peer.addTrack(track, stream));
+        await peer.setRemoteDescription(payload.offer);
+        const answer = await peer.createAnswer();
+        await peer.setLocalDescription(answer);
+        await this.waitForIceGathering(peer);
+        this.webOutputPeerConnections.set(sessionId, { peer, stream });
+        peer.onconnectionstatechange = () => {
+          if (["closed", "failed"].includes(peer.connectionState)) {
+            this.closeWebOutputWebRTCSession(sessionId);
+          }
+        };
+        await window.electronAPI.submitWebOutputWebRTCAnswer(sessionId, peer.localDescription);
+      } catch (error) {
+        if (peer) peer.close();
+        if (stream) stream.getTracks().forEach(track => track.stop());
+        console.warn("Não foi possível iniciar a saída WebRTC:", error);
+      }
+    },
+    closeWebOutputWebRTCSession(sessionId) {
+      const entry = this.webOutputPeerConnections.get(String(sessionId || ""));
+      if (!entry) return;
+      entry.peer.close();
+      entry.stream.getTracks().forEach(track => track.stop());
+      this.webOutputPeerConnections.delete(String(sessionId || ""));
+    },
+    handleWebOutputDemand(demand) {
+      const active = typeof demand === "object" ? demand?.active === true : demand === true;
+      const requestedModule = typeof demand === "object" && typeof demand?.module === "string"
+        ? demand.module
+        : "";
+
+      if (!active) {
+        this.$popup.closeWebOutput();
+        return;
+      }
+
+      const activeModule = this.$appdata.get("popup_module");
+      const hasExternalMedia = Boolean(this.$appdata.get("modules.external_media.filePath"));
+      const moduleName = requestedModule
+        || activeModule
+        || (hasExternalMedia ? "external_media" : "")
+        || (this.$appdata.get("modules.media.id_music") != null ? "media" : "");
+      if (moduleName) this.$popup.openWebOutput(moduleName);
+    },
     handleSidebarAutoCollapseChange(event) {
       this.sidebarAutoCollapse = event.detail === true;
     },
@@ -411,6 +516,10 @@ export default {
       if (!window.electronAPI?.setRemoteControlState) return;
 
       const popupModule = this.$appdata.get("popup_module") || "";
+      const externalFilePath = this.$appdata.get("modules.external_media.filePath") || "";
+      const webOutputModule = popupModule
+        || (externalFilePath ? "external_media" : "")
+        || (this.$appdata.get("modules.media.id_music") != null ? "media" : "");
       const override = this.$appdata.get("projection_override") || "none";
       const mediaConfig = this.$media.config() || {};
       const slides = this.$media.slides() || [];
@@ -450,6 +559,7 @@ export default {
       }
 
       window.electronAPI.setRemoteControlState({
+        webOutputModule,
         projection: { active: Boolean(popupModule), module: popupModule, override },
         current,
         next,
@@ -616,11 +726,23 @@ export default {
       }
     },
     async projectModule(moduleName, forceOpen = true) {
+      const usesIndependentMediaSettings = moduleName === "external_media"
+        && this.$userdata.get("modules.config.media_sync_projection_settings") === false;
+      const fullscreen = usesIndependentMediaSettings
+        ? this.$userdata.get("modules.config.media_slide_fullscreen") !== false
+        : this.$userdata.get("modules.config.slide_fullscreen") !== false;
+      if (moduleName === "external_media" && fullscreen) {
+        return;
+      }
       let selectedMonitors = [];
       if (window.electronAPI && window.electronAPI.getDisplays) {
         const displays = await window.electronAPI.getDisplays();
         if (displays && displays.length > 1) {
-          let configMonitors = this.$userdata.get("modules.config.slide_monitor");
+          let configMonitors = this.$userdata.get(
+            usesIndependentMediaSettings
+              ? "modules.config.media_slide_monitor"
+              : "modules.config.slide_monitor",
+          );
           if (!Array.isArray(configMonitors)) {
             configMonitors = configMonitors ? [configMonitors] : [];
           }
@@ -630,9 +752,8 @@ export default {
       }
 
       if (selectedMonitors.length > 0) {
-        await this.$popup.syncMonitors(selectedMonitors, moduleName, forceOpen);
-      } else {
-        const fullscreen = this.$userdata.get("modules.config.slide_fullscreen") !== false;
+        await this.$popup.syncMonitors(selectedMonitors, moduleName, forceOpen, fullscreen);
+      } else if (moduleName !== "external_media") {
         await this.$popup.open({ module: moduleName, fullscreen });
       }
     },
@@ -781,18 +902,14 @@ export default {
         }
         break;
       case "link":
-        if (item.url && isYouTubeUrl(item.url)) {
+        if (item.url && isWebUrl(item.url)) {
           openExternalMedia(this.$appdata, {
             filePath: item.url,
-            title: item.name || "YouTube",
+            title: item.name || (isYouTubeUrl(item.url) ? "YouTube" : "Link"),
             subtitle: item.subtitle || item.url,
           });
           this.$appdata.set("modules.external_media.show", true);
           await this.projectModule("external_media");
-        } else if (item.url && window.electronAPI?.openExternal) {
-          window.electronAPI.openExternal(item.url);
-        } else if (item.url) {
-          window.open(item.url, "_blank");
         }
         break;
       default:
@@ -898,6 +1015,7 @@ export default {
       this.$appdata.set("modules.external_media.config", {
         is_paused: true,
         current_time: 0,
+        playback_updated_at: Date.now(),
         progress: 0,
         duration: 0,
         volume: this.$appdata.get("modules.external_media.config.volume") || 100,
@@ -933,23 +1051,27 @@ export default {
 <style scoped>
 .main-container {
   margin-left: var(--sidebar-width);
+  width: calc(100% - var(--sidebar-width));
   transition: margin-left 0.3s ease;
-  height: calc(100vh - 32px);
+  height: calc(100vh - var(--titlebar-height, 42px));
   display: flex;
   flex-direction: column;
 }
 
 .main-container.launcher-shell {
   margin-left: 0;
+  width: 100%;
 }
 
 .main-container.sidebar-auto-collapse {
   margin-left: var(--sidebar-collapsed-width, 84px);
+  width: calc(100% - var(--sidebar-collapsed-width, 84px));
 }
 
 @media (max-width: 1024px) {
   .main-container {
     margin-left: 0 !important;
+    width: 100% !important;
   }
 }
 

@@ -1,7 +1,7 @@
 <template>
   <v-slide-y-reverse-transition>
-    <div v-if="module?.show" class="module-full-page dashboard-home d-flex flex-column">
-      <div class="search-header pb-0 flex-shrink-0" style="padding-top: 24px; padding-left: 24px; padding-right: 24px; display: flex; align-items: center;">
+    <div v-if="module?.show" class="module-full-page dashboard-home bible-page d-flex flex-column">
+      <div class="search-header bible-page-header pb-0 flex-shrink-0" style="padding-top: 24px; padding-left: 24px; padding-right: 24px; display: flex; align-items: center;">
         <MenuToggleButton style="margin-right: 16px;" @toggle-sidebar="toggleSidebar" />
 
         <div class="d-flex align-center mr-auto">
@@ -163,7 +163,7 @@
         </div>
       </div>
 
-      <div class="content-main d-flex flex-row flex-grow-1" style="overflow: hidden; padding: 24px; min-height: 0; gap: 24px;">
+      <div class="content-main bible-page-content d-flex flex-row flex-grow-1" style="overflow: hidden; padding: 24px; min-height: 0; gap: 24px;">
         <div v-if="!compact" class="bible-navigation d-flex flex-row flex-shrink-0" style="width: 40%; min-width: 350px; max-width: 400px; background: var(--card-bg, #fff); border-radius: 24px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); overflow: hidden; border: 1px solid var(--border-color, rgba(0,0,0,0.05)); min-height: 0;">
           <div class="books-col h-100 d-flex flex-column" style="width: 65%; border-right: 1px solid var(--border-color, rgba(0,0,0,0.05));">
             <div class="pa-4 pb-2">
@@ -1207,6 +1207,11 @@ export default {
 </script>
 
 <style scoped>
+.bible-page-header,
+.bible-page-content {
+  width: 100%;
+}
+
 .bible-verses-col {
   container-type: inline-size;
   container-name: verses-col;

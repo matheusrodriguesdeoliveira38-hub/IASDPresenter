@@ -3,6 +3,126 @@
   height: 100%;
   display: flex;
   flex-direction: column;
+  background: var(--main-bg);
+  isolation: isolate;
+  overflow: hidden;
+  position: relative;
+}
+
+.dashboard-home .search-header-container,
+.dashboard-home .content-main {
+  position: relative;
+  z-index: 2;
+}
+
+.home-idle {
+  background:
+    linear-gradient(128deg, rgba(37, 99, 235, 0.025) 0%, transparent 30%),
+    var(--main-bg);
+
+  .hero-search-header {
+    gap: 30px;
+    justify-content: center !important;
+    padding: 30px 32px clamp(72px, 9vh, 120px) !important;
+  }
+
+  .hero-content {
+    animation: fadeIn 0.5s ease;
+  }
+
+  .hero-brand-symbol {
+    height: clamp(68px, 7.5vh, 80px);
+    margin-bottom: 30px;
+    object-fit: contain;
+    width: clamp(68px, 7.5vh, 80px);
+  }
+
+  .hero-title {
+    color: #101d4a !important;
+    font-size: clamp(38px, 2.65vw, 44px) !important;
+    font-weight: 750 !important;
+    letter-spacing: -0.035em;
+    line-height: 1.12;
+    margin: 0 !important;
+    text-align: center;
+
+    &::after {
+      background: #ff6b35;
+      border-radius: 999px;
+      content: '';
+      display: block;
+      height: 4px;
+      margin: 24px auto 0;
+      width: 52px;
+    }
+  }
+
+  .search-bar {
+    max-width: 650px !important;
+    width: min(650px, calc(100vw - var(--sidebar-width) - 80px)) !important;
+  }
+}
+
+.home-background-art {
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  position: absolute;
+  user-select: none;
+  z-index: 0;
+}
+
+.home-soft-glow {
+  background: radial-gradient(circle, rgba(37, 99, 235, 0.065), rgba(37, 99, 235, 0) 68%);
+  border-radius: 50%;
+  height: 105%;
+  left: -23%;
+  position: absolute;
+  top: -18%;
+  width: 72%;
+}
+
+.home-dot-pattern {
+  background-image: radial-gradient(circle, rgba(255, 107, 53, 0.28) 1.4px, transparent 1.6px);
+  background-size: 20px 20px;
+  height: 205px;
+  opacity: 0.72;
+  position: absolute;
+  right: -7px;
+  top: 18%;
+  width: 150px;
+}
+
+.home-wave {
+  border-radius: 50% 50% 0 0 / 100% 100% 0 0;
+  bottom: -18%;
+  position: absolute;
+  transform-origin: center bottom;
+}
+
+.home-wave-blue {
+  background: rgba(37, 99, 235, 0.075);
+  height: 37%;
+  left: -9%;
+  transform: rotate(4deg);
+  width: 75%;
+}
+
+.home-wave-orange {
+  background: rgba(255, 107, 53, 0.085);
+  height: 34%;
+  right: -13%;
+  transform: rotate(-8deg);
+  width: 72%;
+}
+
+.home-wave-lavender {
+  background: rgba(104, 135, 232, 0.105);
+  bottom: -22%;
+  height: 39%;
+  right: -3%;
+  transform: rotate(-5deg);
+  width: 82%;
 }
 
 .search-header, .hero-search-header {
@@ -12,31 +132,54 @@
 .dashboard-home .search-bar {
   .v-field {
     background: var(--card-bg) !important;
-    box-shadow: var(--shadow) !important;
-    border-radius: 25px !important;
+    border: 1px solid #e3e7ef !important;
+    border-radius: 31px !important;
+    box-shadow: 0 8px 22px rgba(16, 29, 74, 0.075) !important;
+    min-height: 62px;
+
+    .v-field__overlay {
+      opacity: 0 !important;
+    }
     
     .v-field__input {
-      padding: 12px 20px !important;
-      font-size: 14px !important;
+      min-height: 60px !important;
+      padding: 15px 22px !important;
+      font-size: 16px !important;
+
+      &::placeholder {
+        color: #98a2b3;
+        opacity: 1;
+      }
     }
     
     .v-field__prepend-inner {
-      padding-left: 16px !important;
+      padding-left: 24px !important;
       
       .v-icon {
         color: var(--accent-blue) !important;
-        opacity: 0.7;
+        font-size: 27px;
+        opacity: 1;
       }
     }
     
     &:hover {
-      box-shadow: var(--shadow-hover) !important;
+      border-color: #d8deea !important;
+      box-shadow: 0 10px 26px rgba(16, 29, 74, 0.09) !important;
     }
     
     &.v-field--focused {
-      box-shadow: 0 4px 20px rgba(0, 151, 215, 0.15) !important;
+      border-color: rgba(var(--accent-blue-rgb), 0.52) !important;
+      box-shadow: 0 0 0 3px rgba(var(--accent-blue-rgb), 0.07), 0 9px 24px rgba(16, 29, 74, 0.08) !important;
     }
   }
+}
+
+.v-theme--dark .home-idle .hero-title {
+  color: var(--sidebar-text) !important;
+}
+
+.v-theme--dark .dashboard-home .search-bar .v-field {
+  border-color: var(--border-color) !important;
 }
 
 .home-launcher-layout {
@@ -362,6 +505,10 @@
 }
 
 @media (max-width: 1024px) {  
+  .home-idle .search-bar {
+    width: min(650px, calc(100vw - 40px)) !important;
+  }
+
   .search-header {
     padding: 16px 20px 8px 20px;
     justify-content: flex-start;

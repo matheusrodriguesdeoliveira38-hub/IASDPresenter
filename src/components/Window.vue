@@ -1,6 +1,7 @@
 <template>
   <v-dialog
     v-model="visible"
+    class="app-window-dialog"
     scrollable
     persistent
     :width="w_width"
@@ -10,10 +11,10 @@
     contained
     :eager="eager"
   >
-    <v-card :color="color ? color : ''">
+    <v-card class="app-window-card" :color="color ? color : ''">
       <slot name="toolbar">
         <div
-          class="d-flex flex-no-wrap align-stretch flex-row justify-space-between"
+          class="app-window-toolbar d-flex flex-no-wrap align-stretch flex-row justify-space-between"
         >
           <div
             v-if="icon"

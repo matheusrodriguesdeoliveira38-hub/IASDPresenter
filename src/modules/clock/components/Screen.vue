@@ -1,7 +1,8 @@
 <template>
   <div
     ref="container"
-    class="d-flex align-center justify-center position-relative w-100 h-100 overflow-hidden"
+    class="clock-screen d-flex align-center justify-center position-relative w-100 h-100 overflow-hidden"
+    :class="{ 'clock-screen--preview': preview }"
     :style="{
       background: config.bgColor,
       height: height ? height + 'px' : '100%',
@@ -19,7 +20,7 @@
           fontSize: `${timerFontSize}px`,
           textShadow: `0 4px 30px ${timerTextColor}40`,
           color: timerTextColor,
-          fontFamily: 'system-ui, -apple-system, sans-serif'
+          fontFamily: 'Segoe UI Variable, Segoe UI, Inter, system-ui, sans-serif'
         }"
       >
         <span>{{ formattedTimer }}</span>
@@ -40,13 +41,13 @@
         :style="{
           fontSize: `${digitalFontSize}px`,
           textShadow: `0 4px 30px ${config.textColor}40`,
-          fontFamily: 'system-ui, -apple-system, sans-serif'
+          fontFamily: 'Segoe UI Variable, Segoe UI, Inter, system-ui, sans-serif'
         }"
       >
-        <span>{{ formattedTime }}</span>
+        <span class="clock-time">{{ formattedTime }}</span>
         <span 
           v-if="config.showSeconds" 
-          class="ml-2 opacity-70"
+          class="clock-seconds ml-2"
           :style="{ fontSize: `${digitalFontSize * 0.5}px`, alignSelf: 'flex-end', marginBottom: `${digitalFontSize * 0.15}px` }"
         >
           {{ formattedSeconds }}
@@ -212,7 +213,9 @@ export default {
     },
     digitalFontSize() {
       const v = Math.min(this.s_width, this.s_height);
-      const ratio = this.config.showSeconds ? 0.35 : 0.4;
+      const ratio = this.preview
+        ? (this.config.showSeconds ? 0.43 : 0.47)
+        : (this.config.showSeconds ? 0.35 : 0.4);
       return Math.max(v * ratio, 20); // Responsive font size
     },
     timerFontSize() {
@@ -347,8 +350,22 @@ export default {
 
 <style scoped>
 .digital-clock {
-  letter-spacing: -0.02em;
+  letter-spacing: -0.045em;
   font-variant-numeric: tabular-nums;
+  line-height: 0.95;
+}
+.clock-screen--preview .digital-clock {
+  font-family: "Segoe UI Variable", "Segoe UI", Inter, system-ui, sans-serif !important;
+  font-weight: 750 !important;
+}
+.clock-screen--preview .clock-time {
+  filter: drop-shadow(0 8px 20px rgba(0, 0, 0, 0.22));
+}
+.clock-screen--preview .clock-seconds {
+  color: #5b8cff !important;
+  opacity: 1 !important;
+  font-weight: 700;
+  letter-spacing: -0.03em;
 }
 .timer-display {
   position: relative;

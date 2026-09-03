@@ -1,14 +1,14 @@
 <template>
   <v-slide-y-reverse-transition>
-    <div v-if="module?.show" class="module-full-page dashboard-home d-flex flex-column">
+    <div v-if="module?.show" class="module-full-page dashboard-home clock-page d-flex flex-column">
       <!-- Top Bar -->
-      <div class="search-header pb-0 flex-shrink-0" style="padding-top: 24px; padding-left: 24px; padding-right: 24px; display: flex; align-items: center;">
+      <div class="search-header clock-page-header pb-0 flex-shrink-0" style="padding-top: 24px; padding-left: 24px; padding-right: 24px; display: flex; align-items: center;">
         <MenuToggleButton style="margin-right: 16px;" @toggle-sidebar="toggleSidebar" />
         <div class="d-flex align-center mr-auto">
           <div class="module-icon-box d-flex align-center justify-center mr-4">
             <v-icon :icon="module.icon" size="24" />
           </div>
-          <h2 class="section-title mb-0 mr-4" style="color: var(--sidebar-text); font-size: 24px; font-weight: 600; line-height: 1;">
+          <h2 class="section-title clock-page-title mb-0 mr-4" style="color: var(--sidebar-text); font-size: 24px; font-weight: 600; line-height: 1;">
             {{ t('title') }}
           </h2>
         </div>
@@ -17,8 +17,9 @@
       </div>
 
       <!-- Clock Display -->
-      <div class="content-main flex-grow-1 w-100 pa-6 d-flex flex-column align-center justify-center" style="overflow: hidden; background: transparent; gap: 16px;">
-        <div class="clock-widget-container d-flex flex-column justify-center align-center position-relative" style="width: 100%; max-width: 900px; aspect-ratio: 21/9; max-height: 58%; background: var(--card-bg, #ffffff); border-radius: 40px; box-shadow: 0 20px 60px rgba(0,0,0,0.05); border: 1px solid var(--border-color, rgba(0,0,0,0.05)); overflow: hidden; transition: transform 0.3s ease;">
+      <div class="content-main clock-page-content flex-grow-1 w-100 pa-6 d-flex flex-column align-center" style="overflow: hidden; background: transparent; gap: 18px;">
+        <div class="clock-widget-container d-flex flex-column justify-center align-center position-relative">
+          <div class="clock-panel-decoration" aria-hidden="true" />
           <div class="position-absolute top-0 right-0 ma-4 d-flex align-center" style="z-index: 2; gap: 8px;">
             <v-btn
               variant="tonal"
@@ -39,12 +40,16 @@
                 {{ t('config') }}
               </v-tooltip>
             </v-btn>
-            <LScreenBtn module="clock" monitor-config-key="modules.config.clock_monitor" />
+            <LScreenBtn
+              class="clock-project-btn"
+              module="clock"
+              monitor-config-key="modules.config.clock_monitor"
+            />
           </div>
           <Screen :preview="true" />
         </div>
 
-        <div class="timer-controls w-100" style="max-width: 900px;">
+        <div class="timer-controls w-100">
           <div class="d-flex align-center justify-space-between flex-wrap mb-3" style="gap: 12px;">
             <div class="d-flex align-center" style="gap: 10px;">
               <v-icon color="primary">
@@ -97,7 +102,6 @@
                 hide-details
                 density="compact"
                 variant="outlined"
-                style="max-width: 110px;"
                 @keyup.enter="startTimer"
               />
               <v-text-field
@@ -111,7 +115,6 @@
                 hide-details
                 density="compact"
                 variant="outlined"
-                style="max-width: 110px;"
                 @keyup.enter="startTimer"
               />
               <v-text-field
@@ -125,7 +128,6 @@
                 hide-details
                 density="compact"
                 variant="outlined"
-                style="max-width: 110px;"
                 @keyup.enter="startTimer"
               />
             </template>
@@ -140,7 +142,6 @@
               hide-details
               density="compact"
               variant="outlined"
-              style="max-width: 180px;"
               @keyup.enter="startTimer"
             />
 
@@ -505,91 +506,387 @@ export default {
 </script>
 
 <style scoped>
-.timer-controls {
+.clock-page {
+  font-family: "Segoe UI Variable", "Segoe UI", Inter, Roboto, Arial, sans-serif;
   background:
-    radial-gradient(circle at top right, rgba(var(--v-theme-primary), 0.11), transparent 38%),
-    var(--card-bg, #ffffff);
-  border: 1px solid var(--border-color, rgba(0,0,0,0.05));
-  border-radius: 24px;
-  box-shadow: 0 18px 46px rgba(15, 23, 42, 0.08);
-  padding: 20px;
+    radial-gradient(circle at 92% 20%, rgba(37, 99, 235, 0.035), transparent 25%),
+    linear-gradient(135deg, rgba(37, 99, 235, 0.018), transparent 36%),
+    var(--main-bg, #fcfdff);
+  isolation: isolate;
 }
+
+.clock-page::before,
+.clock-page::after {
+  content: "";
+  position: absolute;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.clock-page::before {
+  width: 86%;
+  height: 31%;
+  left: -7%;
+  bottom: -15%;
+  border-radius: 50% 55% 0 0 / 100% 100% 0 0;
+  background: rgba(80, 120, 230, 0.075);
+  transform: rotate(3deg);
+}
+
+.clock-page::after {
+  width: 72%;
+  height: 27%;
+  right: -13%;
+  bottom: -13%;
+  border-radius: 55% 50% 0 0 / 100% 100% 0 0;
+  background: rgba(255, 107, 53, 0.075);
+  transform: rotate(-7deg);
+}
+
+.clock-page-header,
+.clock-page-content {
+  position: relative;
+  z-index: 1;
+}
+
+.clock-page-header {
+  padding: 28px 40px 0 !important;
+}
+
+.clock-page-title {
+  color: #172033 !important;
+  font-size: 27px !important;
+  font-weight: 700 !important;
+  letter-spacing: -0.02em;
+  line-height: 1.15 !important;
+}
+
+.clock-page-content {
+  justify-content: flex-start;
+  padding: clamp(34px, 5vh, 58px) 32px 28px !important;
+}
+
+.clock-widget-container,
+.timer-controls {
+  width: min(100%, 1060px) !important;
+  max-width: 1060px !important;
+}
+
+.clock-widget-container {
+  height: clamp(260px, 33vh, 322px);
+  min-height: 240px;
+  overflow: hidden;
+  border: 1px solid rgba(31, 65, 130, 0.28);
+  border-radius: 30px;
+  background:
+    radial-gradient(circle at 10% 10%, rgba(55, 115, 225, 0.38), transparent 38%),
+    linear-gradient(135deg, #102b61 0%, #071b3d 52%, #0a214a 100%);
+  box-shadow: 0 18px 50px rgba(15, 35, 75, 0.11);
+}
+
+.clock-widget-container :deep(.clock-screen--preview) {
+  background: transparent !important;
+}
+
+.clock-widget-container :deep(.config-palette-btn) {
+  width: 48px !important;
+  height: 48px !important;
+  color: #dce9ff !important;
+  background: rgba(37, 99, 235, 0.28) !important;
+  border: 1px solid rgba(116, 159, 255, 0.18);
+  transition: background 0.2s ease, transform 0.2s ease;
+}
+
+.clock-widget-container :deep(.config-palette-btn:hover) {
+  background: rgba(59, 130, 246, 0.42) !important;
+  transform: translateY(-1px);
+}
+
+.clock-widget-container :deep(.clock-project-btn) {
+  width: 48px !important;
+  height: 48px !important;
+  color: #ffffff !important;
+  background: rgba(255, 255, 255, 0.14) !important;
+  border: 1px solid rgba(255, 255, 255, 0.24) !important;
+  box-shadow: 0 8px 20px rgba(2, 12, 32, 0.2);
+  opacity: 1 !important;
+  transition: background 0.2s ease, border-color 0.2s ease, transform 0.2s ease;
+}
+
+.clock-widget-container :deep(.clock-project-btn .v-icon) {
+  color: #ffffff !important;
+  opacity: 1 !important;
+}
+
+.clock-widget-container :deep(.clock-project-btn:hover) {
+  background: rgba(59, 130, 246, 0.48) !important;
+  border-color: rgba(147, 184, 255, 0.48) !important;
+  transform: translateY(-1px);
+}
+
+.clock-widget-container :deep(.clock-project-btn.v-btn--active) {
+  color: #ffffff !important;
+  background: #2563eb !important;
+  border-color: #5b8cff !important;
+  box-shadow: 0 0 0 3px rgba(91, 140, 255, 0.2), 0 8px 22px rgba(37, 99, 235, 0.32);
+}
+
+.clock-panel-decoration {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 1;
+  opacity: 0.22;
+  background:
+    radial-gradient(circle at 15% 106%, transparent 0 28%, rgba(89, 143, 255, 0.65) 28.2% 28.45%, transparent 28.7%),
+    radial-gradient(circle at 90% 0%, transparent 0 27%, rgba(89, 143, 255, 0.5) 27.2% 27.45%, transparent 27.7%);
+}
+
+.clock-panel-decoration::before,
+.clock-panel-decoration::after {
+  content: "";
+  position: absolute;
+  width: 220px;
+  height: 220px;
+  opacity: 0.28;
+  background-image: radial-gradient(circle, #79a5ff 1px, transparent 1.4px);
+  background-size: 9px 9px;
+  mask-image: radial-gradient(circle, #000 8%, transparent 70%);
+}
+
+.clock-panel-decoration::before {
+  left: -45px;
+  bottom: -78px;
+}
+
+.clock-panel-decoration::after {
+  right: -38px;
+  top: -65px;
+}
+
+.clock-widget-container :deep(.clock-screen) {
+  z-index: 0;
+}
+
+.clock-widget-container > .position-absolute {
+  margin: 18px !important;
+  z-index: 3 !important;
+}
+
+.timer-controls {
+  background: rgba(255, 255, 255, 0.96);
+  border: 1px solid #e5eaf2;
+  border-radius: 27px;
+  box-shadow: 0 18px 46px rgba(15, 35, 75, 0.075);
+  padding: 26px 30px 24px;
+  color: #172033;
+}
+
+.timer-controls > .d-flex:first-child {
+  margin-bottom: 22px !important;
+}
+
+.timer-controls > .d-flex:first-child .font-weight-bold {
+  font-size: 18px;
+  font-weight: 700 !important;
+  line-height: 1.15 !important;
+}
+
+.timer-controls > .d-flex:first-child .text-caption {
+  margin-top: 3px;
+  color: #667085 !important;
+  font-size: 13px;
+  opacity: 1 !important;
+}
+
 .timer-mode-toggle {
-  border: 1px solid rgba(var(--v-theme-primary), 0.16);
+  height: 50px;
+  border: 1px solid #e6eaf0;
   border-radius: 14px;
   overflow: hidden;
-  padding: 3px;
-  background: rgba(var(--v-theme-primary), 0.06);
+  padding: 4px;
+  background: #f3f5f8;
 }
 .timer-mode-btn {
   border: 0 !important;
-  border-radius: 10px !important;
+  border-radius: 11px !important;
+  min-height: 40px !important;
+  padding-inline: 16px !important;
+  color: #172033;
+  font-weight: 650;
+  font-size: 14px;
+  line-height: 1.2;
   letter-spacing: 0;
   text-transform: none;
 }
+.timer-mode-btn.v-btn--active {
+  color: #2563eb !important;
+  background: #eaf2ff !important;
+  box-shadow: 0 2px 8px rgba(37, 99, 235, 0.12);
+}
 .timer-field {
-  flex: 0 1 132px;
-  max-width: 132px !important;
+  flex: 0 1 164px;
+  max-width: 164px !important;
 }
 .timer-field-end {
-  flex-basis: 210px;
-  max-width: 210px !important;
+  flex-basis: 240px;
+  max-width: 240px !important;
 }
 .timer-field :deep(.v-field) {
   border-radius: 14px;
-  background: rgba(var(--v-theme-surface), 0.78);
-  box-shadow: inset 0 0 0 1px rgba(var(--v-theme-primary), 0.05);
-  transition: box-shadow 0.2s ease, transform 0.2s ease;
+  min-height: 54px;
+  background: #fff;
+  color: #172033;
+  box-shadow: none;
+  transition: box-shadow 0.2s ease, border-color 0.2s ease;
+}
+.timer-field :deep(.v-field__input) {
+  font-family: inherit;
+  font-size: 15px;
+  font-weight: 500;
+  line-height: 1.35;
+}
+.timer-field :deep(.v-label) {
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 500;
 }
 .timer-field :deep(.v-field--focused) {
-  box-shadow: 0 0 0 3px rgba(var(--v-theme-primary), 0.14);
-  transform: translateY(-1px);
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+}
+.timer-field :deep(.v-field__outline) {
+  color: #cfd6e1;
+}
+.timer-field :deep(.v-field--focused .v-field__outline) {
+  color: #2563eb;
+}
+.timer-field :deep(.v-field__prepend-inner .v-icon) {
+  color: #344054;
 }
 .timer-action-btn {
-  min-height: 42px;
-  border-radius: 13px;
-  padding-inline: 20px;
+  min-height: 54px;
+  border-radius: 14px;
+  padding-inline: 26px;
+  font-size: 15px;
+  font-weight: 700;
   letter-spacing: 0;
   text-transform: none;
 }
 .timer-action-primary {
-  box-shadow: 0 9px 22px rgba(var(--v-theme-primary), 0.25);
+  background: linear-gradient(135deg, #2f6cf0, #2563eb) !important;
+  box-shadow: 0 9px 22px rgba(37, 99, 235, 0.24);
 }
 .timer-action-secondary {
-  border: 1px solid rgba(var(--v-theme-on-surface), 0.08);
+  color: #667085;
+  background: #f3f5f8 !important;
+  border: 1px solid transparent;
 }
 .timer-alerts {
-  border-top: 1px solid var(--border-color, rgba(0,0,0,0.05));
-  padding-top: 12px;
-  gap: 10px;
+  border-top: 1px solid #e8ecf2;
+  padding-top: 18px;
+  gap: 12px;
 }
 .timer-option {
   display: flex;
   align-items: center;
   gap: 8px;
-  min-height: 42px;
-  padding: 2px 12px;
-  color: var(--sidebar-text);
-  background: rgba(var(--v-theme-on-surface), 0.035);
-  border: 1px solid rgba(var(--v-theme-on-surface), 0.07);
-  border-radius: 13px;
+  min-height: 54px;
+  padding: 3px 16px;
+  color: #172033;
+  background: #f8f9fb;
+  border: 1px solid #e5e7eb;
+  border-radius: 14px;
 }
 .timer-option-negative {
-  color: rgb(var(--v-theme-error));
-  background: rgba(var(--v-theme-error), 0.06);
-  border-color: rgba(var(--v-theme-error), 0.14);
+  color: #e11d48;
+  background: #fff1f2;
+  border-color: #fecaca;
 }
 .timer-option :deep(.v-label) {
-  font-size: 0.875rem;
+  font-family: inherit;
+  font-size: 14px;
   font-weight: 600;
+  line-height: 1.25;
   opacity: 0.9;
 }
 .timer-option :deep(.v-switch) {
   flex: none;
 }
+
+.v-theme--dark .clock-page-title {
+  color: var(--sidebar-text) !important;
+}
+
+.v-theme--dark .timer-controls {
+  color: var(--sidebar-text);
+  background: rgba(28, 32, 47, 0.96);
+  border-color: var(--border-color);
+}
+
+.v-theme--dark .timer-field :deep(.v-field),
+.v-theme--dark .timer-option,
+.v-theme--dark .timer-action-secondary,
+.v-theme--dark .timer-mode-toggle {
+  background: rgba(255, 255, 255, 0.055) !important;
+  color: var(--sidebar-text);
+  border-color: var(--border-color);
+}
+
+@media (max-width: 1200px) {
+  .clock-page-content {
+    padding-top: 26px !important;
+  }
+
+  .clock-widget-container {
+    height: clamp(235px, 31vh, 285px);
+  }
+
+  .timer-controls {
+    padding: 22px;
+  }
+
+  .timer-field {
+    flex-basis: 132px;
+    max-width: 132px !important;
+  }
+}
+
+@media (max-width: 850px) {
+  .clock-page-header {
+    padding: 20px 22px 0 !important;
+  }
+
+  .clock-page-content {
+    overflow-y: auto !important;
+    padding: 24px 20px 28px !important;
+  }
+
+  .clock-widget-container {
+    min-height: 220px;
+  }
+
+  .timer-controls > .d-flex:first-child {
+    align-items: flex-start !important;
+  }
+}
+
 @media (max-width: 720px) {
   .timer-controls {
     padding: 16px;
+  }
+
+  .timer-mode-toggle {
+    width: 100%;
+  }
+
+  .timer-mode-btn {
+    flex: 1;
+  }
+
+  .timer-field,
+  .timer-field-end {
+    flex: 1 1 120px;
+    max-width: none !important;
   }
 
   .timer-action-btn {

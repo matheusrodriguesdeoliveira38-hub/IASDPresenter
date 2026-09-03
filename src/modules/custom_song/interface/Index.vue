@@ -1,112 +1,183 @@
 <template>
   <v-slide-y-reverse-transition>
-    <div v-if="module?.show" class="module-full-page dashboard-home d-flex flex-column">
-      <div class="search-header pb-0 flex-shrink-0 custom-song-header">
-        <MenuToggleButton class="mr-4" @toggle-sidebar="toggleSidebar" />
-        <div class="d-flex align-center mr-auto">
-          <div class="module-icon-box d-flex align-center justify-center mr-4">
-            <v-icon :icon="module.icon" size="24" />
+    <div v-if="module?.show" class="module-full-page custom-song-page d-flex flex-column">
+      <header class="custom-song-header">
+        <div class="song-brand">
+          <MenuToggleButton class="menu-toggle" @toggle-sidebar="toggleSidebar" />
+          <div class="module-icon-box song-brand-icon">
+            <v-icon :icon="module.icon" size="22" />
           </div>
-          <h2 class="section-title mb-0">
-            {{ t("title") }}
-          </h2>
+          <div>
+            <h2>{{ t("title") }}</h2>
+            <p>{{ editingMusicId ? "Editando musica salva" : "Nova apresentacao musical" }}</p>
+          </div>
         </div>
-        <v-btn
-          v-if="editingMusicId"
-          variant="tonal"
-          class="text-none font-weight-bold"
-          prepend-icon="mdi-plus"
-          :disabled="saving"
-          @click="resetForm"
-        >
-          Nova musica
-        </v-btn>
-        <v-btn
-          color="primary"
-          variant="flat"
-          class="text-none font-weight-bold"
-          prepend-icon="mdi-content-save"
-          :disabled="!canSave"
-          :loading="saving"
-          @click="saveSong"
-        >
-          {{ editingMusicId ? "Salvar alteracoes" : "Finalizar" }}
-        </v-btn>
-      </div>
 
-      <div class="content-main custom-song-layout">
+        <div class="song-actions">
+          <div class="workspace-tabs" role="tablist" aria-label="Ferramentas do criador">
+            <button
+              v-for="tab in workspaceTabs"
+              :key="tab.id"
+              type="button"
+              class="workspace-tab"
+              :class="{ active: workspaceMode === tab.id }"
+              :aria-selected="workspaceMode === tab.id"
+              role="tab"
+              @click="workspaceMode = tab.id"
+            >
+              <v-icon :icon="tab.icon" size="15" />
+              <span>{{ tab.label }}</span>
+            </button>
+          </div>
+
+          <v-btn
+            v-if="editingMusicId"
+            variant="tonal"
+            class="song-secondary-action text-none"
+            prepend-icon="mdi-plus"
+            :disabled="saving"
+            @click="resetForm"
+          >
+            Nova
+          </v-btn>
+          <v-btn
+            color="primary"
+            variant="flat"
+            class="song-save-action text-none"
+            prepend-icon="mdi-content-save-outline"
+            :disabled="!canSave"
+            :loading="saving"
+            @click="saveSong"
+          >
+            {{ editingMusicId ? "Salvar" : "Finalizar" }}
+          </v-btn>
+        </div>
+      </header>
+
+      <div class="custom-song-layout">
         <aside class="custom-song-sidebar">
-          <section class="custom-song-panel">
+          <section class="custom-song-panel editor-panel">
             <div class="panel-title">
-              <v-icon color="primary">
-                mdi-file-music-outline
-              </v-icon>
-              <span>Dados</span>
+              <v-icon :icon="activePanelIcon" size="17" />
+              <span>{{ activePanelTitle }}</span>
+              <v-spacer />
+              <span v-if="workspaceMode === 'edit'" class="slide-position-badge">
+                Slide {{ previewIndex + 1 }}
+              </span>
             </div>
 
-            <v-textarea
-              v-model="form.name"
-              label="Titulo e cifra do slide de titulo"
-              placeholder="//      G  D
+            <div v-if="workspaceMode === 'edit'" class="editor-fields">
+              <template v-if="previewIndex === 0">
+                <label class="field-caption" for="song-title">Texto principal</label>
+                <v-textarea
+                  id="song-title"
+                  v-model="form.name"
+                  placeholder="//      G  D
 Titulo da musica"
-              variant="outlined"
-              rows="3"
-              density="compact"
-              hide-details="auto"
-              prepend-inner-icon="mdi-music-clef-treble"
-            />
-            <v-text-field
-              v-model="form.artist"
-              label="Artista ou descricao"
-              variant="outlined"
-              density="compact"
-              hide-details="auto"
-            />
-            <v-text-field
-              v-model="form.duration"
-              label="Duracao"
-              placeholder="00:00"
-              variant="outlined"
-              density="compact"
-              hide-details="auto"
-            />
+                  variant="outlined"
+                  rows="4"
+                  density="compact"
+                  hide-details="auto"
+                  no-resize
+                />
+                <p class="field-help">Linhas iniciadas com // aparecem somente no retorno.</p>
+              </template>
 
-            <div class="audio-picker">
-              <v-icon color="primary" size="20">
-                mdi-music-box-outline
-              </v-icon>
-              <div class="audio-file">
-                <strong>MP3</strong>
-                <p>{{ form.audioPath ? fileName(form.audioPath) : "Opcional" }}</p>
+              <template v-else-if="selectedLyricSlide">
+                <label class="field-caption" for="slide-lyric">Letra e cifras</label>
+                <v-textarea
+                  id="slide-lyric"
+                  v-model="selectedLyricSlide.text"
+                  placeholder="//       Bb    C
+A Ele a gloria"
+                  variant="outlined"
+                  rows="4"
+                  density="compact"
+                  hide-details="auto"
+                  no-resize
+                />
+                <div class="slide-meta-row">
+                  <v-text-field
+                    v-model="selectedLyricSlide.aux"
+                    label="Marcador"
+                    placeholder="Verso, Coro..."
+                    variant="outlined"
+                    density="compact"
+                    hide-details
+                  />
+                  <v-text-field
+                    v-model="selectedLyricSlide.time"
+                    label="Inicio"
+                    placeholder="00:00"
+                    variant="outlined"
+                    density="compact"
+                    hide-details
+                  />
+                </div>
+                <v-textarea
+                  v-model="selectedLyricSlide.notes"
+                  label="Notas para o retorno"
+                  placeholder="Lembrete, entrada do vocal..."
+                  variant="outlined"
+                  rows="2"
+                  density="compact"
+                  hide-details="auto"
+                  no-resize
+                />
+              </template>
+            </div>
+
+            <div v-else-if="workspaceMode === 'file'" class="editor-fields file-fields">
+              <v-text-field
+                v-model="form.artist"
+                label="Artista ou descricao"
+                variant="outlined"
+                density="compact"
+                hide-details="auto"
+              />
+              <v-text-field
+                v-model="form.duration"
+                label="Duracao"
+                placeholder="00:00"
+                variant="outlined"
+                density="compact"
+                hide-details="auto"
+              />
+              <div class="audio-picker">
+                <v-icon color="primary" size="20">mdi-music-box-outline</v-icon>
+                <div class="audio-file">
+                  <strong>Arquivo MP3</strong>
+                  <p>{{ form.audioPath ? fileName(form.audioPath) : "Nenhum arquivo selecionado" }}</p>
+                </div>
+                <v-btn variant="text" color="primary" icon size="small" @click="chooseAudio">
+                  <v-icon>mdi-folder-music-outline</v-icon>
+                  <v-tooltip activator="parent" location="bottom">Selecionar MP3</v-tooltip>
+                </v-btn>
+                <v-btn
+                  v-if="form.audioPath"
+                  variant="text"
+                  color="error"
+                  icon
+                  size="small"
+                  @click="form.audioPath = ''"
+                >
+                  <v-icon>mdi-close</v-icon>
+                  <v-tooltip activator="parent" location="bottom">Remover MP3</v-tooltip>
+                </v-btn>
               </div>
               <v-btn
-                variant="text"
+                variant="tonal"
                 color="primary"
-                icon
-                size="small"
-                @click="chooseAudio"
+                class="text-none justify-start"
+                prepend-icon="mdi-file-upload-outline"
+                block
+                @click="importLyricsTxt"
               >
-                <v-icon>mdi-folder-music-outline</v-icon>
-                <v-tooltip activator="parent" location="bottom" open-delay="300">
-                  Selecionar MP3
-                </v-tooltip>
-              </v-btn>
-              <v-btn
-                v-if="form.audioPath"
-                variant="text"
-                color="error"
-                icon
-                size="small"
-                @click="form.audioPath = ''"
-              >
-                <v-icon>mdi-close</v-icon>
-                <v-tooltip activator="parent" location="bottom" open-delay="300">
-                  Remover MP3
-                </v-tooltip>
+                Importar letra em TXT
               </v-btn>
             </div>
 
-            <div class="timing-recorder">
+            <div v-else class="timing-recorder">
               <audio
                 ref="timingAudio"
                 :src="audioPreviewSource"
@@ -118,7 +189,7 @@ Titulo da musica"
               <div class="timing-recorder-head">
                 <div>
                   <strong>Sincronizar slides</strong>
-                  <p>{{ audioPreviewSource ? "Reproduza o MP3 e grave o tempo de entrada." : "Selecione um MP3 para marcar os tempos." }}</p>
+                  <p>{{ audioPreviewSource ? "Reproduza o MP3 e marque cada entrada." : "Adicione um MP3 na aba Arquivo." }}</p>
                 </div>
                 <v-btn
                   icon
@@ -129,9 +200,6 @@ Titulo da musica"
                   @click="toggleTimingAudio"
                 >
                   <v-icon>{{ isTimingPlaying ? "mdi-pause" : "mdi-play" }}</v-icon>
-                  <v-tooltip activator="parent" location="bottom" open-delay="300">
-                    {{ isTimingPlaying ? "Pausar MP3" : "Tocar MP3" }}
-                  </v-tooltip>
                 </v-btn>
               </div>
               <v-slider
@@ -144,45 +212,88 @@ Titulo da musica"
                 step="0.1"
                 @update:model-value="seekTimingAudio"
               />
-              <div class="timing-recorder-actions">
-                <span>{{ formatSeconds(timingCurrentTime) }} / {{ formatSeconds(timingDuration) }}</span>
-                <v-btn
-                  size="small"
-                  variant="tonal"
-                  color="primary"
-                  class="text-none"
-                  prepend-icon="mdi-timer-check-outline"
-                  :disabled="!canRecordSelectedSlideTime"
-                  @click="recordSelectedSlideTime"
-                >
-                  Gravar no slide selecionado
-                </v-btn>
+              <div class="timing-clock">
+                {{ formatSeconds(timingCurrentTime) }} / {{ formatSeconds(timingDuration) }}
               </div>
+              <v-btn
+                variant="flat"
+                color="primary"
+                class="text-none"
+                prepend-icon="mdi-timer-check-outline"
+                :disabled="!canRecordSelectedSlideTime"
+                block
+                @click="recordSelectedSlideTime"
+              >
+                Gravar neste slide
+              </v-btn>
             </div>
           </section>
 
-          <section class="custom-song-panel saved-panel">
+          <section v-if="workspaceMode !== 'file'" class="custom-song-panel slides-panel">
             <div class="panel-title">
-              <v-icon color="primary">
-                mdi-playlist-edit
-              </v-icon>
-              <span>Criadas</span>
+              <v-icon size="17">mdi-view-carousel-outline</v-icon>
+              <span>Lista de slides</span>
               <v-spacer />
-              <v-btn
-                icon
-                size="small"
-                variant="text"
-                :loading="loadingSongs"
-                @click="loadCustomSongs"
-              >
-                <v-icon>mdi-refresh</v-icon>
-                <v-tooltip activator="parent" location="bottom" open-delay="300">
-                  Atualizar lista
-                </v-tooltip>
+              <span class="slides-count">{{ projectionPreviewSlides.length }} slides</span>
+              <v-btn icon size="x-small" variant="tonal" color="primary" @click="addSlide">
+                <v-icon size="16">mdi-plus</v-icon>
+                <v-tooltip activator="parent" location="bottom">Adicionar slide</v-tooltip>
               </v-btn>
             </div>
 
-            <v-list v-if="customSongs.length" density="compact" class="created-songs-list pa-0">
+            <div class="slide-list">
+              <button
+                v-for="(slide, index) in projectionPreviewSlides"
+                :key="slide.uid"
+                type="button"
+                class="slide-list-item"
+                :class="{ active: previewIndex === index }"
+                @click="previewIndex = index"
+              >
+                <span class="slide-number">{{ index + 1 }}</span>
+                <span class="slide-copy">
+                  <strong>{{ previewSlideTitle(slide, index) }}</strong>
+                  <small>{{ index === 0 ? "Slide de titulo" : (form.slides[index - 1]?.aux || "Sem texto auxiliar") }}</small>
+                </span>
+                <span v-if="index > 0" class="slide-row-actions">
+                  <v-icon
+                    size="15"
+                    :class="{ disabled: index === 1 }"
+                    @click.stop="moveSlide(index - 1, -1)"
+                  >mdi-arrow-up</v-icon>
+                  <v-icon
+                    size="15"
+                    :class="{ disabled: index === form.slides.length }"
+                    @click.stop="moveSlide(index - 1, 1)"
+                  >mdi-arrow-down</v-icon>
+                  <v-icon
+                    size="15"
+                    :class="{ disabled: form.slides.length === 1 }"
+                    @click.stop="removeSlide(index - 1)"
+                  >mdi-delete-outline</v-icon>
+                </span>
+              </button>
+            </div>
+
+            <button type="button" class="add-slide-button" @click="addSlide">
+              <v-icon size="17">mdi-plus</v-icon>
+              Adicionar slide
+            </button>
+          </section>
+
+          <section v-else class="custom-song-panel saved-panel file-songs-panel">
+            <div class="panel-title">
+              <v-icon size="17">mdi-playlist-music-outline</v-icon>
+              <span>Musicas criadas</span>
+              <v-spacer />
+              <span class="slides-count">{{ customSongs.length }}</span>
+              <v-btn icon size="x-small" variant="tonal" color="primary" :loading="loadingSongs" @click="loadCustomSongs">
+                <v-icon size="16">mdi-refresh</v-icon>
+                <v-tooltip activator="parent" location="bottom">Atualizar lista</v-tooltip>
+              </v-btn>
+            </div>
+
+            <v-list v-if="customSongs.length" density="compact" class="created-songs-list file-created-songs pa-0">
               <v-list-item
                 v-for="song in customSongs"
                 :key="song.id_music"
@@ -191,53 +302,53 @@ Titulo da musica"
                 @click="editSong(song.id_music)"
               >
                 <template #prepend>
-                  <v-icon color="primary" size="18">
-                    mdi-music-note
-                  </v-icon>
+                  <span class="saved-song-icon"><v-icon size="16">mdi-music-note</v-icon></span>
                 </template>
-                <v-list-item-title class="text-truncate">
-                  {{ song.name }}
-                </v-list-item-title>
+                <v-list-item-title class="text-truncate">{{ song.name }}</v-list-item-title>
                 <v-list-item-subtitle>
                   {{ song.duration || "00:00" }}
                 </v-list-item-subtitle>
                 <template #append>
-                  <v-btn
-                    icon
-                    size="small"
-                    variant="text"
-                    color="primary"
-                    :disabled="!audioPreviewSource"
-                    @click="recordSlideTime(index)"
-                  >
-                    <v-icon>mdi-timer-marker-outline</v-icon>
-                    <v-tooltip activator="parent" location="bottom" open-delay="300">
-                      Gravar tempo atual
-                    </v-tooltip>
-                  </v-btn>
-                  <v-btn
-                    icon
-                    size="small"
-                    variant="text"
-                    color="primary"
-                    @click.stop="editSong(song.id_music)"
-                  >
-                    <v-icon>mdi-pencil-outline</v-icon>
-                    <v-tooltip activator="parent" location="bottom" open-delay="300">
-                      Editar musica
-                    </v-tooltip>
-                  </v-btn>
+                  <div class="saved-song-actions">
+                    <v-btn
+                      icon
+                      size="x-small"
+                      variant="text"
+                      color="primary"
+                      aria-label="Editar musica"
+                      @click.stop="editSong(song.id_music)"
+                    >
+                      <v-icon size="17">mdi-pencil-outline</v-icon>
+                      <v-tooltip activator="parent" location="bottom">Editar música</v-tooltip>
+                    </v-btn>
+                    <v-btn
+                      icon
+                      size="x-small"
+                      variant="text"
+                      color="error"
+                      aria-label="Excluir musica"
+                      :loading="deletingMusicId === song.id_music"
+                      :disabled="deletingMusicId !== null && deletingMusicId !== song.id_music"
+                      @click.stop="confirmDeleteSong(song)"
+                    >
+                      <v-icon size="17">mdi-delete-outline</v-icon>
+                      <v-tooltip activator="parent" location="bottom">Excluir música</v-tooltip>
+                    </v-btn>
+                  </div>
                 </template>
               </v-list-item>
             </v-list>
-            <div v-else class="empty-state">
-              Nenhuma musica personalizada salva ainda.
+
+            <div v-else class="empty-created-songs">
+              <span class="empty-created-icon"><v-icon size="24">mdi-music-note-plus</v-icon></span>
+              <strong>Nenhuma musica criada</strong>
+              <p>Finalize sua primeira musica para encontra-la aqui.</p>
             </div>
           </section>
         </aside>
 
         <main class="custom-song-workspace">
-          <section class="preview-strip">
+          <section ref="previewFrame" class="preview-stage">
             <div class="preview-slide">
               <LSlide
                 v-if="activeProjectionPreview"
@@ -249,142 +360,43 @@ Titulo da musica"
                 :image_position="activeProjectionPreview.image_position"
               />
             </div>
-            <div class="preview-list">
-              <v-list density="compact" class="bg-transparent pa-0">
-                <v-list-item
-                  v-for="(slide, index) in projectionPreviewSlides"
-                  :key="slide.uid"
-                  class="preview-list-item"
-                  :active="previewIndex === index"
-                  @click="previewIndex = index"
-                >
-                  <template #prepend>
-                    <v-avatar size="22" color="primary" class="text-white text-caption">
-                      {{ index + 1 }}
-                    </v-avatar>
-                  </template>
-                  <v-list-item-title class="text-truncate">
-                    {{ previewSlideTitle(slide, index) }}
-                  </v-list-item-title>
-                </v-list-item>
-              </v-list>
+
+            <div class="preview-controls">
+              <button type="button" :disabled="previewIndex === 0" @click="previewIndex = 0">
+                <v-icon size="17">mdi-skip-previous</v-icon>
+              </button>
+              <button type="button" :disabled="previewIndex === 0" @click="previewIndex--">
+                <v-icon size="18">mdi-chevron-left</v-icon>
+              </button>
+              <span><strong>{{ previewIndex + 1 }}</strong> / {{ projectionPreviewSlides.length }}</span>
+              <button
+                type="button"
+                :disabled="previewIndex === projectionPreviewSlides.length - 1"
+                @click="previewIndex++"
+              >
+                <v-icon size="18">mdi-chevron-right</v-icon>
+              </button>
+              <button
+                type="button"
+                :disabled="previewIndex === projectionPreviewSlides.length - 1"
+                @click="previewIndex = projectionPreviewSlides.length - 1"
+              >
+                <v-icon size="17">mdi-skip-next</v-icon>
+              </button>
+              <button type="button" @click="togglePreviewFullscreen">
+                <v-icon size="17">mdi-fullscreen</v-icon>
+              </button>
             </div>
           </section>
 
-          <section class="slides-workarea">
-            <div class="panel-title slides-title">
-              <v-icon color="primary">
-                mdi-monitor-screenshot
-              </v-icon>
-              <span>Slides da letra</span>
-              <v-chip size="small" variant="tonal" color="primary">
-                {{ form.slides.length }}
-              </v-chip>
-              <v-spacer />
-              <v-btn
-                variant="tonal"
-                class="text-none"
-                prepend-icon="mdi-file-upload-outline"
-                @click="importLyricsTxt"
-              >
-                Importar TXT
-              </v-btn>
-              <v-btn
-                color="primary"
-                variant="tonal"
-                class="text-none"
-                prepend-icon="mdi-plus"
-                @click="addSlide"
-              >
-                Slide
-              </v-btn>
+          <footer class="workspace-status">
+            <div>
+              <span class="status-dot" />
+              <strong>{{ lyricText(form.name) || "Titulo da musica" }}</strong>
             </div>
-
-            <div class="slides-list">
-              <article
-                v-for="(slide, index) in form.slides"
-                :key="slide.uid"
-                class="slide-editor"
-              >
-                <div class="slide-editor-head">
-                  <v-chip color="primary" variant="tonal" size="small">
-                    Slide {{ index + 1 }}
-                  </v-chip>
-                  <v-spacer />
-                  <v-btn
-                    icon
-                    size="small"
-                    variant="text"
-                    :disabled="index === 0"
-                    @click="moveSlide(index, -1)"
-                  >
-                    <v-icon>mdi-arrow-up</v-icon>
-                  </v-btn>
-                  <v-btn
-                    icon
-                    size="small"
-                    variant="text"
-                    :disabled="index === form.slides.length - 1"
-                    @click="moveSlide(index, 1)"
-                  >
-                    <v-icon>mdi-arrow-down</v-icon>
-                  </v-btn>
-                  <v-btn
-                    icon
-                    size="small"
-                    variant="text"
-                    color="error"
-                    :disabled="form.slides.length === 1"
-                    @click="removeSlide(index)"
-                  >
-                    <v-icon>mdi-delete-outline</v-icon>
-                  </v-btn>
-                </div>
-
-                <v-textarea
-                  v-model="slide.text"
-                  label="Letra e cifras do slide"
-                  placeholder="//       Bb    C\nA Ele a gloria"
-                  hint="Linhas iniciadas com // aparecem somente no monitor de retorno."
-                  persistent-hint
-                  variant="outlined"
-                  rows="2"
-                  density="compact"
-                  hide-details="auto"
-                />
-                <v-textarea
-                  v-model="slide.notes"
-                  label="Notas para o retorno"
-                  placeholder="Lembrete, entrada do vocal..."
-                  variant="outlined"
-                  rows="2"
-                  density="compact"
-                  hide-details="auto"
-                  prepend-inner-icon="mdi-note-text-outline"
-                />
-                <div class="slide-meta-row">
-                  <v-text-field
-                    v-model="slide.aux"
-                    label="Marcador"
-                    placeholder="Verso, Coro..."
-                    variant="outlined"
-                    density="compact"
-                    hide-details
-                    class="slide-marker-field"
-                  />
-                  <v-text-field
-                    v-model="slide.time"
-                    label="Inicio"
-                    placeholder="00:00"
-                    variant="outlined"
-                    density="compact"
-                    hide-details
-                    class="slide-time-field"
-                  />
-                </div>
-              </article>
-            </div>
-          </section>
+            <span>{{ form.artist || "Sem artista" }}</span>
+            <span>{{ form.duration || "00:00" }}</span>
+          </footer>
         </main>
       </div>
     </div>
@@ -411,8 +423,15 @@ export default {
   data: () => ({
     saving: false,
     loadingSongs: false,
+    deletingMusicId: null,
     editingMusicId: null,
     customSongs: [],
+    workspaceMode: "edit",
+    workspaceTabs: [
+      { id: "edit", label: "Editar", icon: "mdi-pencil-outline" },
+      { id: "file", label: "Arquivo", icon: "mdi-folder-outline" },
+      { id: "sync", label: "Sincronia", icon: "mdi-timer-music-outline" },
+    ],
     previewIndex: 0,
     timingCurrentTime: 0,
     timingDuration: 0,
@@ -461,6 +480,23 @@ export default {
     },
     activeProjectionPreview() {
       return this.projectionPreviewSlides[this.previewIndex] || this.projectionPreviewSlides[0] || null;
+    },
+    selectedLyricSlide() {
+      return this.previewIndex > 0 ? this.form.slides[this.previewIndex - 1] || null : null;
+    },
+    activePanelTitle() {
+      return {
+        edit: "Editor de letra",
+        file: "Arquivo da musica",
+        sync: "Sincronizar slides",
+      }[this.workspaceMode];
+    },
+    activePanelIcon() {
+      return {
+        edit: "mdi-format-text",
+        file: "mdi-folder-music-outline",
+        sync: "mdi-timer-music-outline",
+      }[this.workspaceMode];
     },
     audioPreviewSource() {
       if (!this.form.audioPath) return "";
@@ -531,7 +567,16 @@ export default {
       if (target < 0 || target >= this.form.slides.length) return;
       const [slide] = this.form.slides.splice(index, 1);
       this.form.slides.splice(target, 0, slide);
-      this.previewIndex = target;
+      this.previewIndex = target + 1;
+    },
+    async togglePreviewFullscreen() {
+      const preview = this.$refs.previewFrame;
+      if (!preview) return;
+      if (document.fullscreenElement) {
+        await document.exitFullscreen?.();
+      } else {
+        await preview.requestFullscreen?.();
+      }
     },
     fileName(filePath) {
       return String(filePath).split(/[\\/]/).pop();
@@ -798,6 +843,65 @@ export default {
         slides: slides.length ? slides : [this.createSlide()],
       };
     },
+    confirmDeleteSong(song) {
+      if (!song || this.deletingMusicId !== null) return;
+
+      this.$alert.yesno({
+        text: `Deseja excluir "${song.name}"? Esta musica sera removida da coletanea Personalizadas.`,
+        translate: false,
+      }, async (response) => {
+        if (response === "yes") await this.deleteSong(song);
+      });
+    },
+    async deleteSong(song) {
+      if (!song || !window.electronAPI?.saveLocalDb) {
+        this.$alert.error({ text: "Exclusao disponivel apenas no aplicativo desktop.", translate: false });
+        return;
+      }
+
+      const idMusic = song.id_music;
+      this.deletingMusicId = idMusic;
+
+      try {
+        const locale = this.$i18n.locale || "pt";
+        const album = await this.ensureAlbum(locale);
+        const musicData = window.electronAPI?.getLocalDb
+          ? await window.electronAPI.getLocalDb(`music_${idMusic}`)
+          : null;
+        const musicIndex = await this.loadLocalDb(`${locale}_musics`, []);
+        const nextAlbum = {
+          ...album,
+          musics: (album.musics || []).filter((music) => music.id_music !== idMusic),
+        };
+        const nextMusicIndex = Array.isArray(musicIndex)
+          ? musicIndex.filter((music) => music.id_music !== idMusic)
+          : [];
+
+        await window.electronAPI.saveLocalDb(`${locale}_musics`, this.toPlainObject(nextMusicIndex));
+        await window.electronAPI.saveLocalDb(`album_${CUSTOM_ALBUM_ID}`, this.toPlainObject(nextAlbum));
+
+        if (musicData?.url_music && window.electronAPI?.deleteMedia) {
+          const filename = String(musicData.url_music).replace(/^\/musics\//, "");
+          if (filename) await window.electronAPI.deleteMedia("music", filename);
+        }
+
+        sessionStorage.removeItem(`db:${locale}_musics`);
+        sessionStorage.removeItem(`db:album_${CUSTOM_ALBUM_ID}`);
+        sessionStorage.removeItem(`db:music_${idMusic}`);
+
+        if (this.editingMusicId === idMusic) this.resetForm();
+        await this.loadCustomSongs();
+        this.$alert.info({ text: "Musica excluida da coletanea Personalizadas.", translate: false });
+      } catch (error) {
+        this.$alert.error({
+          text: "Nao foi possivel excluir a musica.",
+          error: error?.message || String(error),
+          translate: false,
+        });
+      } finally {
+        this.deletingMusicId = null;
+      }
+    },
     createAlbum(track) {
       return {
         id_album: CUSTOM_ALBUM_ID,
@@ -875,6 +979,17 @@ export default {
       else index.push(indexedMusic);
 
       return index;
+    },
+    async loadLocalDb(file, fallback) {
+      const cached = sessionStorage.getItem(`db:${file}`);
+      if (cached) return JSON.parse(cached);
+
+      if (window.electronAPI?.getLocalDb) {
+        const local = await window.electronAPI.getLocalDb(file);
+        if (local) return local;
+      }
+
+      return fallback;
     },
     createMusicSummary(idMusic, track, urlMusic) {
       return {
@@ -1252,6 +1367,778 @@ export default {
 
   .custom-song-header {
     padding: 16px 14px 0;
+  }
+}
+
+/* Presentation-first identity that inherits the active IASDPresenter theme. */
+.custom-song-page {
+  --song-bg: var(--main-bg);
+  --song-panel: var(--card-bg);
+  --song-panel-deep: color-mix(in srgb, var(--card-bg) 88%, var(--main-bg));
+  --song-line: var(--border-color);
+  --song-text: var(--sidebar-text);
+  --song-muted: var(--sidebar-text-secondary);
+  --song-accent: var(--accent-blue);
+  --song-accent-soft: var(--sidebar-hover);
+  background:
+    radial-gradient(circle at 76% 18%, rgba(var(--accent-blue-rgb), 0.07), transparent 34%),
+    var(--song-bg);
+  color: var(--song-text);
+  min-height: 0;
+  overflow: hidden;
+}
+
+.custom-song-page,
+.custom-song-page *,
+.custom-song-page *::before,
+.custom-song-page *::after {
+  box-sizing: border-box;
+}
+
+.custom-song-header {
+  align-items: center;
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 20px;
+  justify-content: space-between;
+  padding: 24px 28px 18px;
+}
+
+.song-brand,
+.song-actions,
+.workspace-tabs {
+  align-items: center;
+  display: flex;
+}
+
+.song-brand {
+  gap: 12px;
+  min-width: 0;
+}
+
+.menu-toggle {
+  margin-right: 2px !important;
+}
+
+.song-brand-icon {
+  align-items: center;
+  background: linear-gradient(145deg, #02b9ee, #0878b5);
+  border: 1px solid rgba(88, 218, 255, 0.42);
+  border-radius: 10px;
+  box-shadow: 0 7px 18px rgba(0, 169, 232, 0.3);
+  color: white;
+  display: flex;
+  height: 38px;
+  justify-content: center;
+  width: 38px;
+}
+
+.song-brand h2 {
+  color: var(--song-text);
+  font-size: 24px;
+  font-weight: 750;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+  margin: 0;
+  white-space: nowrap;
+}
+
+.song-brand p {
+  color: var(--song-muted);
+  font-size: 13px;
+  margin: 4px 0 0;
+}
+
+.song-actions {
+  gap: 9px;
+  justify-content: flex-end;
+}
+
+.workspace-tabs {
+  background: var(--song-panel);
+  border: 1px solid var(--song-line);
+  border-radius: 13px;
+  box-shadow: var(--shadow);
+  gap: 3px;
+  padding: 3px;
+}
+
+.workspace-tab {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: 9px;
+  color: var(--song-muted);
+  cursor: pointer;
+  display: flex;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  gap: 5px;
+  min-height: 34px;
+  padding: 0 13px;
+  transition: background 0.18s ease, color 0.18s ease, box-shadow 0.18s ease;
+}
+
+.workspace-tab:hover {
+  background: var(--song-accent-soft);
+  color: var(--song-text);
+}
+
+.workspace-tab.active {
+  background: linear-gradient(180deg, var(--accent-blue), var(--accent-blue-dark));
+  box-shadow: 0 5px 12px rgba(var(--accent-blue-rgb), 0.24);
+  color: white;
+}
+
+.song-save-action,
+.song-secondary-action {
+  border-radius: 8px !important;
+  font-size: 12px !important;
+  font-weight: 750 !important;
+  letter-spacing: 0 !important;
+}
+
+.song-save-action {
+  box-shadow: 0 7px 18px rgba(var(--accent-blue-rgb), 0.22);
+}
+
+.song-secondary-action {
+  color: var(--song-text) !important;
+}
+
+.custom-song-layout {
+  display: grid;
+  flex: 1;
+  gap: 20px;
+  grid-template-columns: clamp(340px, 25vw, 380px) minmax(0, 1fr);
+  min-height: 0;
+  overflow: hidden;
+  padding: 0 28px 28px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.custom-song-sidebar {
+  display: grid;
+  gap: 12px;
+  grid-template-rows: minmax(250px, auto) minmax(250px, 1fr);
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  padding-right: 1px;
+}
+
+.custom-song-panel {
+  background: var(--song-panel);
+  border: 1px solid var(--song-line);
+  border-radius: 14px;
+  box-shadow: var(--shadow);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 0;
+  min-width: 0;
+  padding: 16px;
+  width: 100%;
+  max-width: 100%;
+}
+
+.editor-panel {
+  max-height: 420px;
+  overflow: hidden;
+}
+
+.panel-title {
+  color: var(--song-text);
+  flex-shrink: 0;
+  font-size: 14px;
+  gap: 7px;
+}
+
+.panel-title > .v-icon {
+  color: var(--song-accent);
+}
+
+.slide-position-badge,
+.slides-count {
+  background: var(--song-accent-soft);
+  border-radius: 999px;
+  color: var(--song-accent);
+  font-size: 11px;
+  font-weight: 750;
+  padding: 3px 7px;
+}
+
+.editor-fields,
+.file-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 0;
+  min-width: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-right: 2px;
+  width: 100%;
+}
+
+.field-caption {
+  color: var(--song-muted);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.field-help {
+  color: var(--song-muted);
+  font-size: 11px;
+  line-height: 1.35;
+  margin: -5px 2px 0;
+}
+
+.custom-song-page :deep(.v-field) {
+  background: var(--song-panel-deep);
+  border-radius: 8px;
+  color: var(--song-text);
+  font-size: 14px;
+}
+
+.custom-song-page :deep(.v-field__outline) {
+  --v-field-border-opacity: 0.25;
+  color: var(--song-muted);
+}
+
+.custom-song-page :deep(.v-field--focused .v-field__outline) {
+  color: var(--song-accent);
+}
+
+.custom-song-page :deep(.v-label) {
+  color: var(--song-muted);
+  font-size: 12px;
+}
+
+.custom-song-page :deep(.v-field__input) {
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+.custom-song-page :deep(textarea),
+.custom-song-page :deep(input) {
+  color: var(--song-text);
+}
+
+.slide-meta-row {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: minmax(0, 1fr) 86px;
+  margin-top: 0;
+}
+
+.audio-picker {
+  background: var(--song-panel-deep);
+  border: 1px solid var(--song-line);
+  border-radius: 8px;
+  color: var(--song-text);
+  padding: 8px;
+}
+
+.audio-file strong {
+  font-size: 13px;
+}
+
+.audio-picker p {
+  color: var(--song-muted);
+  font-size: 11px;
+  margin-top: 2px;
+}
+
+.saved-songs-heading {
+  align-items: center;
+  color: var(--song-muted);
+  display: flex;
+  font-size: 12px;
+  font-weight: 700;
+  justify-content: space-between;
+  margin-top: 2px;
+}
+
+.created-songs-list {
+  background: transparent !important;
+  max-height: 115px;
+  overflow-y: auto;
+}
+
+.file-created-songs {
+  flex: 1;
+  max-height: none;
+  min-height: 0;
+}
+
+.file-songs-panel {
+  overflow: hidden;
+}
+
+.saved-song-item {
+  background: var(--song-panel-deep);
+  border: 1px solid transparent;
+  border-radius: 7px !important;
+  color: var(--song-text);
+  margin-bottom: 4px;
+  min-height: 52px !important;
+}
+
+.saved-song-actions {
+  align-items: center;
+  display: flex;
+  gap: 2px;
+}
+
+.saved-song-item :deep(.v-list-item-title) {
+  font-size: 13px;
+  font-weight: 650;
+  line-height: 1.35;
+}
+
+.saved-song-item :deep(.v-list-item-subtitle) {
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.saved-song-item:hover,
+.saved-song-item.v-list-item--active {
+  background: var(--song-accent-soft) !important;
+  border-color: rgba(var(--accent-blue-rgb), 0.32);
+}
+
+.saved-song-icon,
+.empty-created-icon {
+  align-items: center;
+  background: var(--song-accent-soft);
+  border-radius: 7px;
+  color: var(--song-accent);
+  display: flex;
+  height: 28px;
+  justify-content: center;
+  width: 28px;
+}
+
+.empty-created-songs {
+  align-items: center;
+  border: 1px dashed var(--song-line);
+  border-radius: 9px;
+  color: var(--song-muted);
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  justify-content: center;
+  min-height: 130px;
+  padding: 18px;
+  text-align: center;
+}
+
+.empty-created-songs strong {
+  color: var(--song-text);
+  font-size: 13px;
+  margin-top: 9px;
+}
+
+.empty-created-songs p {
+  font-size: 11px;
+  line-height: 1.4;
+  margin: 4px 0 0;
+}
+
+.empty-state {
+  border-color: var(--song-line);
+  color: var(--song-muted);
+  font-size: 10px;
+  padding: 10px;
+}
+
+.timing-recorder {
+  background: transparent;
+  border: 0;
+  color: var(--song-text);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 0;
+}
+
+.timing-recorder-head strong {
+  color: var(--song-text);
+  font-size: 14px;
+}
+
+.timing-recorder-head p {
+  color: var(--song-muted);
+  font-size: 12px;
+}
+
+.timing-clock {
+  color: var(--song-text);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+.slides-panel {
+  padding-bottom: 12px;
+}
+
+.slide-list {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 7px;
+  min-height: 0;
+  min-width: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding-right: 2px;
+}
+
+.slide-list-item {
+  align-items: center;
+  background: var(--song-panel-deep);
+  border: 1px solid transparent;
+  border-radius: 8px;
+  color: var(--song-text);
+  cursor: pointer;
+  display: flex;
+  flex-shrink: 0;
+  gap: 9px;
+  min-height: 50px;
+  padding: 8px 10px;
+  text-align: left;
+  transition: background 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
+  max-width: 100%;
+  width: 100%;
+}
+
+.slide-list-item:hover {
+  background: var(--song-accent-soft);
+}
+
+.slide-list-item.active {
+  background: var(--song-accent-soft);
+  border-color: rgba(var(--accent-blue-rgb), 0.62);
+  box-shadow: 0 0 0 1px rgba(var(--accent-blue-rgb), 0.08), inset 0 0 22px rgba(var(--accent-blue-rgb), 0.04);
+}
+
+.slide-number {
+  align-items: center;
+  background: var(--song-accent-soft);
+  border-radius: 50%;
+  color: var(--song-muted);
+  display: flex;
+  flex: 0 0 26px;
+  font-size: 11px;
+  font-weight: 800;
+  height: 26px;
+  justify-content: center;
+}
+
+.slide-list-item.active .slide-number {
+  background: linear-gradient(145deg, var(--accent-blue), var(--accent-blue-dark));
+  color: white;
+}
+
+.slide-copy {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.slide-copy strong,
+.slide-copy small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.slide-copy strong {
+  color: var(--song-text);
+  font-size: 12px;
+  line-height: 1.3;
+}
+
+.slide-copy small {
+  color: var(--song-muted);
+  font-size: 10px;
+  margin-top: 2px;
+}
+
+.slide-list-item.active .slide-copy strong {
+  color: var(--song-accent);
+}
+
+.slide-row-actions {
+  align-items: center;
+  color: var(--song-muted);
+  display: none;
+  gap: 2px;
+}
+
+.slide-list-item:hover .slide-row-actions,
+.slide-list-item:focus-visible .slide-row-actions {
+  display: flex;
+}
+
+.slide-row-actions .v-icon {
+  border-radius: 4px;
+  padding: 2px;
+}
+
+.slide-row-actions .v-icon:hover {
+  color: var(--song-accent);
+}
+
+.slide-row-actions .disabled {
+  opacity: 0.22;
+  pointer-events: none;
+}
+
+.add-slide-button {
+  align-items: center;
+  background: transparent;
+  border: 1px dashed var(--song-line);
+  border-radius: 8px;
+  color: var(--song-accent);
+  cursor: pointer;
+  display: flex;
+  flex-shrink: 0;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  gap: 5px;
+  justify-content: center;
+  min-height: 40px;
+  transition: background 0.18s ease, border-color 0.18s ease;
+  width: 100%;
+}
+
+.add-slide-button:hover {
+  background: var(--song-accent-soft);
+  border-color: rgba(var(--accent-blue-rgb), 0.55);
+}
+
+.custom-song-workspace {
+  align-items: center;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-height: 0;
+  overflow: hidden;
+  padding: clamp(6px, 2vw, 26px) clamp(4px, 2.2vw, 30px) 0;
+}
+
+.preview-stage {
+  align-items: center;
+  display: flex;
+  justify-content: center;
+  max-height: 100%;
+  max-width: 1040px;
+  min-height: 0;
+  position: relative;
+  width: 100%;
+}
+
+.preview-slide {
+  aspect-ratio: 16 / 9;
+  background: #1c315f;
+  border: 1px solid rgba(67, 91, 151, 0.34);
+  border-radius: 14px;
+  box-shadow: 0 24px 55px rgba(0, 0, 0, 0.38), 0 7px 19px rgba(0, 0, 0, 0.26);
+  overflow: hidden;
+  position: relative;
+  width: 100%;
+}
+
+.preview-slide::after {
+  border-radius: inherit;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.015);
+  content: "";
+  inset: 0;
+  pointer-events: none;
+  position: absolute;
+}
+
+.preview-controls {
+  align-items: center;
+  backdrop-filter: blur(12px);
+  background: rgba(12, 21, 47, 0.88);
+  border: 1px solid rgba(103, 122, 172, 0.24);
+  border-radius: 999px;
+  bottom: 17px;
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.3);
+  display: flex;
+  gap: 4px;
+  left: 50%;
+  padding: 5px 7px;
+  position: absolute;
+  transform: translateX(-50%);
+  z-index: 2;
+}
+
+.preview-controls button {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: 50%;
+  color: #dce4f4;
+  cursor: pointer;
+  display: flex;
+  height: 31px;
+  justify-content: center;
+  transition: background 0.18s ease, color 0.18s ease;
+  width: 31px;
+}
+
+.preview-controls button:hover:not(:disabled) {
+  background: rgba(58, 76, 121, 0.5);
+  color: white;
+}
+
+.preview-controls button:disabled {
+  color: #3d4865;
+  cursor: default;
+}
+
+.preview-controls span {
+  color: #9da9c4;
+  font-size: 10px;
+  min-width: 43px;
+  text-align: center;
+}
+
+.preview-controls strong {
+  color: white;
+  font-weight: 800;
+}
+
+.preview-stage:fullscreen {
+  background: #0c0c13;
+  max-width: none;
+  padding: 4vh 4vw;
+}
+
+.preview-stage:fullscreen .preview-slide {
+  max-height: 92vh;
+  width: auto;
+}
+
+.workspace-status {
+  align-items: center;
+  color: var(--song-muted);
+  display: flex;
+  font-size: 12px;
+  gap: 16px;
+  justify-content: flex-end;
+  max-width: 1040px;
+  padding: 11px 5px 0;
+  width: 100%;
+}
+
+.workspace-status div {
+  align-items: center;
+  display: flex;
+  gap: 7px;
+  margin-right: auto;
+  min-width: 0;
+}
+
+.workspace-status strong {
+  color: var(--song-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.status-dot {
+  background: #1bc67a;
+  border-radius: 50%;
+  box-shadow: 0 0 8px rgba(27, 198, 122, 0.55);
+  flex: 0 0 6px;
+  height: 6px;
+  width: 6px;
+}
+
+@media (max-width: 1100px) {
+  .custom-song-layout {
+    grid-template-columns: 330px minmax(0, 1fr);
+  }
+
+  .workspace-tab {
+    padding: 0 8px;
+  }
+}
+
+@media (max-width: 860px) {
+  .custom-song-page {
+    overflow-y: auto;
+  }
+
+  .custom-song-header {
+    align-items: flex-start;
+    flex-direction: column;
+    padding: 16px;
+  }
+
+  .song-actions {
+    justify-content: space-between;
+    width: 100%;
+  }
+
+  .custom-song-layout {
+    grid-template-columns: 1fr;
+    overflow: visible;
+    padding: 0 16px 20px;
+  }
+
+  .custom-song-sidebar {
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: 360px;
+    overflow: visible;
+  }
+
+  .custom-song-workspace {
+    min-height: 420px;
+    overflow: visible;
+    padding: 8px 0 0;
+  }
+}
+
+@media (max-width: 620px) {
+  .song-actions {
+    align-items: stretch;
+    flex-wrap: wrap;
+  }
+
+  .workspace-tabs {
+    order: 3;
+    width: 100%;
+  }
+
+  .workspace-tab {
+    flex: 1;
+    justify-content: center;
+  }
+
+  .custom-song-sidebar {
+    grid-template-columns: 1fr;
+    grid-template-rows: 350px 390px;
+  }
+
+  .preview-controls {
+    bottom: 9px;
+  }
+
+  .preview-controls button {
+    height: 27px;
+    width: 27px;
   }
 }
 </style>

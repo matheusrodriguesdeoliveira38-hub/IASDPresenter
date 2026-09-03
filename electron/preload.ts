@@ -59,6 +59,23 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('remote-control-command', listener);
     return () => ipcRenderer.removeListener('remote-control-command', listener);
   },
+  onWebOutputDemand: (callback) => {
+    const listener = (_event, active) => callback(active);
+    ipcRenderer.on('web-output-demand', listener);
+    return () => ipcRenderer.removeListener('web-output-demand', listener);
+  },
+  getWebOutputCaptureSource: () => ipcRenderer.invoke('get-web-output-capture-source'),
+  submitWebOutputWebRTCAnswer: (sessionId, answer) => ipcRenderer.invoke('submit-web-output-webrtc-answer', sessionId, answer),
+  onWebOutputWebRTCOffer: (callback) => {
+    const listener = (_event, payload) => callback(payload);
+    ipcRenderer.on('web-output-webrtc-offer', listener);
+    return () => ipcRenderer.removeListener('web-output-webrtc-offer', listener);
+  },
+  onWebOutputWebRTCClose: (callback) => {
+    const listener = (_event, sessionId) => callback(sessionId);
+    ipcRenderer.on('web-output-webrtc-close', listener);
+    return () => ipcRenderer.removeListener('web-output-webrtc-close', listener);
+  },
   onExtractProgress: (callback) => {
     const listener = (_event, data) => callback(data);
     ipcRenderer.on('extract-progress', listener);

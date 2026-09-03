@@ -6,28 +6,49 @@
 }
 
 :root {
-    --accent-blue: #0097d7;
-    --accent-blue-dark: #0077b3;
-    --accent-blue-rgb: 0, 151, 215;
+    --font-family-ui: "Segoe UI Variable", "Segoe UI", Inter, Roboto, Arial, sans-serif;
+    --font-size-display: 40px;
+    --font-size-page-title: 24px;
+    --font-size-section-title: 18px;
+    --font-size-subtitle: 16px;
+    --font-size-body-large: 15px;
+    --font-size-body: 14px;
+    --font-size-small: 13px;
+    --font-size-caption: 12px;
+    --font-size-overline: 11px;
+    --line-height-heading: 1.2;
+    --line-height-body: 1.5;
+    --font-weight-regular: 400;
+    --font-weight-medium: 500;
+    --font-weight-semibold: 600;
+    --font-weight-bold: 700;
+
+    --accent-blue: #2563eb;
+    --accent-blue-dark: #1d4ed8;
+    --accent-blue-rgb: 37, 99, 235;
     --accent-yellow: #ffc107;
+    --brand-orange: #ff6b35;
+    --brand-navy: #101d4a;
+    --titlebar-height: 42px;
+    --page-gutter: 40px;
     
-    --main-bg: #f5f7fb;
+    --main-bg: #ffffff;
     --card-bg: #ffffff;
-    --sidebar-bg: #ffffff;
-    --sidebar-border: #e0e0e0;
-    --border-color: #e0e0e0;
+    --sidebar-bg: #fafbfd;
+    --sidebar-border: #e5e7eb;
+    --border-color: #e5e7eb;
     
-    --sidebar-text: #333333;
-    --sidebar-text-secondary: #666666;
+    --sidebar-text: #172033;
+    --sidebar-text-secondary: #667085;
     
     --sidebar-hover: rgba(var(--accent-blue-rgb), 0.08);
     --accent-soft: rgba(var(--accent-blue-rgb), 0.08);
     --sidebar-active: linear-gradient(135deg, var(--accent-blue) 0%, var(--accent-blue-dark) 100%);
     
-    --shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
-    --shadow-hover: 0 4px 16px rgba(0, 0, 0, 0.12);
+    --shadow: 0 5px 16px rgba(16, 29, 74, 0.07);
+    --shadow-hover: 0 9px 24px rgba(16, 29, 74, 0.11);
     
-    --sidebar-width: 350px;
+    --sidebar-width: clamp(320px, 20.6vw, 350px);
     --border-radius: 12px;
     --transition: all 0.3s ease;
     
@@ -71,8 +92,37 @@ body {
     overflow: hidden !important;
     margin: 0 !important;
     padding: 0 !important;
+    font-family: var(--font-family-ui);
+    font-size: var(--font-size-body);
+    font-weight: var(--font-weight-regular);
+    line-height: var(--line-height-body);
     -webkit-user-select: none;
     user-select: none;
+}
+
+button,
+input,
+textarea,
+select {
+    font-family: inherit;
+}
+
+/* Escala tipográfica compartilhada da interface. O escopo evita interferir
+   nos conteúdos de projeção, que possuem tamanhos configuráveis próprios. */
+#app-container .main-container,
+#app-container .dashboard-sidebar,
+#app-container .app-titlebar,
+.v-overlay-container {
+    font-family: var(--font-family-ui);
+}
+
+#app-container .main-container .section-title,
+#app-container .main-container .page-title {
+    font-family: var(--font-family-ui) !important;
+    font-size: var(--font-size-page-title) !important;
+    font-weight: var(--font-weight-bold) !important;
+    line-height: var(--line-height-heading) !important;
+    letter-spacing: -0.02em !important;
 }
 
 input, textarea {
@@ -125,4 +175,159 @@ img, a {
   min-height: 0;
   background: var(--card-bg);
   z-index: 10;
+  box-sizing: border-box;
+}
+
+.module-full-page.dashboard-home,
+.module-full-page.dashboard-home > .search-header,
+.module-full-page.dashboard-home > .content-main,
+.module-full-page.dashboard-home > .help-content {
+  width: 100%;
+  max-width: none;
+  box-sizing: border-box;
+}
+
+/* Design System compartilhado das páginas do aplicativo. */
+.module-full-page.dashboard-home:not(.clock-page):not(.home-page) {
+  background:
+    radial-gradient(ellipse 62% 25% at 18% 111%, rgba(37, 99, 235, 0.075) 0 49%, transparent 50%),
+    radial-gradient(ellipse 60% 24% at 92% 112%, rgba(255, 107, 53, 0.065) 0 49%, transparent 50%),
+    radial-gradient(circle at 92% 16%, rgba(37, 99, 235, 0.028), transparent 24%),
+    var(--main-bg);
+}
+
+.module-full-page.dashboard-home:not(.clock-page):not(.home-page) > .search-header {
+  min-height: 84px;
+  padding: 28px var(--page-gutter) 0 !important;
+  background: transparent !important;
+}
+
+.module-full-page.dashboard-home:not(.clock-page):not(.home-page) .module-icon-box {
+  width: 50px;
+  height: 50px;
+  flex: 0 0 50px;
+  color: #fff;
+  border-radius: 14px;
+  background: linear-gradient(135deg, var(--accent-blue) 0%, var(--accent-blue-dark) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  box-shadow: 0 7px 18px rgba(var(--accent-blue-rgb), 0.24);
+}
+
+.module-full-page.dashboard-home:not(.clock-page):not(.home-page) .module-icon-box .v-icon {
+  color: #fff !important;
+}
+
+.module-full-page.dashboard-home:not(.clock-page):not(.home-page) > .content-main {
+  padding: 24px var(--page-gutter) 32px !important;
+  background: transparent !important;
+}
+
+.module-full-page.dashboard-home:not(.clock-page):not(.home-page) > .content-main > .v-window,
+.module-full-page.dashboard-home:not(.clock-page):not(.home-page) > .content-main > .v-tabs-window {
+  width: 100%;
+  min-width: 0;
+}
+
+.module-full-page.dashboard-home .settings-container,
+.module-full-page.dashboard-home .about-container {
+  width: 100%;
+  margin-right: auto !important;
+  margin-left: auto !important;
+  box-sizing: border-box;
+}
+
+.module-full-page.dashboard-home .collections-grid-wrap,
+.module-full-page.dashboard-home .modern-hymnal-table,
+.module-full-page.dashboard-home .modern-music-table {
+  width: 100%;
+  min-width: 0;
+  margin-right: auto;
+  margin-left: auto;
+  box-sizing: border-box;
+}
+
+.help-page .help-header {
+  width: 100%;
+  padding: 28px var(--page-gutter) 0 !important;
+  box-sizing: border-box;
+}
+
+.help-page .about-scroll {
+  padding-right: var(--page-gutter) !important;
+  padding-left: var(--page-gutter) !important;
+}
+
+.liturgy-page > .liturgy-page-strip {
+  padding-right: var(--page-gutter) !important;
+  padding-left: var(--page-gutter) !important;
+}
+
+/* Janelas compartilhadas usadas por Apresentações, mídia e utilitários. */
+.app-window-dialog .app-window-card {
+  overflow: hidden;
+  color: var(--sidebar-text);
+  border: 1px solid var(--border-color);
+  border-radius: 24px !important;
+  background: var(--card-bg);
+  box-shadow: 0 24px 70px rgba(16, 29, 74, 0.16) !important;
+}
+
+.app-window-dialog .app-window-toolbar {
+  min-height: 64px;
+  padding: 8px 16px;
+  border-bottom: 1px solid var(--border-color);
+  background: color-mix(in srgb, var(--card-bg) 90%, var(--main-bg));
+}
+
+.app-window-dialog .v-card-title {
+  color: var(--sidebar-text);
+}
+
+.app-window-dialog .v-card-subtitle {
+  color: var(--sidebar-text-secondary);
+  opacity: 1;
+}
+
+.app-window-dialog .v-card-actions {
+  border-top: 1px solid var(--border-color);
+  background: var(--card-bg);
+}
+
+.v-theme--dark .module-full-page.dashboard-home:not(.clock-page):not(.home-page) {
+  background:
+    radial-gradient(ellipse 62% 25% at 18% 111%, rgba(var(--accent-blue-rgb), 0.1) 0 49%, transparent 50%),
+    radial-gradient(ellipse 60% 24% at 92% 112%, rgba(255, 107, 53, 0.06) 0 49%, transparent 50%),
+    var(--main-bg);
+}
+
+@media (max-width: 1024px) {
+  :root {
+    --page-gutter: 22px;
+  }
+
+  .module-full-page.dashboard-home:not(.clock-page):not(.home-page) > .search-header {
+    min-height: 72px;
+    padding: 20px var(--page-gutter) 0 !important;
+  }
+
+  .module-full-page.dashboard-home:not(.clock-page):not(.home-page) > .content-main {
+    padding: 20px var(--page-gutter) 24px !important;
+  }
+}
+
+@media (max-width: 720px) {
+  :root {
+    --page-gutter: 16px;
+  }
+
+  .module-full-page.dashboard-home:not(.clock-page):not(.home-page) .module-icon-box {
+    width: 44px;
+    height: 44px;
+    flex-basis: 44px;
+    border-radius: 12px;
+  }
+
+  .module-full-page.dashboard-home:not(.clock-page):not(.home-page) > .content-main {
+    padding: 16px !important;
+  }
 }

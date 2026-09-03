@@ -121,6 +121,13 @@
                 @load="onYouTubeFrameLoad"
               />
 
+              <webview
+                v-else-if="isWebLink"
+                class="external-web-frame"
+                :src="rawFilePath"
+                webpreferences="contextIsolation=yes, sandbox=yes"
+              />
+
               <video
                 v-else-if="isVideo && filePath && !isProjectionActive"
                 ref="videoEl"
@@ -467,7 +474,7 @@
 import manifest from "../manifest.json";
 import Window from "@/components/Window.vue";
 import ButtonScreen from "@/components/buttons/Screen.vue";
-import { getFileExtension, isAudioFile, isVideoFile } from "@/helpers/ExternalMedia";
+import { getFileExtension, isAudioFile, isVideoFile, isWebUrl } from "@/helpers/ExternalMedia";
 import { getYouTubeEmbedUrl, isYouTubeUrl, YOUTUBE_PLAYER_ORIGIN } from "@/helpers/YouTube";
 
 export default {
@@ -504,7 +511,18 @@ export default {
       return this.$userdata.get("modules.config.media_auto_project_video") !== false;
     },
     isProjectionActive() {
-      return this.$appdata.get("popup_module") === "external_media";
+      const syncSettings = this.$userdata.get("modules.config.media_sync_projection_settings") !== false;
+      const showOnlyInOperator = syncSettings
+        ? this.$userdata.get("modules.config.slide_fullscreen") !== false
+        : this.$userdata.get("modules.config.media_slide_fullscreen") !== false;
+
+      if (showOnlyInOperator) return false;
+
+      const popups = this.$appdata.get("popups") || [];
+      return popups.some(popup => popup
+        && !popup.closed
+        && (popup.popupRole || "projection") === "projection"
+        && popup.popupModule === "external_media");
     },
     module_id() {
       return manifest.id;
@@ -527,6 +545,9 @@ export default {
     },
     isYouTube() {
       return isYouTubeUrl(this.rawFilePath);
+    },
+    isWebLink() {
+      return isWebUrl(this.rawFilePath) && !this.isYouTube;
     },
     youtubeEmbedUrl() {
       return getYouTubeEmbedUrl(this.rawFilePath, { autoplay: true });
@@ -553,10 +574,11 @@ export default {
       return this.isVideo || this.isAudio || this.isYouTube;
     },
     isVisualMedia() {
-      return this.isVideo || this.isYouTube || this.isDocument || this.isPresentation;
+      return this.isVideo || this.isYouTube || this.isWebLink || this.isDocument || this.isPresentation;
     },
     mediaKindLabel() {
       if (this.isYouTube) return "YouTube";
+      if (this.isWebLink) return "Link";
       if (this.isVideo) return "Vídeo";
       if (this.isAudio) return "Áudio";
       if (this.isDocument) return "PDF";
@@ -633,20 +655,8 @@ export default {
         const slideFullscreen = syncSettings 
           ? this.$userdata.get("modules.config.slide_fullscreen") !== false
           : this.$userdata.get("modules.config.media_slide_fullscreen") !== false;
-          
-        const disableIfExtended = syncSettings 
-          ? this.$userdata.get("modules.config.slide_disable_main_if_extended") !== false
-          : this.$userdata.get("modules.config.media_slide_disable_main_if_extended") !== false;
-          
-        let slideMonitors = syncSettings
-          ? this.$userdata.get("modules.config.slide_monitor") || []
-          : this.$userdata.get("modules.config.media_slide_monitor") || [];
-          
-        if (!Array.isArray(slideMonitors)) {
-          slideMonitors = slideMonitors ? [slideMonitors] : [];
-        }
 
-        if (slideFullscreen && !(disableIfExtended && slideMonitors.length > 0)) {
+        if (slideFullscreen && this.isVisualMedia) {
           this.$nextTick(() => {
             setTimeout(() => {
               this.isFullscreen = true;
@@ -755,6 +765,17 @@ export default {
     },
 
     projectVisualMediaIfNeeded() {
+      const syncSettings = this.$userdata.get("modules.config.media_sync_projection_settings") !== false;
+      const showOnlyInOperator = syncSettings
+        ? this.$userdata.get("modules.config.slide_fullscreen") !== false
+        : this.$userdata.get("modules.config.media_slide_fullscreen") !== false;
+
+      if (showOnlyInOperator && this.isVisualMedia) {
+        this.$popup.closeProjection("external_media");
+        this.isFullscreen = true;
+        return;
+      }
+
       if (!this.autoProject || !this.$refs.btnScreen) return;
       if (this.isVisualMedia && !this.$refs.btnScreen.is_selected) {
         this.$refs.btnScreen.popup();
@@ -772,41 +793,10 @@ export default {
       const slideFullscreen = syncSettings 
         ? this.$userdata.get("modules.config.slide_fullscreen") !== false
         : this.$userdata.get("modules.config.media_slide_fullscreen") !== false;
-        
-      const disableIfExtended = syncSettings 
-        ? this.$userdata.get("modules.config.slide_disable_main_if_extended") !== false
-        : this.$userdata.get("modules.config.media_slide_disable_main_if_extended") !== false;
-        
-      let slideMonitors = syncSettings
-        ? this.$userdata.get("modules.config.slide_monitor") || []
-        : this.$userdata.get("modules.config.media_slide_monitor") || [];
-        
-      if (!Array.isArray(slideMonitors)) {
-        slideMonitors = slideMonitors ? [slideMonitors] : [];
-      }
-      
-      let hasExtended = false;
-      if (window.electronAPI && window.electronAPI.getDisplays) {
-        window.electronAPI.getDisplays().then(displays => {
-          if (displays && displays.length > 1) {
-            const primary = displays.find(d => d.isPrimary) || displays[0];
-            const extendedSelected = slideMonitors.filter(m => m !== primary.id);
-            hasExtended = extendedSelected.length > 0;
-          }
-          
-          const willGoFullscreen = slideFullscreen && !(disableIfExtended && hasExtended);
-          
-          if (minimizePlayer && !willGoFullscreen) {
-            this.$appdata.set("modules.external_media.show", false);
-            this.$appdata.set("modules.external_media.minimized", true);
-          }
-        });
-      } else {
-        const willGoFullscreen = slideFullscreen && !(disableIfExtended && slideMonitors.length > 0);
-        if (minimizePlayer && !willGoFullscreen) {
-          this.$appdata.set("modules.external_media.show", false);
-          this.$appdata.set("modules.external_media.minimized", true);
-        }
+
+      if (minimizePlayer && !slideFullscreen) {
+        this.$appdata.set("modules.external_media.show", false);
+        this.$appdata.set("modules.external_media.minimized", true);
       }
     },
 
@@ -976,9 +966,10 @@ export default {
 
     sharePlaybackPosition(force = false) {
       const now = Date.now();
-      if (!force && now - this.lastSharedPlaybackAt < 1000) return;
+      if (!force && now - this.lastSharedPlaybackAt < 250) return;
       this.lastSharedPlaybackAt = now;
       this.$appdata.set("modules.external_media.config.current_time", this.currentTime);
+      this.$appdata.set("modules.external_media.config.playback_updated_at", now);
       this.$appdata.set("modules.external_media.config.progress", this.progress);
     },
 
@@ -1004,11 +995,13 @@ export default {
     onPlay() {
       this.isPaused = false;
       this.$appdata.set("modules.external_media.config.is_paused", false);
+      this.sharePlaybackPosition(true);
     },
 
     onPause() {
       this.isPaused = true;
       this.$appdata.set("modules.external_media.config.is_paused", true);
+      this.sharePlaybackPosition(true);
     },
 
     // --- Controls ---
@@ -1105,6 +1098,7 @@ export default {
       this.$appdata.set("modules.external_media.config", {
         is_paused: true,
         current_time: 0,
+        playback_updated_at: Date.now(),
         progress: 0,
         duration: 0,
         volume: this.volume,
@@ -1225,6 +1219,13 @@ export default {
   border: 0;
   background: #000;
   pointer-events: none;
+}
+
+.external-web-frame {
+  width: 100%;
+  height: 100%;
+  border: 0;
+  background: #fff;
 }
 
 .slide-up-enter-active,

@@ -1,6 +1,20 @@
 <template>
   <v-slide-y-reverse-transition>
-    <div v-if="module?.show" class="module-full-page dashboard-home d-flex flex-column" :class="{ 'home-launcher-layout': isLauncherLayout && !searchQuery }">
+    <div
+      v-if="module?.show"
+      class="module-full-page dashboard-home home-page d-flex flex-column"
+      :class="{
+        'home-launcher-layout': isLauncherLayout && !searchQuery,
+        'home-idle': !searchQuery && !shouldShowHistory && !isLauncherLayout,
+      }"
+    >
+      <div v-if="!searchQuery && !shouldShowHistory && !isLauncherLayout" class="home-background-art" aria-hidden="true">
+        <span class="home-soft-glow" />
+        <span class="home-dot-pattern" />
+        <span class="home-wave home-wave-blue" />
+        <span class="home-wave home-wave-orange" />
+        <span class="home-wave home-wave-lavender" />
+      </div>
       <div class="search-header-container" :class="hasSearchOrClassicHistory ? 'search-header d-flex align-center w-100' : 'hero-search-header d-flex flex-column align-center justify-center'" :style="hasSearchOrClassicHistory ? 'padding: 24px 32px 10px 32px; position: relative;' : 'flex: 1; position: relative; padding: 32px; transition: all 0.5s ease;'">
         <div :style="hasSearchOrClassicHistory ? 'flex: 1; display: flex; align-items: center;' : 'position: absolute; top: 24px; left: 32px;'">
           <MenuToggleButton style="margin: 0;" @toggle-sidebar="toggleSidebar" />
@@ -43,9 +57,9 @@
           </div>
         </div>
 
-        <div v-else-if="!searchQuery && !shouldShowHistory" class="hero-content d-flex flex-column align-center w-100" style="animation: fadeIn 0.5s ease;">
-          <img src="/ico/favicon.png" alt="IASDPresenter" style="width: 80px; height: 80px; margin-bottom: 24px;" />
-          <h1 class="hero-title mb-8" style="font-size: 2.5rem; font-weight: 700; color: var(--sidebar-text);">
+        <div v-else-if="!searchQuery && !shouldShowHistory" class="hero-content d-flex flex-column align-center w-100">
+          <img src="/ico/favicon.png" alt="IASDPresenter" class="hero-brand-symbol" />
+          <h1 class="hero-title">
             O que vamos cantar?
           </h1>
         </div>

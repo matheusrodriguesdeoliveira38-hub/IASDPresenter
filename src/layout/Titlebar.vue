@@ -27,16 +27,15 @@
 
     <!-- WINDOWS VERSION -->
     <template v-else>
-      <div class="d-flex align-center titlebar-drag-area flex-grow-1 h-100 pl-3">
+      <div class="d-flex align-center titlebar-drag-area flex-grow-1 h-100 titlebar-brand">
         <img
           src="/ico/favicon.png"
-          width="16"
-          height="16"
-          class="mr-2"
-          style="opacity: 0.9;"
+          width="19"
+          height="19"
+          class="titlebar-brand-icon"
           alt="Icone"
         />
-        <span class="text-caption font-weight-medium" style="opacity: 0.9; letter-spacing: 0.5px;">{{ $t('app.name') }}</span>
+        <span class="titlebar-brand-name">{{ $t('app.name') }}</span>
       </div>
       
       <div class="window-controls d-flex h-100 titlebar-no-drag">
@@ -136,13 +135,30 @@ export default {
 
 <style scoped>
 .app-titlebar {
-  height: 32px;
+  height: var(--titlebar-height, 42px);
   width: 100%;
   position: relative;
   z-index: 99999;
   user-select: none;
-  border-bottom: 1px solid var(--border-color);
+  background: color-mix(in srgb, var(--main-bg) 96%, #eef2f8) !important;
+  border-bottom: 1px solid #e5e7eb;
   -webkit-app-region: drag;
+}
+
+.titlebar-brand {
+  gap: 8px;
+  padding-left: 25px;
+}
+
+.titlebar-brand-icon {
+  opacity: 0.96;
+}
+
+.titlebar-brand-name {
+  color: #172033;
+  font-size: var(--font-size-small);
+  font-weight: 600;
+  letter-spacing: -0.01em;
 }
 
 .titlebar-drag-area {
@@ -154,11 +170,12 @@ export default {
 }
 
 .control-btn {
-  width: 46px;
+  width: 50px;
   height: 100%;
   cursor: pointer;
   transition: background-color 0.2s;
-  opacity: 0.8;
+  color: #111827;
+  opacity: 0.9;
 }
 
 .control-btn:hover {
@@ -170,6 +187,15 @@ export default {
   background-color: #E81123 !important;
   color: white !important;
   opacity: 1;
+}
+
+:global(.v-theme--dark) .app-titlebar {
+  border-bottom-color: var(--border-color);
+}
+
+:global(.v-theme--dark) .titlebar-brand-name,
+:global(.v-theme--dark) .control-btn {
+  color: var(--sidebar-text);
 }
 
 .titlebar-no-drag {
