@@ -140,8 +140,14 @@ import manifest from "../manifest.json";
 
 import MusicMenuTable from "@/components/MusicMenuTable.vue";
 import MenuToggleButton from "@/components/MenuToggleButton.vue";
+import {
+  applyCustomSongTrack,
+  CUSTOM_SONG_ALBUM_ID,
+  getCustomSongTrackMap,
+  normalizeCustomSongTracks,
+} from "@/helpers/CustomSongOrder";
 
-const CUSTOM_ALBUM_ID = 900001;
+const CUSTOM_ALBUM_ID = CUSTOM_SONG_ALBUM_ID;
 
 export default {
   name: "AlbumModule",
@@ -209,9 +215,12 @@ export default {
       try {
         const locale = this.$i18n.locale || "pt";
         const idMusic = item.id_music;
+        const nextMusics = normalizeCustomSongTracks(
+          (this.module.data.musics || []).filter((music) => music.id_music !== idMusic),
+        );
         const album = this.toPlainObject({
           ...this.module.data,
-          musics: (this.module.data.musics || []).filter((music) => music.id_music !== idMusic),
+          musics: nextMusics,
         });
 
         const musicData = window.electronAPI?.getLocalDb
@@ -219,12 +228,35 @@ export default {
           : null;
 
         const musicIndex = await this.loadLocalDb(`${locale}_musics`, []);
+        const trackMap = getCustomSongTrackMap(nextMusics);
         const nextMusicIndex = Array.isArray(musicIndex)
-          ? musicIndex.filter((music) => music.id_music !== idMusic)
+          ? musicIndex
+            .filter((music) => music.id_music !== idMusic)
+            .map((music) => trackMap.has(music.id_music)
+              ? applyCustomSongTrack(music, trackMap.get(music.id_music))
+              : music)
           : [];
 
         await window.electronAPI.saveLocalDb(`${locale}_musics`, this.toPlainObject(nextMusicIndex));
         await window.electronAPI.saveLocalDb(`album_${CUSTOM_ALBUM_ID}`, album);
+
+        for (const summary of nextMusics) {
+          const storedMusic = window.electronAPI?.getLocalDb
+            ? await window.electronAPI.getLocalDb(`music_${summary.id_music}`)
+            : null;
+          if (!storedMusic) continue;
+          await window.electronAPI.saveLocalDb(
+            `music_${summary.id_music}`,
+            this.toPlainObject(applyCustomSongTrack(storedMusic, summary.track)),
+          );
+          sessionStorage.removeItem(`db:music_${summary.id_music}`);
+        }
+
+        const customState = this.$userdata.get("custom_songs_state") || {};
+        this.$userdata.set("custom_songs_state", {
+          ...customState,
+          track: nextMusics.length,
+        });
 
         if (musicData?.url_music && window.electronAPI?.deleteMedia) {
           const filename = musicData.url_music.replace(/^\/musics\//, "");

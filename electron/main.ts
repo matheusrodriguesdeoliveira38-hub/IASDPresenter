@@ -1,4 +1,4 @@
-const { app, BrowserWindow, Menu, ipcMain, protocol, net, dialog, shell, globalShortcut, session, desktopCapturer } = require('electron');
+const { app, BrowserWindow, Menu, ipcMain, protocol, net, dialog, shell, globalShortcut, session } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const fsExtra = require('fs-extra');
@@ -74,9 +74,11 @@ let presentationShortcutsEnabled = false;
 let mainAppWindow = null;
 let remoteControlServer = null;
 const webOutputClients = new Set();
-const webOutputWebRtcSessions = new Map();
+const webOutputFrameWaiters = new Set();
 let webOutputCaptureTimer = null;
 let webOutputCaptureInFlight = false;
+let webOutputLatestFrame = null;
+let webOutputFrameRevision = 0;
 let remoteControlState = {
   revision: 0,
   updatedAt: null,
@@ -127,6 +129,7 @@ function getRequiredLocalDbFiles(language = 'pt') {
 const defaultRemoteControlConfig = {
   enabled: true,
   webOutputEnabled: true,
+  webOutputSource: 'projection',
   host: '0.0.0.0',
   port: Number(process.env.LOUVORJA_REMOTE_PORT || 1975),
   password: '',
@@ -217,6 +220,7 @@ function sanitizeRemoteControlConfig(config = {}) {
   return {
     enabled: config.enabled !== false,
     webOutputEnabled: config.webOutputEnabled !== false,
+    webOutputSource: config.webOutputSource === 'return_monitor' ? 'return_monitor' : 'projection',
     host,
     port: Number.isInteger(port) && port >= 1024 && port <= 65535 ? port : defaultRemoteControlConfig.port,
     password: typeof config.password === 'string' ? config.password : '',
@@ -515,15 +519,12 @@ function updateRemoteControlState(state = {}) {
     connected: true,
   };
   if (getWebOutputViewerCount() > 0) {
-    const projection = remoteControlState.projection || {};
-    const moduleName = typeof safeState.webOutputModule === 'string'
-      ? safeState.webOutputModule
-      : (typeof projection.module === 'string' ? projection.module : '');
+    const moduleName = getSelectedWebOutputModule(remoteControlState);
     sendWebOutputDemand({
       active: Boolean(moduleName),
       module: moduleName,
+      source: remoteControlConfig.webOutputSource,
     });
-    if (moduleName) setTimeout(dispatchPendingWebOutputWebRtcOffers, 250);
   }
   return remoteControlState;
 }
@@ -549,39 +550,17 @@ function sendWebOutputDemand(demand) {
 }
 
 function getWebOutputViewerCount() {
-  return webOutputClients.size + webOutputWebRtcSessions.size;
+  return webOutputClients.size;
 }
 
-function closeWebOutputWebRtcSession(sessionId) {
-  if (!webOutputWebRtcSessions.delete(sessionId)) return;
-  const mainWindow = mainAppWindow && !mainAppWindow.isDestroyed() ? mainAppWindow : null;
-  if (mainWindow && !mainWindow.webContents.isDestroyed()) {
-    mainWindow.webContents.send('web-output-webrtc-close', sessionId);
+function getSelectedWebOutputModule(state = remoteControlState) {
+  if (remoteControlConfig.webOutputSource === 'return_monitor') {
+    return state.returnMonitorActive === true ? 'return_monitor' : '';
   }
-  if (getWebOutputViewerCount() === 0) sendWebOutputDemand(false);
-}
-
-function pruneWebOutputWebRtcSessions() {
-  const cutoff = Date.now() - 15000;
-  webOutputWebRtcSessions.forEach((rtcSession, sessionId) => {
-    if (rtcSession.lastSeen < cutoff) closeWebOutputWebRtcSession(sessionId);
-  });
-}
-
-function sendWebOutputWebRtcOffer(sessionId, offer) {
-  const mainWindow = mainAppWindow && !mainAppWindow.isDestroyed() ? mainAppWindow : null;
-  if (!mainWindow || mainWindow.webContents.isDestroyed()) return false;
-  mainWindow.webContents.send('web-output-webrtc-offer', { sessionId, offer });
-  return true;
-}
-
-function dispatchPendingWebOutputWebRtcOffers() {
-  const moduleName = remoteControlState.webOutputModule || remoteControlState.projection?.module || '';
-  if (!moduleName) return;
-  webOutputWebRtcSessions.forEach((rtcSession, sessionId) => {
-    if (rtcSession.offerSent || rtcSession.answer) return;
-    rtcSession.offerSent = sendWebOutputWebRtcOffer(sessionId, rtcSession.offer);
-  });
+  const projection = state.projection || {};
+  return typeof state.webOutputModule === 'string'
+    ? state.webOutputModule
+    : (typeof projection.module === 'string' ? projection.module : '');
 }
 
 function normalizeLocalDbFilename(filename) {
@@ -1196,54 +1175,41 @@ function getWebOutputHtml() {
   <meta name="color-scheme" content="dark">
   <title>Saída IASDPresenter</title>
   <style>
-    *{box-sizing:border-box}html,body{width:100%;height:100%;margin:0;overflow:hidden;background:#000}body{display:grid;place-items:center;font-family:Inter,system-ui,sans-serif}.stage{position:absolute;inset:0;width:100%;height:100%;object-fit:fill;background:#000;opacity:1;transition:opacity .08s linear}.stage.inactive{opacity:0}.fallback{display:none}.status{position:relative;z-index:2;display:flex;align-items:center;gap:12px;padding:14px 18px;border:1px solid rgba(255,255,255,.14);border-radius:14px;background:rgba(7,14,25,.86);color:#dce8f5;font-size:14px;transition:opacity .2s}.status.hidden{opacity:0}.dot{width:9px;height:9px;border-radius:50%;background:#18a7e0;box-shadow:0 0 0 6px rgba(24,167,224,.12);animation:pulse 1.5s infinite}@keyframes pulse{50%{box-shadow:0 0 0 11px rgba(24,167,224,0)}}
+    *{box-sizing:border-box}html,body{width:100%;height:100%;margin:0;overflow:hidden;background:#000}body{display:grid;place-items:center;font-family:Inter,system-ui,sans-serif}.stage{position:absolute;inset:0;width:100%;height:100%;object-fit:fill;background:#000;opacity:1;transition:opacity .05s linear}.stage.inactive{opacity:0}.fallback{display:none}.status{position:relative;z-index:2;display:flex;align-items:center;gap:12px;padding:14px 18px;border:1px solid rgba(255,255,255,.14);border-radius:14px;background:rgba(7,14,25,.86);color:#dce8f5;font-size:14px;transition:opacity .2s}.status.hidden{opacity:0}.dot{width:9px;height:9px;border-radius:50%;background:#18a7e0;box-shadow:0 0 0 6px rgba(24,167,224,.12);animation:pulse 1.5s infinite}@keyframes pulse{50%{box-shadow:0 0 0 11px rgba(24,167,224,0)}}
   </style>
 </head>
 <body>
-  <video id="stage" class="stage inactive" autoplay playsinline></video>
+  <canvas id="stage" class="stage inactive" width="1920" height="1080"></canvas>
   <img id="fallback" class="stage fallback inactive" alt="Saída de vídeo do IASDPresenter">
   <div id="status" class="status"><span class="dot"></span><span>Aguardando a saída do IASDPresenter…</span></div>
   <script>
     (function(){
-      var stage=document.getElementById('stage'),fallback=document.getElementById('fallback'),status=document.getElementById('status'),frameReady=false,outputActive=false,pc=null,sessionId='',heartbeat=null,fallbackStarted=false,rtcReady=false,connecting=false;
+      var stage=document.getElementById('stage'),fallback=document.getElementById('fallback'),status=document.getElementById('status'),context=stage.getContext('2d',{alpha:false,desynchronized:true}),frameReady=false,outputActive=false,revision=0,failures=0,fallbackStarted=false,live=null;
       function render(){
         stage.classList.toggle('inactive',!outputActive);
         fallback.classList.toggle('inactive',!outputActive);
         status.classList.toggle('hidden',!outputActive||frameReady);
       }
-      function waitIce(connection){return new Promise(function(resolve){if(connection.iceGatheringState==='complete')return resolve();var done=function(){if(connection.iceGatheringState==='complete'){connection.removeEventListener('icegatheringstatechange',done);resolve()}};connection.addEventListener('icegatheringstatechange',done);setTimeout(resolve,2500)})}
       function startFallback(){
-        if(fallbackStarted)return;fallbackStarted=true;stage.style.display='none';fallback.style.display='block';
+        if(fallbackStarted)return;fallbackStarted=true;document.body.dataset.transport='mjpeg';stage.style.display='none';fallback.style.display='block';
         fallback.onload=function(){frameReady=true;render()};
         fallback.onerror=function(){status.classList.remove('hidden');setTimeout(function(){fallback.src='/output/stream.mjpg?'+Date.now()},800)};
         fallback.src='/output/stream.mjpg?'+Date.now();
       }
-      async function connect(){
-        if(connecting||rtcReady)return;connecting=true;
+      async function nextFrame(){
+        if(fallbackStarted)return;
         try{
-          if(pc)pc.close();if(sessionId)fetch('/api/output/webrtc?id='+encodeURIComponent(sessionId),{method:'DELETE',keepalive:true}).catch(function(){});sessionId='';
-          pc=new RTCPeerConnection({iceServers:[]});
-          pc.addTransceiver('video',{direction:'recvonly'});pc.addTransceiver('audio',{direction:'recvonly'});
-          pc.ontrack=function(event){var stream=event.streams&&event.streams[0];if(!stream)return;stage.srcObject=stream;stage.style.display='block';fallback.style.display='none';rtcReady=true;frameReady=true;stage.play().catch(function(){});render()};
-          pc.onconnectionstatechange=function(){if(pc.connectionState==='failed'||pc.connectionState==='closed')startFallback()};
-          var offer=await pc.createOffer();await pc.setLocalDescription(offer);await waitIce(pc);
-          var created=await fetch('/api/output/webrtc',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({offer:pc.localDescription})});
-          var info=await created.json();if(!info.ok)throw new Error('webrtc');sessionId=info.sessionId;
-          for(var attempt=0;attempt<30;attempt++){
-            var response=await fetch('/api/output/webrtc?id='+encodeURIComponent(sessionId),{cache:'no-store'}),data=await response.json();
-            if(data.answer){await pc.setRemoteDescription(data.answer);break}
-            await new Promise(function(resolve){setTimeout(resolve,150)})
-          }
-          if(!pc.remoteDescription)throw new Error('timeout');
-          heartbeat=setInterval(function(){fetch('/api/output/webrtc?id='+encodeURIComponent(sessionId),{cache:'no-store'}).catch(function(){})},5000);
-          setTimeout(function(){if(!frameReady)startFallback()},2500);
-        }catch(error){startFallback()}finally{connecting=false}
+          var response=await fetch('/output/frame.jpg?after='+revision,{cache:'no-store'});
+          if(response.status===204){setTimeout(nextFrame,16);return}
+          if(!response.ok)throw new Error('frame');
+          revision=Number(response.headers.get('X-Frame-Revision')||revision+1);
+          var bitmap=await createImageBitmap(await response.blob());context.drawImage(bitmap,0,0,1920,1080);bitmap.close();failures=0;frameReady=true;document.body.dataset.transport='latest-frame';render();nextFrame();
+        }catch(error){failures+=1;if(failures>5||typeof createImageBitmap!=='function')startFallback();else setTimeout(nextFrame,80)}
       }
       async function pollState(){
-        try{var response=await fetch('/api/output-state',{cache:'no-store'}),data=await response.json(),wasActive=outputActive;outputActive=data.active===true;if(outputActive&&!wasActive&&!rtcReady)connect();render()}catch(error){}finally{setTimeout(pollState,300)}
+        try{var response=await fetch('/api/output-state',{cache:'no-store'}),data=await response.json();outputActive=data.active===true;render()}catch(error){}finally{setTimeout(pollState,200)}
       }
-      window.addEventListener('beforeunload',function(){if(heartbeat)clearInterval(heartbeat);if(sessionId)fetch('/api/output/webrtc?id='+encodeURIComponent(sessionId),{method:'DELETE',keepalive:true}).catch(function(){})});
-      connect();pollState();
+      live=new EventSource('/output/live');nextFrame();pollState();
     })();
   </script>
 </body>
@@ -1254,7 +1220,8 @@ function getProjectionCaptureWindow() {
   const projectionWindows = BrowserWindow.getAllWindows().filter((win) => {
     if (!win || win.isDestroyed() || win === mainAppWindow || win.webContents?.isDestroyed()) return false;
     const url = win.webContents.getURL();
-    return url.includes('#/popup') && !/[?&]module=return_monitor(?:&|$)/.test(url);
+    const isWebOutput = /[?&]webOutput=1(?:&|$)/.test(url);
+    return url.includes('#/popup') && (isWebOutput || !/[?&]module=return_monitor(?:&|$)/.test(url));
   });
 
   return projectionWindows.find(win => /[?&]webOutput=1(?:&|$)/.test(win.webContents.getURL()))
@@ -1283,10 +1250,17 @@ async function captureWebOutputFrame() {
           ? image
           : image.resize({ width: 1920, height: 1080, quality: 'good' });
         const frame = outputImage.toJPEG(78);
+        webOutputLatestFrame = frame;
+        webOutputFrameRevision += 1;
+        webOutputFrameWaiters.forEach((waiter) => {
+          clearTimeout(waiter.timer);
+          webOutputFrameWaiters.delete(waiter);
+          sendWebOutputFrame(waiter.response, frame, webOutputFrameRevision);
+        });
         const header = Buffer.from(`--iasdpresenter\r\nContent-Type: image/jpeg\r\nContent-Length: ${frame.length}\r\n\r\n`);
         const trailer = Buffer.from('\r\n');
         webOutputClients.forEach((client) => {
-          if (client.closed || client.blocked) return;
+          if (client.kind !== 'mjpeg' || client.closed || client.blocked) return;
           try {
             client.blocked = !client.response.write(Buffer.concat([header, frame, trailer]));
           } catch (error) {
@@ -1307,6 +1281,48 @@ async function captureWebOutputFrame() {
   }
 }
 
+function sendWebOutputFrame(response, frame, revision) {
+  if (response.destroyed || response.writableEnded) return;
+  response.writeHead(200, {
+    'Content-Type': 'image/jpeg',
+    'Content-Length': frame.length,
+    'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0',
+    'X-Frame-Revision': String(revision),
+    'Access-Control-Allow-Origin': '*',
+  });
+  response.end(frame);
+}
+
+function addWebOutputLiveClient(request, response) {
+  request.socket.setNoDelay(true);
+  response.writeHead(200, {
+    'Content-Type': 'text/event-stream; charset=utf-8',
+    'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0',
+    'Connection': 'keep-alive',
+    'X-Accel-Buffering': 'no',
+  });
+  response.flushHeaders();
+  response.write('retry: 500\nevent: ready\ndata: 1\n\n');
+  const client = { kind: 'live', response, blocked: false, closed: false, keepAlive: null };
+  client.keepAlive = setInterval(() => {
+    if (!client.closed && !response.writableEnded) response.write(': keepalive\n\n');
+  }, 5000);
+  webOutputClients.add(client);
+  const moduleName = getSelectedWebOutputModule();
+  sendWebOutputDemand({ active: Boolean(moduleName), module: moduleName, source: remoteControlConfig.webOutputSource });
+  const removeClient = () => {
+    if (client.closed) return;
+    client.closed = true;
+    clearInterval(client.keepAlive);
+    webOutputClients.delete(client);
+    stopWebOutputCaptureIfIdle();
+    if (getWebOutputViewerCount() === 0) sendWebOutputDemand(false);
+  };
+  request.socket.on('close', removeClient);
+  response.on('close', removeClient);
+  if (!webOutputCaptureTimer && !webOutputCaptureInFlight) captureWebOutputFrame();
+}
+
 function addWebOutputClient(request, response) {
   request.socket.setNoDelay(true);
   response.writeHead(200, {
@@ -1319,15 +1335,13 @@ function addWebOutputClient(request, response) {
   });
   response.flushHeaders();
 
-  const client = { response, blocked: false, closed: false };
+  const client = { kind: 'mjpeg', response, blocked: false, closed: false };
   webOutputClients.add(client);
-  const projection = remoteControlState.projection || {};
-  const moduleName = typeof remoteControlState.webOutputModule === 'string'
-    ? remoteControlState.webOutputModule
-    : (typeof projection.module === 'string' ? projection.module : '');
+  const moduleName = getSelectedWebOutputModule();
   sendWebOutputDemand({
     active: Boolean(moduleName),
     module: moduleName,
+    source: remoteControlConfig.webOutputSource,
   });
   response.on('drain', () => { client.blocked = false; });
   const removeClient = () => {
@@ -1445,7 +1459,7 @@ function getRemoteControlHtml() {
 async function handleRemoteControlRequest(request, response) {
   const url = new URL(request.url, `http://${request.headers.host || 'localhost'}`);
 
-  if (url.pathname === '/output' || url.pathname === '/output/' || url.pathname === '/output/stream.mjpg' || url.pathname === '/api/output/webrtc') {
+  if (url.pathname === '/output' || url.pathname === '/output/' || url.pathname === '/output/stream.mjpg' || url.pathname === '/output/live' || url.pathname === '/output/frame.jpg') {
     if (!remoteControlConfig.webOutputEnabled) {
       response.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' });
       response.end('Saída web desativada nas configurações do IASDPresenter.');
@@ -1464,52 +1478,40 @@ async function handleRemoteControlRequest(request, response) {
     return;
   }
 
-  if (url.pathname === '/api/output/webrtc') {
-    pruneWebOutputWebRtcSessions();
-    if (request.method === 'POST') {
-      const body = await readRequestJson(request);
-      if (!body.offer || typeof body.offer.sdp !== 'string') {
-        sendJson(response, 400, { ok: false, error: 'Oferta WebRTC invalida.' });
-        return;
-      }
-      const sessionId = crypto.randomUUID();
-      webOutputWebRtcSessions.set(sessionId, {
-        offer: body.offer,
-        answer: null,
-        offerSent: false,
-        lastSeen: Date.now(),
-      });
-      const projection = remoteControlState.projection || {};
-      const moduleName = remoteControlState.webOutputModule || projection.module || '';
-      sendWebOutputDemand({ active: Boolean(moduleName), module: moduleName });
-      if (moduleName) setTimeout(dispatchPendingWebOutputWebRtcOffers, 250);
-      sendJson(response, 200, { ok: true, sessionId });
-      return;
-    }
+  if (request.method === 'GET' && url.pathname === '/output/live') {
+    addWebOutputLiveClient(request, response);
+    return;
+  }
 
-    const sessionId = String(url.searchParams.get('id') || '');
-    const rtcSession = webOutputWebRtcSessions.get(sessionId);
-    if (request.method === 'GET') {
-      if (!rtcSession) {
-        sendJson(response, 404, { ok: false, error: 'Sessao encerrada.' });
-        return;
+  if (request.method === 'GET' && url.pathname === '/output/frame.jpg') {
+    const after = Math.max(0, Number(url.searchParams.get('after') || 0));
+    if (webOutputLatestFrame && webOutputFrameRevision > after) {
+      sendWebOutputFrame(response, webOutputLatestFrame, webOutputFrameRevision);
+      return;
+    }
+    const waiter = { response, timer: null };
+    waiter.timer = setTimeout(() => {
+      webOutputFrameWaiters.delete(waiter);
+      if (!response.writableEnded) {
+        response.writeHead(204, { 'Cache-Control': 'no-store', 'X-Frame-Revision': String(webOutputFrameRevision) });
+        response.end();
       }
-      rtcSession.lastSeen = Date.now();
-      sendJson(response, 200, { ok: true, answer: rtcSession.answer });
-      return;
-    }
-    if (request.method === 'DELETE') {
-      closeWebOutputWebRtcSession(sessionId);
-      sendJson(response, 200, { ok: true });
-      return;
-    }
+    }, 1000);
+    webOutputFrameWaiters.add(waiter);
+    response.on('close', () => {
+      clearTimeout(waiter.timer);
+      webOutputFrameWaiters.delete(waiter);
+    });
+    return;
   }
 
   if (request.method === 'GET' && url.pathname === '/api/output-state') {
+    const moduleName = getSelectedWebOutputModule();
     sendJson(response, 200, {
       ok: true,
-      active: remoteControlState.projection?.active === true,
-      module: remoteControlState.projection?.module || '',
+      active: Boolean(moduleName),
+      module: moduleName,
+      source: remoteControlConfig.webOutputSource,
       revision: remoteControlState.revision,
     });
     return;
@@ -1780,7 +1782,11 @@ function stopRemoteControlServer() {
       try { client.response.end(); } catch (error) { /* ignore */ }
     });
     webOutputClients.clear();
-    Array.from(webOutputWebRtcSessions.keys()).forEach(closeWebOutputWebRtcSession);
+    webOutputFrameWaiters.forEach((waiter) => {
+      clearTimeout(waiter.timer);
+      if (!waiter.response.writableEnded) waiter.response.end();
+    });
+    webOutputFrameWaiters.clear();
     stopWebOutputCaptureIfIdle();
     sendWebOutputDemand(false);
     if (!remoteControlServer) {
@@ -2725,17 +2731,6 @@ ipcMain.handle('identify-displays', () => {
 
 ipcMain.handle('get-remote-control-status', () => getRemoteControlStatus());
 ipcMain.handle('set-remote-control-state', (event, state) => updateRemoteControlState(state));
-ipcMain.handle('get-web-output-capture-source', () => {
-  const projectionWindow = getProjectionCaptureWindow();
-  return projectionWindow && !projectionWindow.isDestroyed() ? projectionWindow.getMediaSourceId() : '';
-});
-ipcMain.handle('submit-web-output-webrtc-answer', (event, sessionId, answer) => {
-  const rtcSession = webOutputWebRtcSessions.get(String(sessionId || ''));
-  if (!rtcSession || !answer || typeof answer.sdp !== 'string') return false;
-  rtcSession.answer = answer;
-  rtcSession.lastSeen = Date.now();
-  return true;
-});
 
 ipcMain.handle('get-automation-config', () => automationConfig);
 
@@ -3007,38 +3002,7 @@ async function clearDesktopWebAppCaches() {
   }
 }
 
-function setupWebOutputDisplayCapture() {
-  session.defaultSession.setDisplayMediaRequestHandler(async (_request, callback) => {
-    try {
-      let source = null;
-      for (let attempt = 0; attempt < 30 && !source; attempt += 1) {
-        const projectionWindow = getProjectionCaptureWindow();
-        const sourceId = projectionWindow && !projectionWindow.isDestroyed()
-          ? projectionWindow.getMediaSourceId()
-          : '';
-        if (sourceId) {
-          const sources = await desktopCapturer.getSources({
-            types: ['window'],
-            thumbnailSize: { width: 0, height: 0 },
-          });
-          source = sources.find(candidate => candidate.id === sourceId) || null;
-        }
-        if (!source) await new Promise(resolve => setTimeout(resolve, 100));
-      }
-      if (!source) {
-        callback({});
-        return;
-      }
-      callback({ video: source, audio: 'loopback' });
-    } catch (error) {
-      console.warn('[WebOutput] Falha ao preparar captura WebRTC:', error.message);
-      callback({});
-    }
-  });
-}
-
 async function createWindow() {
-  setupWebOutputDisplayCapture();
   const mainWindow = new BrowserWindow({
     width: 1300,
     height: 900,

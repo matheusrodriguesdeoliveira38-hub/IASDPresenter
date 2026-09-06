@@ -1713,6 +1713,22 @@
                       />
                     </div>
 
+                    <v-select
+                      v-if="remote_control_config.webOutputEnabled"
+                      class="mb-5"
+                      label="Conteúdo transmitido"
+                      :items="web_output_source_options"
+                      item-title="title"
+                      item-value="value"
+                      :model-value="remote_control_config.webOutputSource"
+                      variant="outlined"
+                      density="comfortable"
+                      persistent-hint
+                      hint="Projeção mostra a saída principal. Retorno mostra letras, próximo slide e informações do monitor de retorno."
+                      :loading="remote_control_loading"
+                      @update:model-value="updateWebOutputSource"
+                    />
+
                     <v-alert v-if="!remote_control_config.webOutputEnabled" type="info" variant="tonal" density="comfortable" class="rounded-lg">
                       A saída web está desativada. O controle remoto pode continuar funcionando normalmente.
                     </v-alert>
@@ -2199,12 +2215,17 @@ export default {
     remote_control_running: false,
     remote_control_addresses: [],
     web_output_addresses: [],
+    web_output_source_options: [
+      { title: "Projeção", value: "projection" },
+      { title: "Retorno", value: "return_monitor" },
+    ],
     remote_control_qr_code: "",
     remote_control_network_options: [],
     show_remote_control_password: false,
     remote_control_config: {
       enabled: true,
       webOutputEnabled: true,
+      webOutputSource: "projection",
       host: "0.0.0.0",
       port: 1975,
       password: "",
@@ -2692,6 +2713,10 @@ export default {
     },
     async updateWebOutputEnabled(value) {
       this.remote_control_config.webOutputEnabled = value === true;
+      await this.saveRemoteControlConfig();
+    },
+    async updateWebOutputSource(value) {
+      this.remote_control_config.webOutputSource = value === "return_monitor" ? "return_monitor" : "projection";
       await this.saveRemoteControlConfig();
     },
     async saveRemoteControlConfig() {

@@ -406,9 +406,15 @@ A Ele a gloria"
 <script lang="ts">
 import LSlide from "@/components/Slide.vue";
 import MenuToggleButton from "@/components/MenuToggleButton.vue";
+import {
+  applyCustomSongTrack,
+  CUSTOM_SONG_ALBUM_ID,
+  getCustomSongTrackMap,
+  normalizeCustomSongTracks,
+} from "@/helpers/CustomSongOrder";
 import manifest from "../manifest.json";
 
-const CUSTOM_ALBUM_ID = 900001;
+const CUSTOM_ALBUM_ID = CUSTOM_SONG_ALBUM_ID;
 const CUSTOM_CATEGORY_FALLBACK_ID = "cds";
 const CUSTOM_CATEGORY_NAME = "CDs Oficiais/Ano";
 const CUSTOM_ALBUM_NAME = "Personalizadas";
@@ -740,33 +746,33 @@ export default {
 
         const album = await this.ensureAlbum(locale);
         const customState = this.$userdata.get("custom_songs_state") || {};
+        const orderedExisting = normalizeCustomSongTracks(album.musics || []);
         const editingSummary = this.editingMusicId
-          ? (album.musics || []).find((music) => music.id_music === this.editingMusicId)
+          ? orderedExisting.find((music) => music.id_music === this.editingMusicId)
           : null;
-        const lastTrack = Math.max(
-          Number(customState.track) || 0,
-          ...(album.musics || []).map((music) => Number(music.track) || 0),
-        );
         const lastMusicId = Math.max(
           Number(customState.nextMusicId) ? Number(customState.nextMusicId) - 1 : 900000,
-          ...(album.musics || []).map((music) => Number(music.id_music) || 0),
+          ...orderedExisting.map((music) => Number(music.id_music) || 0),
         );
         const nextMusicId = this.editingMusicId || Math.max(lastMusicId + 1, 900001);
-        const track = editingSummary?.track || lastTrack + 1;
-        const baseAlbum = this.createAlbum(track);
+        const track = editingSummary?.track || orderedExisting.length + 1;
+        const proposedSummary = this.createMusicSummary(nextMusicId, track, urlMusic);
+
+        album.musics = normalizeCustomSongTracks([
+          ...orderedExisting.filter((music) => music.id_music !== nextMusicId),
+          proposedSummary,
+        ]);
+        const musicSummary = album.musics.find((music) => music.id_music === nextMusicId);
+        const baseAlbum = this.createAlbum(album.musics.length);
         const { categories, categoryId } = await this.ensureCategories(locale, baseAlbum);
         album.categories = [categoryId];
-        const musicSummary = this.createMusicSummary(nextMusicId, track, urlMusic);
         const musicData = this.createMusicData(musicSummary, categoryId);
-
-        album.musics = [
-          ...(album.musics || []).filter((music) => music.id_music !== nextMusicId),
-          musicSummary,
-        ].sort((a, b) => a.track - b.track);
+        const musicIndex = await this.mergeMusicIndex(locale, musicSummary, album.musics);
 
         await window.electronAPI.saveLocalDb(`${locale}_categories`, this.toPlainObject(categories));
-        await window.electronAPI.saveLocalDb(`${locale}_musics`, this.toPlainObject(await this.mergeMusicIndex(locale, musicSummary)));
+        await window.electronAPI.saveLocalDb(`${locale}_musics`, this.toPlainObject(musicIndex));
         await window.electronAPI.saveLocalDb(`album_${CUSTOM_ALBUM_ID}`, this.toPlainObject(album));
+        await this.syncStoredCustomSongTracks(album.musics, nextMusicId);
         await window.electronAPI.saveLocalDb(`music_${nextMusicId}`, this.toPlainObject(musicData));
 
         sessionStorage.removeItem(`db:${locale}_categories`);
@@ -774,12 +780,13 @@ export default {
         sessionStorage.removeItem(`db:album_${CUSTOM_ALBUM_ID}`);
         sessionStorage.removeItem(`db:music_${nextMusicId}`);
 
-        if (!wasEditing) {
-          this.$userdata.set("custom_songs_state", {
-            nextMusicId: nextMusicId + 1,
-            track,
-          });
-        }
+        this.$userdata.set("custom_songs_state", {
+          ...customState,
+          nextMusicId: wasEditing
+            ? Math.max(Number(customState.nextMusicId) || 900001, lastMusicId + 1)
+            : nextMusicId + 1,
+          track: album.musics.length,
+        });
 
         this.resetForm();
         await this.loadCustomSongs();
@@ -869,16 +876,30 @@ export default {
           ? await window.electronAPI.getLocalDb(`music_${idMusic}`)
           : null;
         const musicIndex = await this.loadLocalDb(`${locale}_musics`, []);
+        const nextMusics = normalizeCustomSongTracks(
+          (album.musics || []).filter((music) => music.id_music !== idMusic),
+        );
         const nextAlbum = {
           ...album,
-          musics: (album.musics || []).filter((music) => music.id_music !== idMusic),
+          musics: nextMusics,
         };
+        const trackMap = getCustomSongTrackMap(nextMusics);
         const nextMusicIndex = Array.isArray(musicIndex)
-          ? musicIndex.filter((music) => music.id_music !== idMusic)
+          ? musicIndex
+            .filter((music) => music.id_music !== idMusic)
+            .map((music) => trackMap.has(music.id_music)
+              ? applyCustomSongTrack(music, trackMap.get(music.id_music))
+              : music)
           : [];
 
         await window.electronAPI.saveLocalDb(`${locale}_musics`, this.toPlainObject(nextMusicIndex));
         await window.electronAPI.saveLocalDb(`album_${CUSTOM_ALBUM_ID}`, this.toPlainObject(nextAlbum));
+        await this.syncStoredCustomSongTracks(nextMusics);
+        const customState = this.$userdata.get("custom_songs_state") || {};
+        this.$userdata.set("custom_songs_state", {
+          ...customState,
+          track: nextMusics.length,
+        });
 
         if (musicData?.url_music && window.electronAPI?.deleteMedia) {
           const filename = String(musicData.url_music).replace(/^\/musics\//, "");
@@ -963,7 +984,7 @@ export default {
         locale,
       };
     },
-    async mergeMusicIndex(locale, musicSummary) {
+    async mergeMusicIndex(locale, musicSummary, orderedMusics = []) {
       const current = sessionStorage.getItem(`db:${locale}_musics`);
       let index = current ? JSON.parse(current) : await this.$database.get(`${locale}_musics`);
       if (!Array.isArray(index)) index = [];
@@ -978,7 +999,24 @@ export default {
       if (existing >= 0) index.splice(existing, 1, indexedMusic);
       else index.push(indexedMusic);
 
-      return index;
+      const trackMap = getCustomSongTrackMap(orderedMusics);
+      return index.map((music) => trackMap.has(music.id_music)
+        ? applyCustomSongTrack(music, trackMap.get(music.id_music))
+        : music);
+    },
+    async syncStoredCustomSongTracks(musics, skipMusicId = null) {
+      if (!window.electronAPI?.getLocalDb || !window.electronAPI?.saveLocalDb) return;
+
+      for (const summary of musics) {
+        if (summary.id_music === skipMusicId) continue;
+        const storedMusic = await window.electronAPI.getLocalDb(`music_${summary.id_music}`);
+        if (!storedMusic) continue;
+        await window.electronAPI.saveLocalDb(
+          `music_${summary.id_music}`,
+          this.toPlainObject(applyCustomSongTrack(storedMusic, summary.track)),
+        );
+        sessionStorage.removeItem(`db:music_${summary.id_music}`);
+      }
     },
     async loadLocalDb(file, fallback) {
       const cached = sessionStorage.getItem(`db:${file}`);

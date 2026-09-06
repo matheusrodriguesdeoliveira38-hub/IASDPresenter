@@ -165,7 +165,7 @@ A cor principal altera os destaques do sistema, incluindo botoes, abas, icones `
 
 ## Saida web para OBS e vMix
 
-Com o servidor de rede e a modalidade `Ativar saida web` ligados, o IASDPresenter publica a janela de projecao em `http://IP-DO-COMPUTADOR:1975/output`. As URLs disponiveis aparecem em `Configuracoes > Rede > Saida web para OBS e vMix` e podem ser copiadas diretamente. A modalidade pode ser desativada sem interromper o controle remoto.
+Com o servidor de rede e a modalidade `Ativar saida web` ligados, o IASDPresenter publica em `http://IP-DO-COMPUTADOR:1975/output` a fonte escolhida entre `Projecao` e `Retorno`. As URLs disponiveis aparecem em `Configuracoes > Rede > Saida web para OBS e vMix` e podem ser copiadas diretamente. A modalidade pode ser desativada sem interromper o controle remoto.
 
 No OBS, adicione uma fonte `Browser Source`; no vMix, use `Web Input`. Cole a URL e configure a fonte com 1920 x 1080. O fluxo so captura quadros enquanto houver um cliente conectado.
 

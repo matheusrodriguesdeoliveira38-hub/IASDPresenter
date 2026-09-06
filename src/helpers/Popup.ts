@@ -103,7 +103,6 @@ const helper: Record<string, any> = {
     if (existing && !existing.closed) existing.close();
     popups = popups.filter(popup => popup !== existing && !popup.closed);
 
-    $appdata.set("popup_module", moduleName);
     const newPopup = $window.open(
       `#/popup?module=${moduleName}&webOutput=1`,
       "IASDPresenterWebOutput",
@@ -124,7 +123,6 @@ const helper: Record<string, any> = {
     popups = popups.filter(popup => popup && !popup.closed && popup.popupRole !== this.webOutputRole);
     $appdata.set("popups", popups);
     $appdata.set("popup", popups[0] || null);
-    if (popups.length === 0) $appdata.set("popup_module", "");
   },
   async syncMonitors(monitors, moduleName = "media", forceOpen = false, fullscreen = true) {
     let popups = $appdata.get("popups") || [];

@@ -194,9 +194,6 @@ export default {
       sidebarAutoCollapse: false,
       remoteControlUnsubscribe: null,
       webOutputDemandUnsubscribe: null,
-      webOutputWebRTCOfferUnsubscribe: null,
-      webOutputWebRTCCloseUnsubscribe: null,
-      webOutputPeerConnections: new Map(),
       remoteControlQueue: Promise.resolve(),
       remoteControlStateTimer: null,
     };
@@ -392,16 +389,6 @@ export default {
           this.handleWebOutputDemand,
         );
       }
-      if (window.electronAPI.onWebOutputWebRTCOffer) {
-        this.webOutputWebRTCOfferUnsubscribe = window.electronAPI.onWebOutputWebRTCOffer(
-          this.handleWebOutputWebRTCOffer,
-        );
-      }
-      if (window.electronAPI.onWebOutputWebRTCClose) {
-        this.webOutputWebRTCCloseUnsubscribe = window.electronAPI.onWebOutputWebRTCClose(
-          this.closeWebOutputWebRTCSession,
-        );
-      }
       if (window.electronAPI.setRemoteControlState) {
         this.publishRemoteControlState();
         const publishInterval = this.$performance.isLightMode() ? 2000 : 750;
@@ -417,75 +404,11 @@ export default {
     if (this.webOutputDemandUnsubscribe) {
       this.webOutputDemandUnsubscribe();
     }
-    if (this.webOutputWebRTCOfferUnsubscribe) this.webOutputWebRTCOfferUnsubscribe();
-    if (this.webOutputWebRTCCloseUnsubscribe) this.webOutputWebRTCCloseUnsubscribe();
-    this.webOutputPeerConnections.forEach((entry) => {
-      entry.peer.close();
-      entry.stream.getTracks().forEach(track => track.stop());
-    });
-    this.webOutputPeerConnections.clear();
     if (this.remoteControlStateTimer) {
       window.clearInterval(this.remoteControlStateTimer);
     }
   },
   methods: {
-    waitForIceGathering(peer) {
-      if (peer.iceGatheringState === "complete") return Promise.resolve();
-      return new Promise((resolve) => {
-        const finish = () => {
-          if (peer.iceGatheringState !== "complete") return;
-          peer.removeEventListener("icegatheringstatechange", finish);
-          resolve();
-        };
-        peer.addEventListener("icegatheringstatechange", finish);
-        window.setTimeout(resolve, 2500);
-      });
-    },
-    async getWebOutputCaptureStream() {
-      return navigator.mediaDevices.getDisplayMedia({
-        audio: true,
-        video: {
-          width: { ideal: 1920, max: 1920 },
-          height: { ideal: 1080, max: 1080 },
-          frameRate: { ideal: 60, min: 30 },
-        },
-      });
-    },
-    async handleWebOutputWebRTCOffer(payload) {
-      const sessionId = String(payload?.sessionId || "");
-      if (!sessionId || !payload?.offer) return;
-      this.closeWebOutputWebRTCSession(sessionId);
-
-      let peer = null;
-      let stream = null;
-      try {
-        stream = await this.getWebOutputCaptureStream();
-        peer = new RTCPeerConnection({ iceServers: [] });
-        stream.getTracks().forEach(track => peer.addTrack(track, stream));
-        await peer.setRemoteDescription(payload.offer);
-        const answer = await peer.createAnswer();
-        await peer.setLocalDescription(answer);
-        await this.waitForIceGathering(peer);
-        this.webOutputPeerConnections.set(sessionId, { peer, stream });
-        peer.onconnectionstatechange = () => {
-          if (["closed", "failed"].includes(peer.connectionState)) {
-            this.closeWebOutputWebRTCSession(sessionId);
-          }
-        };
-        await window.electronAPI.submitWebOutputWebRTCAnswer(sessionId, peer.localDescription);
-      } catch (error) {
-        if (peer) peer.close();
-        if (stream) stream.getTracks().forEach(track => track.stop());
-        console.warn("Não foi possível iniciar a saída WebRTC:", error);
-      }
-    },
-    closeWebOutputWebRTCSession(sessionId) {
-      const entry = this.webOutputPeerConnections.get(String(sessionId || ""));
-      if (!entry) return;
-      entry.peer.close();
-      entry.stream.getTracks().forEach(track => track.stop());
-      this.webOutputPeerConnections.delete(String(sessionId || ""));
-    },
     handleWebOutputDemand(demand) {
       const active = typeof demand === "object" ? demand?.active === true : demand === true;
       const requestedModule = typeof demand === "object" && typeof demand?.module === "string"
@@ -560,6 +483,7 @@ export default {
 
       window.electronAPI.setRemoteControlState({
         webOutputModule,
+        returnMonitorActive: this.$appdata.get("modules.media.id_music") != null,
         projection: { active: Boolean(popupModule), module: popupModule, override },
         current,
         next,
