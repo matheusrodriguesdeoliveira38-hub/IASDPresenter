@@ -220,7 +220,7 @@ export default {
       }
       if (!this.id_category || this.id_category === 0) {
         return [
-          ...new Map(
+          ...new Map<number, Record<string, any>>(
             this.categories
               .reduce((acc, category) => acc.concat(category.albums), [])
               .map((album) => [album.id_album, { ...album, subtitle: null }]),
@@ -401,7 +401,7 @@ export default {
         const musics = [];
         const allAlbums = this.categories.reduce((acc, cat) => acc.concat(cat.albums), []);
         
-        const uniqueAlbums = [...new Map(allAlbums.map(a => [a.id_album, a])).values()];
+        const uniqueAlbums = [...new Map<number, Record<string, any>>(allAlbums.map(a => [a.id_album, a])).values()];
         
         const promises = uniqueAlbums.map(a => this.$database.get(`album_${a.id_album}`));
         const results = await Promise.all(promises);

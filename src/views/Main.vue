@@ -6,6 +6,7 @@
   />
 
   <AppAlert />
+  <PulpitMessageControl />
 
   <div
     class="main-container"
@@ -134,16 +135,7 @@
               </v-btn>
             </div>
             <div class="position-relative w-100 bg-black" style="height: 180px;">
-              <iframe
-                v-if="isExternalYouTube && externalYouTubeEmbedUrl"
-                ref="externalMiniPlayerYouTube"
-                :src="externalYouTubeEmbedUrl"
-                class="w-100 h-100"
-                style="border: 0; pointer-events: none;"
-                allow="autoplay; encrypted-media; picture-in-picture"
-                allowfullscreen
-                referrerpolicy="strict-origin-when-cross-origin"
-              />
+              <ExternalMediaProjection v-if="isExternalYouTube" />
               <video
                 v-else-if="externalFilePath"
                 ref="externalMiniPlayerVideo"
@@ -170,17 +162,22 @@
 
 <script lang="ts">
 import AppFooter from "@/layout/Footer.vue";
+import PulpitMessageControl from "@/components/PulpitMessageControl.vue";
 import AppSidebar from "@/layout/Sidebar.vue";
 import AppModules from "@/layout/Modules.vue";
 import AppAlert from "@/layout/Alert.vue";
 import AppTrayArea from "@/layout/TrayArea.vue";
 import LSlide from "@/components/Slide.vue";
 import { isAudioFile, isVideoFile, isWebUrl, openExternalMedia } from "@/helpers/ExternalMedia";
-import { getYouTubeEmbedUrl, isYouTubeUrl } from "@/helpers/YouTube";
+import { isYouTubeUrl } from "@/helpers/YouTube";
+
+import { defineAsyncComponent } from "vue";
 
 export default {
   name: "MainPage",
   components: {
+    PulpitMessageControl,
+    ExternalMediaProjection: defineAsyncComponent(() => import("@/modules/core/external_media/interface/Popup.vue")),
     AppFooter,
     AppSidebar,
     AppModules,
@@ -236,12 +233,6 @@ export default {
     },
     isExternalYouTube() {
       return isYouTubeUrl(this.$appdata.get("modules.external_media.filePath"));
-    },
-    externalYouTubeEmbedUrl() {
-      return getYouTubeEmbedUrl(this.$appdata.get("modules.external_media.filePath"), {
-        autoplay: true,
-        muted: true,
-      });
     },
     externalMediaCurrentTime() {
       return this.$appdata.get("modules.external_media.config.current_time");
@@ -341,7 +332,7 @@ export default {
     window.addEventListener("message", (event) => {
       if (event.origin === window.location.origin || event.origin === "file://" || event.origin === "null") {
         if (event.data === "mounted") {
-          const popupSource = event.source;
+          const popupSource = event.source as Window | null;
           if (popupSource) {
             const data = this.$appdata.getFlatten();
             Object.keys(data).map((item) => {
@@ -734,7 +725,7 @@ export default {
       };
     },
     parseBibleVerseNumbers(input, verses) {
-      const selected = new Set();
+      const selected = new Set<number>();
       const parts = String(input || "").split(",");
 
       for (const part of parts) {

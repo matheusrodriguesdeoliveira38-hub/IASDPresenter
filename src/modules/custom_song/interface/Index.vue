@@ -829,7 +829,7 @@ export default {
         return;
       }
 
-      const slides = Object.values(music.lyric || {})
+      const slides = Object.values<Record<string, any>>(music.lyric || {})
         .filter((slide) => slide.show_slide !== 0)
         .sort((a, b) => (a.order || 0) - (b.order || 0))
         .map((slide) => ({

@@ -7,6 +7,7 @@ declare module "*.vue" {
 }
 
 interface Window {
+  queryLocalFonts?: () => Promise<Array<{ family: string; fullName: string; postscriptName: string; style: string }>>;
   monitorId?: string | number;
   popupRole?: string;
   popupModule?: string;

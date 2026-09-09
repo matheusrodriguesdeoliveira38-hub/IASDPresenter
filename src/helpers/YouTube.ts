@@ -68,10 +68,10 @@ export function getYouTubeStartSeconds(value) {
     || parseTimeValue(url.searchParams.get("start"));
 }
 
-export function getYouTubeEmbedUrl(value, { autoplay = true, muted = false, controls = false } = {}) {
+export function getYouTubeEmbedUrl(value, { autoplay = true, muted = false, controls = false, startSeconds = null } = {}) {
   const videoId = getYouTubeVideoId(value);
   if (!videoId) return "";
-  const start = getYouTubeStartSeconds(value);
+  const start = startSeconds == null ? getYouTubeStartSeconds(value) : Math.max(0, Number(startSeconds) || 0);
   const origin = getCurrentOrigin();
 
   const params = new URLSearchParams({

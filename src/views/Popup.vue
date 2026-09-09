@@ -1,9 +1,8 @@
 <template>
   <div class="popup-stage w-100 h-100" style="background: #000">
     <div
+      ref="projectionContent"
       class="projection-content w-100 h-100"
-      :class="{ 'projection-content--hidden': projectionTransition.active }"
-      :style="projectionTransitionStyle"
     >
       <component :is="loadModuleComponent()" v-if="module" />
     </div>
@@ -11,16 +10,19 @@
     <div v-else-if="projectionOverride === 'logo'" class="projection-override projection-logo">
       <img src="/ico/logo-horizontal.png" alt="IASDPresenter" />
     </div>
+    <PulpitMessageOverlay v-if="module === 'return_monitor'" />
   </div>
 </template>
 
 <script lang="ts">
 import { defineAsyncComponent } from "vue";
+import PulpitMessageOverlay from "@/components/PulpitMessageOverlay.vue";
 
 const moduleComponents = new Map();
 
 export default {
   name: "PopupPage",
+  components: { PulpitMessageOverlay },
   data: () => ({
     message: null,
     frozen: false,
@@ -35,12 +37,36 @@ export default {
     projectionTransition() {
       return this.$appdata.get("projection_transition") || { active: false, durationMs: 300 };
     },
-    projectionTransitionStyle() {
-      const durationMs = Math.max(0, Number(this.projectionTransition.durationMs) || 0);
-      return { transitionDuration: `${durationMs}ms` };
-    },
     projectionOverride() {
       return this.$appdata.get("projection_override") || "none";
+    },
+  },
+  watch: {
+    projectionTransition: {
+      deep: true,
+      async handler(transition) {
+        await this.$nextTick();
+        const element = this.$refs.projectionContent as HTMLElement;
+        if (!element) return;
+        const opacity = transition.active ? "0" : "1";
+        const from = getComputedStyle(element).opacity;
+        element.getAnimations().forEach(animation => animation.cancel());
+        element.style.opacity = opacity;
+        const duration = Math.max(0, Number(transition.durationMs) || 0);
+        const animation = element.animate([{ opacity: from }, { opacity }], {
+          duration,
+          easing: "ease-in-out",
+        });
+        try {
+          await animation.finished;
+          window.opener?.postMessage({
+            action: "projection-transition-complete",
+            requestId: transition.requestId,
+          }, "*");
+        } catch {
+          // A newer transition superseded this one.
+        }
+      },
     },
   },
   mounted() {
@@ -127,12 +153,6 @@ export default {
 
 .projection-content {
   opacity: 1;
-  transition-property: opacity;
-  transition-timing-function: ease-in-out;
-}
-
-.projection-content--hidden {
-  opacity: 0;
 }
 
 .projection-logo {

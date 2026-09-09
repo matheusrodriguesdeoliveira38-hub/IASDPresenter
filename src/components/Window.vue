@@ -152,6 +152,7 @@ export default {
     imageSize: Number,
     color: String,
     slotRightClass: String,
+    slotLeftClass: String,
     slotLeftStyle: [String, Object],
     slotRightStyle: [String, Object],
     eager: Boolean,
@@ -227,7 +228,7 @@ export default {
       this.$emit("minimize");
     },
     scroll() {
-      const data = {};
+      const data: Record<string, number> = {};
       data.scroll_top = this.$refs.main_container.scrollTop;
       data.client_height = this.$refs.main_container.clientHeight;
       data.scroll_height = this.$refs.main_container.scrollHeight;

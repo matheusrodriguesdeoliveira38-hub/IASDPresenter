@@ -313,14 +313,13 @@
 </template>
 
 <script lang="ts">
-import * as pdfjsLib from "pdfjs-dist/legacy/build/pdf.mjs";
-import pdfWorkerUrl from "pdfjs-dist/legacy/build/pdf.worker.mjs?url";
+import { PresentationPdf } from "@/helpers/PresentationPdf";
 import { markRaw } from "vue";
 import ModuleContainer from "@/layout/ModuleContainer.vue";
 import $performance from "@/helpers/Performance";
 import manifest from "../manifest.json";
 
-pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
+
 
 export default {
   name: "PresentationModule",
@@ -340,13 +339,14 @@ export default {
       sourceType: "",
       title: "",
       pdfDoc: null,
+      pdf: markRaw(new PresentationPdf()),
+      loadToken: 0,
       slides: [],
       thumbnailCache: {},
       currentImage: "",
       nextImage: "",
       slideIndex: 0,
       thumbRefs: {},
-      renderToken: 0,
       selectedProjectionTarget: "config",
     };
   },
@@ -383,8 +383,7 @@ export default {
   watch: {
     slideIndex() {
       this.syncState();
-      this.renderCurrentSlides();
-      this.renderVisibleThumbnails();
+      if (this.pdfDoc) this.updatePreviews();
       this.scrollActiveThumb();
     },
   },
@@ -395,6 +394,14 @@ export default {
     this.restoreState();
   },
   unmounted() {
+    this.loadToken++;
+    this.pdf.reset();
+    this.pdfDoc = null;
+    this.slides = [];
+    this.thumbnailCache = {};
+    this.thumbRefs = {};
+    this.currentImage = "";
+    this.nextImage = "";
     window.removeEventListener("presentation-slide-index-change", this.handleExternalSlideIndex);
     this.disableGlobalShortcuts();
   },
@@ -435,6 +442,11 @@ export default {
       }
     },
     async loadFile(filePath) {
+      const token = ++this.loadToken;
+      const revision = this.pdf.reset();
+      this.pdfDoc = null;
+      this.preparedPath = "";
+      this.syncState();
       this.loading = true;
       this.loadingText = this.t("status.loading");
       this.error = "";
@@ -442,6 +454,7 @@ export default {
       this.needsConversion = false;
       this.slides = [];
       this.thumbnailCache = {};
+      this.thumbRefs = {};
       this.currentImage = "";
       this.nextImage = "";
       this.slideIndex = 0;
@@ -453,6 +466,7 @@ export default {
 
       try {
         const prepared = await window.electronAPI.preparePresentationFile(filePath);
+        if (token !== this.loadToken) return;
         if (!prepared?.ok) {
           this.error = prepared?.error || this.t("status.unsupported");
           this.needsConversion = prepared?.needsConversion === true;
@@ -472,98 +486,73 @@ export default {
         this.preparedPath = prepared.filePath;
         this.sourceType = prepared.sourceType || ext;
         this.title = this.getFileName(this.sourcePath);
-        await this.loadPdf(this.preparedPath);
+        await this.loadPdf(this.preparedPath, revision);
+        if (token !== this.loadToken) return;
         this.syncState();
       } catch (err) {
+        if (token !== this.loadToken) return;
         this.error = err?.message || String(err);
         this.errorDetails = "";
       } finally {
-        this.loading = false;
+        if (token === this.loadToken) this.loading = false;
       }
     },
-    async loadPdf(filePath) {
-      const result = await window.electronAPI.readPresentationFile(filePath);
-      if (!result?.ok || !result.data) {
-        throw new Error(result?.error || "Nao foi possivel ler o PDF preparado.");
-      }
-
-      const bytes = this.toPdfBytes(result.data);
-      const pdfDocument = await pdfjsLib.getDocument({ data: bytes }).promise;
+    async loadPdf(filePath, revision = this.pdf.revision) {
+      const pdfDocument = await this.pdf.load(async () => {
+        const result = await window.electronAPI.readPresentationFile(filePath);
+        if (!result?.ok || !result.data) throw new Error(result?.error || "Nao foi possivel ler o PDF preparado.");
+        return result.data;
+      }, revision);
+      if (!pdfDocument || revision !== this.pdf.revision) return;
       this.pdfDoc = markRaw(pdfDocument);
-      await this.renderThumbnails();
-      await this.renderCurrentSlides();
+      this.slideIndex = Math.min(this.slideIndex, pdfDocument.numPages - 1);
+      this.slides = Array.from({ length: pdfDocument.numPages }, (_, index) => ({ pageNumber: index + 1, thumbnail: "" }));
+      await this.updatePreviews();
     },
-    toPdfBytes(data) {
-      if (data instanceof Uint8Array) return data;
-      if (data instanceof ArrayBuffer) return new Uint8Array(data);
-      if (Array.isArray(data)) return new Uint8Array(data);
-      if (data?.type === "Buffer" && Array.isArray(data.data)) return new Uint8Array(data.data);
-      if (data?.data && Array.isArray(data.data)) return new Uint8Array(data.data);
-      throw new Error("Formato de dados do PDF invalido.");
-    },
-    async renderThumbnails() {
-      if ($performance.optimizePresentations()) {
-        this.slides = Array.from({ length: this.pdfDoc.numPages }, (_, index) => ({
-          pageNumber: index + 1,
-          thumbnail: "",
-        }));
-        await this.renderVisibleThumbnails();
-        return;
+    async updatePreviews() {
+      const revision = this.pdf.revision;
+      try {
+        await Promise.all([this.renderCurrentSlides(), this.renderVisibleThumbnails()]);
+      } catch (error) {
+        if (revision === this.pdf.revision) this.error = error?.message || String(error);
       }
-
-      const rendered = [];
-      for (let pageNumber = 1; pageNumber <= this.pdfDoc.numPages; pageNumber++) {
-        const thumbnail = await this.renderPageToDataUrl(pageNumber, 0.22);
-        this.thumbnailCache[pageNumber] = thumbnail;
-        rendered.push({ pageNumber, thumbnail });
-      }
-      this.slides = rendered;
     },
     async renderVisibleThumbnails() {
-      if (!$performance.optimizePresentations() || !this.pdfDoc) return;
-
-      const token = this.renderToken;
-      const pageNumbers = [
-        this.slideIndex - 1,
-        this.slideIndex,
-        this.slideIndex + 1,
-        this.slideIndex + 2,
-      ]
-        .map(index => index + 1)
-        .filter(pageNumber => pageNumber >= 1 && pageNumber <= this.pdfDoc.numPages && !this.thumbnailCache[pageNumber]);
-
-      for (const pageNumber of pageNumbers) {
-        const thumbnail = await this.renderPageToDataUrl(pageNumber, 0.16);
-        if (token !== this.renderToken && pageNumber !== this.slideIndex + 1) return;
+      if (!this.pdfDoc) return;
+      const revision = this.pdf.revision;
+      const token = this.pdf.beginRender("thumbnails");
+      const center = this.slideIndex + 1;
+      const first = Math.max(1, center - 4);
+      const last = Math.min(this.pdfDoc.numPages, center + 4);
+      for (const key of Object.keys(this.thumbnailCache)) {
+        if (Number(key) < first || Number(key) > last) {
+          delete this.thumbnailCache[key];
+          this.slides[Number(key) - 1].thumbnail = "";
+        }
+      }
+      for (let pageNumber = first; pageNumber <= last; pageNumber++) {
+        if (this.thumbnailCache[pageNumber]) continue;
+        const thumbnail = await this.pdf.render(pageNumber, $performance.optimizePresentations() ? 0.16 : 0.22, 0.8, "thumbnails", token);
+        if (!thumbnail || revision !== this.pdf.revision || !this.pdf.isRenderCurrent("thumbnails", token)) return;
         this.thumbnailCache[pageNumber] = thumbnail;
-        this.slides = this.slides.map(slide => (
-          slide.pageNumber === pageNumber ? { ...slide, thumbnail } : slide
-        ));
+        this.slides[pageNumber - 1].thumbnail = thumbnail;
       }
     },
     async renderCurrentSlides() {
       if (!this.pdfDoc) return;
-      const token = ++this.renderToken;
+      const revision = this.pdf.revision;
+      const token = this.pdf.beginRender("preview");
       const currentPage = this.slideIndex + 1;
-      const nextPage = this.slideIndex + 2;
+      const nextPage = currentPage + 1;
       const optimized = $performance.optimizePresentations();
-      const current = await this.renderPageToDataUrl(currentPage, optimized ? 0.9 : 1.25, optimized ? 0.82 : 0.9);
+      const current = await this.pdf.render(currentPage, optimized ? 0.9 : 1.25, optimized ? 0.82 : 0.9, "preview", token);
+      if (!current || revision !== this.pdf.revision || !this.pdf.isRenderCurrent("preview", token)) return;
       const next = nextPage <= this.pdfDoc.numPages
-        ? await this.renderPageToDataUrl(nextPage, optimized ? 0.32 : 0.55, optimized ? 0.75 : 0.9)
+        ? await this.pdf.render(nextPage, optimized ? 0.32 : 0.55, optimized ? 0.75 : 0.9, "preview", token)
         : "";
-      if (token !== this.renderToken) return;
+      if (revision !== this.pdf.revision || !this.pdf.isRenderCurrent("preview", token) || (nextPage <= this.pdfDoc.numPages && !next)) return;
       this.currentImage = current;
       this.nextImage = next;
-    },
-    async renderPageToDataUrl(pageNumber, scale, quality = 0.9) {
-      const page = await this.pdfDoc.getPage(pageNumber);
-      const viewport = page.getViewport({ scale });
-      const canvas = document.createElement("canvas");
-      const context = canvas.getContext("2d", { alpha: false });
-      canvas.width = Math.ceil(viewport.width);
-      canvas.height = Math.ceil(viewport.height);
-      await page.render({ canvasContext: context, viewport }).promise;
-      return canvas.toDataURL("image/jpeg", quality);
     },
     syncState() {
       this.$appdata.set("modules.presentation.sourcePath", this.sourcePath);
@@ -577,25 +566,33 @@ export default {
       const sourcePath = this.$appdata.get("modules.presentation.sourcePath");
       const slideIndex = this.$appdata.get("modules.presentation.config.slide_index") || 0;
       if (!preparedPath) return;
+      const token = ++this.loadToken;
+      const revision = this.pdf.reset();
       this.sourcePath = sourcePath || preparedPath;
       this.preparedPath = preparedPath;
       this.title = this.$appdata.get("modules.presentation.titleText") || this.getFileName(this.sourcePath);
       this.slideIndex = slideIndex;
       this.loading = true;
       this.loadingText = this.t("status.loading");
-      this.loadPdf(preparedPath)
+      this.loadPdf(preparedPath, revision)
         .catch((err) => {
+          if (token !== this.loadToken) return;
           this.error = err?.message || String(err);
         })
         .finally(() => {
+          if (token !== this.loadToken) return;
           this.loading = false;
           this.syncState();
         });
     },
     async openProjection() {
       if (!this.preparedPath && this.sourcePath && this.isPowerPointSource) {
+        const expectedToken = this.loadToken + 1;
         await this.loadFile(this.sourcePath);
+        if (this.loadToken !== expectedToken) return;
       }
+
+      const token = this.loadToken;
 
       if (!this.preparedPath) {
         const details = this.errorDetails ? `\n\nDetalhes: ${this.errorDetails}` : "";
@@ -612,6 +609,7 @@ export default {
         selectedMonitors = [this.selectedProjectionTarget];
       } else if (window.electronAPI?.getDisplays) {
         const displays = await window.electronAPI.getDisplays();
+        if (token !== this.loadToken) return;
         if (displays && displays.length > 1) {
           let configMonitors = this.$userdata.get("modules.config.slide_monitor");
           if (!Array.isArray(configMonitors)) {
@@ -632,6 +630,7 @@ export default {
       }
 
       if (window.electronAPI?.setPresentationShortcutsEnabled) {
+        if (token !== this.loadToken) return;
         window.electronAPI.setPresentationShortcutsEnabled(true);
       }
     },
@@ -668,6 +667,7 @@ export default {
     },
     setThumbRef(el, pageNumber) {
       if (el) this.thumbRefs[pageNumber] = el;
+      else delete this.thumbRefs[pageNumber];
     },
     scrollActiveThumb() {
       this.$nextTick(() => {

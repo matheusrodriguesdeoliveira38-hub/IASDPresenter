@@ -168,7 +168,7 @@ export default {
 
   data: () => ({
     search: "",
-    data: [],
+    data: { data: [], count: 0, filter_count: 0 },
     scroll: {},
     has_scroll: false,
     letter: "",

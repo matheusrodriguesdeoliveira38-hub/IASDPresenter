@@ -76,8 +76,8 @@ export default {
     themes: [],
   }),
   computed: {
-    module_group() {
-      return Object.entries(this.$modules.getGroups())
+    module_group(): Record<string, Record<string, any>> {
+      return Object.entries<Record<string, any>>(this.$modules.getGroups())
         .filter(([, value]) => Object.keys(value.modules).length > 0)
         .reduce((result, [key, value]) => {
           result[key] = value;

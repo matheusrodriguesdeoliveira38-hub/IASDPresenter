@@ -144,6 +144,8 @@ const helper: Record<string, any> = {
       $appdata.set("popup_module", moduleName);
       for (const monitorId of targetMonitors) {
         const existing = popups.find(p => p.monitorId === monitorId && (p.popupRole || this.projectionRole) === this.projectionRole);
+        // The popup renders popup_module dynamically; keep its metadata in sync.
+        if (existing) existing.popupModule = moduleName;
         if (!existing || existing.closed) {
           const features = `width=800,height=600,monitor=${monitorId},fullscreen=yes`;
           const windowFeatures = fullscreen ? features : `width=800,height=600,monitor=${monitorId}`;

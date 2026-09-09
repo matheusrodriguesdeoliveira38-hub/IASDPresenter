@@ -34,7 +34,7 @@ const helper: Record<string, any> = {
     for (let i = this.storage(type).length - 1; i >= 0; i--) {
       const key = this.storage(type).key(i);
       if (key.split(":")[0] == item) {
-        this.remove(key);
+        this.remove(key, type);
       }
     }
   },

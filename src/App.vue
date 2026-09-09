@@ -241,7 +241,7 @@ export default {
         return;
       }
 
-      if (["INPUT", "TEXTAREA"].includes(document.activeElement.tagName) || document.activeElement.isContentEditable) {
+      if (["INPUT", "TEXTAREA"].includes(document.activeElement.tagName) || (document.activeElement instanceof HTMLElement && document.activeElement.isContentEditable)) {
         return;
       }
 

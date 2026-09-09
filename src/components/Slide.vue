@@ -50,6 +50,7 @@
 </template>
 
 <script lang="ts">
+import type { CSSProperties } from "vue";
 export default {
   name: "SlideComponent",
   props: {
@@ -220,7 +221,7 @@ export default {
         backgroundSize: "cover",
       };
     },
-    style_aux_text(slide) {
+    style_aux_text(slide): CSSProperties {
       if (slide.cover) {
         return {
           fontSize: `${this.fontSizePc(7)}px`,
@@ -245,7 +246,7 @@ export default {
       };
       
     },
-    style_text(slide) {
+    style_text(slide): CSSProperties {
       if (slide.cover) {
         return {
           fontSize: `${this.fontSizePc(24)}px`,

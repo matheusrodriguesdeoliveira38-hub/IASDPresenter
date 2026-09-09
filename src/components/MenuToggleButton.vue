@@ -24,7 +24,7 @@ export default {
       const modules = this.$appdata.get("modules") || {};
       const overlays = ["album", "media", "lyric"];
 
-      for (const [key, module] of Object.entries(modules)) {
+      for (const [key, module] of Object.entries<Record<string, any>>(modules)) {
         if (module.show && !overlays.includes(key)) {
           return key;
         }

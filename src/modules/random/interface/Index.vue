@@ -85,7 +85,7 @@
                   rounded="lg"
                   class="text-none mb-2 font-weight-bold"
                   prepend-icon="mdi-file-upload-outline"
-                  @click="$refs.fileInputCompact.click()"
+                  @click="($refs.fileInputCompact as HTMLInputElement)?.click()"
                 >
                   {{ t('import_names') }}
                   <v-tooltip
@@ -291,7 +291,7 @@
                 rounded="lg"
                 class="text-none mb-2 font-weight-bold"
                 prepend-icon="mdi-file-upload-outline"
-                @click="$refs.fileInput.click()"
+                @click="($refs.fileInput as HTMLInputElement)?.click()"
               >
                 {{ t('import_names') }}
                 <v-tooltip
@@ -642,7 +642,7 @@ export default {
 
       const reader = new FileReader();
       reader.onload = (e) => {
-        const text = e.target.result;
+        const text = String(e.target.result || "");
         const lines = text.split(/\r?\n/).map(line => line.trim()).filter(line => line.length > 0);
         
         let addedCount = 0;

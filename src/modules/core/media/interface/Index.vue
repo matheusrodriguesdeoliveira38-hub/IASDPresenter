@@ -158,7 +158,7 @@
           >
             <template #prepend>
               <v-icon v-if="queueIndex === index" color="white" size="small">mdi-volume-high</v-icon>
-              <div v-else class="slide-number-chip">{{ item.track || index + 1 }}</div>
+              <div v-else class="slide-number-chip">{{ item.track || Number(index) + 1 }}</div>
             </template>
             <v-list-item-title class="slide-title">{{ item.name }}</v-list-item-title>
             <v-list-item-subtitle>{{ item.mode === 'instrumental' ? 'Playback' : 'Cantado' }}</v-list-item-subtitle>
@@ -178,7 +178,7 @@
           >
             <template #prepend>
               <div class="slide-number-chip">
-                {{ index + 1 }}
+                {{ Number(index) + 1 }}
               </div>
             </template>
 
@@ -220,6 +220,7 @@
 </template>
 
 <script lang="ts">
+import { resolveProjectionPreferences } from "@/helpers/ProjectionPreferences";
 import manifest from "../manifest.json";
 
 import Window from "@/components/Window.vue";
@@ -345,26 +346,11 @@ export default {
   methods: {
     async applyPreferredFullscreen() {
       const requestId = ++this.preferredFullscreenRequest;
-      const slideFullscreen = this.$userdata.get("modules.config.slide_fullscreen") !== false;
-      const disableIfExtended = this.$userdata.get("modules.config.slide_disable_main_if_extended") !== false;
-      let slideMonitors = this.$userdata.get("modules.config.slide_monitor") || [];
-      if (!Array.isArray(slideMonitors)) {
-        slideMonitors = slideMonitors ? [slideMonitors] : [];
-      }
-
-      let hasExtended = slideMonitors.length > 0;
-      if (window.electronAPI?.getDisplays) {
-        const displays = await window.electronAPI.getDisplays();
-        if (requestId !== this.preferredFullscreenRequest || !this.module?.show) return;
-        if (displays?.length > 1) {
-          const primary = displays.find((display) => display.isPrimary) || displays[0];
-          hasExtended = slideMonitors.some((monitorId) => monitorId !== primary.id);
-        } else {
-          hasExtended = false;
-        }
-      }
-
-      const shouldFullscreen = slideFullscreen && !(disableIfExtended && hasExtended);
+      const displays = window.electronAPI?.getDisplays ? await window.electronAPI.getDisplays() : [];
+      if (requestId !== this.preferredFullscreenRequest || !this.module?.show) return;
+      const { operatorFullscreen: shouldFullscreen } = resolveProjectionPreferences(
+        key => this.$userdata.get(key), displays || [],
+      );
       window.clearTimeout(this.preferredFullscreenTimer);
       if (!shouldFullscreen) {
         this.fullscreen = false;

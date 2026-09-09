@@ -28,7 +28,7 @@
               size="small"
               style="width: 36px; height: 36px;"
               class="config-palette-btn"
-              @click="$refs.configModal.open()"
+              @click="openConfig()"
             >
               <v-icon>mdi-palette</v-icon>
               <v-tooltip
@@ -336,6 +336,9 @@ export default {
     clearInterval(this.timerAlertInterval);
   },
   methods: {
+    openConfig() {
+      (this.$refs.configModal as { open: () => void })?.open();
+    },
     t(text) {
       return this.$t(`modules.${this.module_id}.${text}`);
     },
@@ -438,7 +441,7 @@ export default {
       const timerExpired = this.clockTimer.enabled && this.timerRemainingMs <= 0;
       const expiredAt = Number(this.clockTimer.expiredAt)
         || (this.clockTimer.endsAt ? Number(this.clockTimer.endsAt) : null);
-      const updates = {
+      const updates: Record<string, boolean | number> = {
         negativeEnabled: enabled,
       };
 
@@ -471,7 +474,7 @@ export default {
 
       if (previousMs === null) return;
 
-      const updates = {};
+      const updates: Record<string, boolean> = {};
       const crossedFiveMinutes = previousMs > 5 * 60 * 1000 && remainingMs <= 5 * 60 * 1000;
       const crossedOneMinute = previousMs > 60 * 1000 && remainingMs <= 60 * 1000;
 

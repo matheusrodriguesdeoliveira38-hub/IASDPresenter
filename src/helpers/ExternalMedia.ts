@@ -1,3 +1,5 @@
+let playbackSession = 0;
+
 export const AUDIO_EXTENSIONS = ["mp3", "wav", "flac", "aac", "ogg", "wma", "m4a"];
 export const VIDEO_EXTENSIONS = ["mp4", "mkv", "avi", "mov", "wmv", "webm"];
 
@@ -34,7 +36,9 @@ export function openExternalMedia(appdata, { filePath, title = "", subtitle = ""
   appdata.set("modules.external_media.subtitle", subtitle);
   appdata.set("modules.external_media.minimized", false);
   appdata.set("modules.external_media.config", {
+    session_id: `${Date.now()}:${++playbackSession}`,
     is_paused: false,
+    is_buffering: true,
     current_time: 0,
     playback_updated_at: Date.now(),
     progress: 0,

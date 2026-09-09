@@ -1,9 +1,18 @@
 import $dev from "@/helpers/Dev";
 import $appdata from "@/helpers/AppData";
 
+const pending: Array<{ data: any; callback: (...args: any[]) => void }> = [];
+let active: { data: any; callback: (...args: any[]) => void } | null = null;
+
 const helper: Record<string, any> = {
   show(data, callback: (...args: any[]) => void = function () {}) {
-    data = this.getData(data);
+    pending.push({ data: this.getData(data), callback });
+    this.showNext();
+  },
+  showNext() {
+    if (active || !pending.length) return;
+    active = pending.shift();
+    const { data } = active;
 
     $dev.write("dialog", data, typeof data, Array.isArray(data));
 
@@ -24,12 +33,18 @@ const helper: Record<string, any> = {
       data.buttons || [{ text: "alert.close", color: "error", value: "close" }],
     );
 
-    const tmr = setInterval(() => {
-      if (!$appdata.get("alert.show")) {
-        clearInterval(tmr);
-        callback($appdata.get("alert.value"));
-      }
-    }, 100);
+  },
+  respond(value) {
+    if (!active) return;
+    const completed = active;
+    $appdata.set("alert.value", value);
+    $appdata.set("alert.show", false);
+    try {
+      completed.callback(value);
+    } finally {
+      active = null;
+      this.showNext();
+    }
   },
 
   yesno(data, callback: (...args: any[]) => void = function () {}) {

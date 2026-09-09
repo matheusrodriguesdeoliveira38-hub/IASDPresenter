@@ -604,7 +604,7 @@ export default {
     },
     handleBibleKeydown(event) {
       if (!this.show || this.isBibleProjectionActive() || event.ctrlKey || event.altKey || event.metaKey) return;
-      if (["INPUT", "TEXTAREA"].includes(document.activeElement?.tagName) || document.activeElement?.isContentEditable) {
+      if (["INPUT", "TEXTAREA"].includes(document.activeElement?.tagName) || (document.activeElement instanceof HTMLElement && document.activeElement.isContentEditable)) {
         return;
       }
 
@@ -866,7 +866,7 @@ export default {
       };
     },
     filterVersesByQuery(input) {
-      const selected = new Set();
+      const selected = new Set<number>();
       const parts = String(input || "").split(",");
 
       for (const part of parts) {

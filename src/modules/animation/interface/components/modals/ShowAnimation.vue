@@ -120,7 +120,7 @@
 <!-- OFFLINE - Load Dependencie By File -->
 <script setup lang="ts">
 import { onMounted } from "vue";
-import log from "../../../scripts/log.ts";
+import log from "../../../scripts/log";
 
 // Offline Method (Preferred)
 import anime from "../../../dependencies/animejs/lib/anime.es.js";

@@ -43,7 +43,7 @@ export default {
         .filter(Boolean);
     },
     visibleModuleIds() {
-      return Object.values(this.modules || {})
+      return Object.values<Record<string, any>>(this.modules || {})
         .filter((module) => module?.show)
         .map((module) => module.id);
     },

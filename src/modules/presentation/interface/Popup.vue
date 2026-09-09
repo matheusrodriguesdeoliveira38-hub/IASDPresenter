@@ -8,21 +8,20 @@
 </template>
 
 <script lang="ts">
-import * as pdfjsLib from "pdfjs-dist/legacy/build/pdf.mjs";
-import pdfWorkerUrl from "pdfjs-dist/legacy/build/pdf.worker.mjs?url";
+import { PresentationPdf } from "@/helpers/PresentationPdf";
 import { markRaw } from "vue";
 import $performance from "@/helpers/Performance";
 import manifest from "../manifest.json";
 
-pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
+
 
 export default {
   name: "PopupPresentationPage",
   data() {
     return {
       pdfDoc: null,
+      pdf: markRaw(new PresentationPdf()),
       currentImage: "",
-      renderToken: 0,
     };
   },
   computed: {
@@ -53,42 +52,44 @@ export default {
   mounted() {
     this.loadPdf();
   },
+  unmounted() {
+    this.pdf.reset();
+    this.pdfDoc = null;
+    this.currentImage = "";
+  },
   methods: {
     async loadPdf() {
+      const revision = this.pdf.reset();
       this.currentImage = "";
       this.pdfDoc = null;
-      if (!this.preparedPath || !window.electronAPI?.readPresentationFile) return;
-
-      const result = await window.electronAPI.readPresentationFile(this.preparedPath);
-      if (!result?.ok || !result.data) return;
-      const bytes = this.toPdfBytes(result.data);
-      const pdfDocument = await pdfjsLib.getDocument({ data: bytes }).promise;
-      this.pdfDoc = markRaw(pdfDocument);
-      this.$appdata.set("modules.presentation.config.total_slides", pdfDocument.numPages);
-      await this.renderCurrentSlide();
-    },
-    toPdfBytes(data) {
-      if (data instanceof Uint8Array) return data;
-      if (data instanceof ArrayBuffer) return new Uint8Array(data);
-      if (Array.isArray(data)) return new Uint8Array(data);
-      if (data?.type === "Buffer" && Array.isArray(data.data)) return new Uint8Array(data.data);
-      if (data?.data && Array.isArray(data.data)) return new Uint8Array(data.data);
-      throw new Error("Formato de dados do PDF invalido.");
+      const filePath = this.preparedPath;
+      if (!filePath || !window.electronAPI?.readPresentationFile) return;
+      try {
+        const pdfDocument = await this.pdf.load(async () => {
+          const result = await window.electronAPI.readPresentationFile(filePath);
+          if (!result?.ok || !result.data) throw new Error(result?.error || "Nao foi possivel ler o PDF.");
+          return result.data;
+        }, revision);
+        if (!pdfDocument || revision !== this.pdf.revision) return;
+        this.pdfDoc = markRaw(pdfDocument);
+        this.$appdata.set("modules.presentation.config.total_slides", pdfDocument.numPages);
+        await this.renderCurrentSlide();
+      } catch (error) {
+        console.warn("Falha ao carregar apresentacao:", error);
+      }
     },
     async renderCurrentSlide() {
       if (!this.pdfDoc) return;
-      const token = ++this.renderToken;
+      const revision = this.pdf.revision;
+      const token = this.pdf.beginRender("projection");
       const pageNumber = Math.min(Math.max(this.slideIndex + 1, 1), this.pdfDoc.numPages);
-      const page = await this.pdfDoc.getPage(pageNumber);
       const optimized = $performance.optimizePresentations();
-      const viewport = page.getViewport({ scale: optimized ? 1.2 : 1.8 });
-      const canvas = document.createElement("canvas");
-      const context = canvas.getContext("2d", { alpha: false });
-      canvas.width = Math.ceil(viewport.width);
-      canvas.height = Math.ceil(viewport.height);
-      await page.render({ canvasContext: context, viewport }).promise;
-      if (token !== this.renderToken) return;
-      this.currentImage = canvas.toDataURL("image/jpeg", optimized ? 0.84 : 0.92);
+      try {
+        const image = await this.pdf.render(pageNumber, optimized ? 1.2 : 1.8, optimized ? 0.84 : 0.92, "projection", token);
+        if (image && revision === this.pdf.revision && this.pdf.isRenderCurrent("projection", token)) this.currentImage = image;
+      } catch (error) {
+        console.warn("Falha ao renderizar slide:", error);
+      }
     },
   },
 };

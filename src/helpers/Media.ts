@@ -11,10 +11,30 @@ import $performance from "@/helpers/Performance";
 import $automation from "@/helpers/Automation";
 import $popup from "@/helpers/Popup";
 
+import { cancelFade, fadeVolume } from "@/helpers/AudioFade";
+
+let openRevision = 0;
+
 const helper: Record<string, any> = {
   queueTransitioning: false,
 
   async open(params) {
+    const revision = ++openRevision;
+    const current = () => revision === openRevision;
+    try {
+      await this.openRequest(params, current);
+    } catch (error) {
+      if (!current()) return;
+      const closing = this.close(true);
+      const closingRevision = openRevision;
+      await closing;
+      if (closingRevision !== openRevision) return;
+      $alert.error({ text: "modules.media.alerts.not_loaded", error });
+    } finally {
+      if (current()) $appdata.set("modules.media.loading", false);
+    }
+  },
+  async openRequest(params, current) {
     if (typeof params !== "object") {
       params = { id_music: params };
     }
@@ -27,7 +47,7 @@ const helper: Record<string, any> = {
           translate: false,
         }, (res) => resolve(res === "yes"));
       });
-      if (!confirmed) return;
+      if (!current() || !confirmed) return;
       
       $appdata.set("modules.external_media.filePath", "");
       $appdata.set("modules.external_media.show", false);
@@ -43,10 +63,9 @@ const helper: Record<string, any> = {
     const currentMode = $appdata.get("modules.media.config.mode");
     const isSameSong = params.id_music === $appdata.get("modules.media.id_music");
 
-    if (isSameSong && mode === currentMode) {
+    if (isSameSong && mode === currentMode && !$appdata.get("modules.media.loading")) {
       this.maximize();
-      await this.syncMonitors();
-      await this.syncReturnMonitor(true);
+      await this.syncMonitors(current);
       return;
     }
 
@@ -65,6 +84,8 @@ const helper: Record<string, any> = {
 
       this.switchActiveElement();
       audio = this.getElement();
+      cancelFade(audio);
+      audio.pause();
     } else {
       this.stopAudio();
       this.clearVariables();
@@ -79,6 +100,7 @@ const helper: Record<string, any> = {
     $appdata.set("modules.media.loading", true);
 
     const data = await $database.get(`music_${id_music}`);
+    if (!current()) return;
     if (data == null) {
       this.close(true);
       return;
@@ -105,6 +127,7 @@ const helper: Record<string, any> = {
     let hasExtended = false;
     if (window.electronAPI && window.electronAPI.getDisplays) {
       const displays = await window.electronAPI.getDisplays();
+      if (!current()) return;
       if (displays && displays.length > 1) {
         const primary = displays.find(d => d.isPrimary) || displays[0];
         const extendedSelected = slideMonitors.filter(m => m !== primary.id);
@@ -128,8 +151,10 @@ const helper: Record<string, any> = {
       this.minimize();
     }
 
-    await this.syncProjectionMonitors(true);
-    await this.syncReturnMonitor(true);
+    await this.syncProjectionMonitors(true, current);
+    if (!current()) return;
+    await this.syncReturnMonitor(true, current);
+    if (!current()) return;
 
     if (mode == "audio" || mode == "instrumental") {
       //Será executado com áudio... cria o elemento de audio
@@ -160,6 +185,7 @@ const helper: Record<string, any> = {
       if (window.electronAPI && window.electronAPI.isElectron) {
         const relativePath = urlPath.replace(/^\/(musics|images|covers)\//, "");
         const localUrl = await window.electronAPI.checkMedia("music", relativePath);
+        if (!current()) return;
         if (localUrl) {
           $dev.write("Mídia carregada do disco local", localUrl);
           targetAudioUrl = localUrl;
@@ -230,35 +256,13 @@ const helper: Record<string, any> = {
       });
     }
 
-    // Projeção Automática no Monitor Estendido
-    if (window.electronAPI && window.electronAPI.getDisplays) {
-      const displays = await window.electronAPI.getDisplays();
-      if (displays && displays.length > 1) {
-        let selectedMonitors = $userdata.get("modules.config.slide_monitor");
-        if (!Array.isArray(selectedMonitors)) {
-          selectedMonitors = selectedMonitors ? [selectedMonitors] : [];
-        }
-
-        const primary = displays.find(d => d.isPrimary) || displays[0];
-
-        // Remove primary from selected monitors to avoid covering controls
-        selectedMonitors = selectedMonitors.filter(m => m !== primary.id);
-
-        if (selectedMonitors.length > 0) {
-          const fullscreen = $userdata.get("modules.config.slide_fullscreen") !== false;
-          await $popup.syncMonitors(selectedMonitors, "media", true, fullscreen);
-        }
-      }
-    }
-
-    await this.syncReturnMonitor(true);
   },
 
-  async syncProjectionMonitors(forceOpen = false) {
+  async syncProjectionMonitors(forceOpen = false, current = () => true) {
     if (!window.electronAPI?.getDisplays) return;
 
     const displays = await window.electronAPI.getDisplays();
-    if (!displays || displays.length <= 1) return;
+    if (!current() || !displays || displays.length <= 1) return;
 
     let selectedMonitors = $userdata.get("modules.config.slide_monitor");
     if (!Array.isArray(selectedMonitors)) {
@@ -272,14 +276,15 @@ const helper: Record<string, any> = {
     await $popup.syncMonitors(selectedMonitors, "media", forceOpen, fullscreen);
   },
 
-  async syncMonitors() {
+  async syncMonitors(current = () => true) {
     const isMediaActive = $appdata.get("modules.media.id_music") != null;
-    await this.syncProjectionMonitors(isMediaActive);
+    await this.syncProjectionMonitors(isMediaActive, current);
+    if (!current()) return;
 
-    await this.syncReturnMonitor();
+    await this.syncReturnMonitor(false, current);
   },
 
-  async syncReturnMonitor(forceOpen = false) {
+  async syncReturnMonitor(forceOpen = false, current = () => true) {
     if ($performance.limitProjectionWindows()) {
       $popup.closeReturnMonitor();
       return;
@@ -301,6 +306,7 @@ const helper: Record<string, any> = {
     }
 
     const displays = await window.electronAPI.getDisplays();
+    if (!current()) return;
     const displayExists = displays?.some(display => display.id === returnMonitor);
     if (!displayExists) {
       $popup.closeReturnMonitor();
@@ -332,6 +338,8 @@ const helper: Record<string, any> = {
       return;
     }
 
+    ++openRevision;
+    $appdata.set("modules.media.loading", false);
     $automation.restore("media_closed");
     this.stopAudio();
     this.clearVariables();
@@ -577,12 +585,16 @@ const helper: Record<string, any> = {
   },
 
   stopAudio() {
-    const audioA = this.getElement("a");
-    const audioB = this.getElement("b");
-    this.pause(true, () => {
-      audioA.setAttribute("src", "");
-      audioB.setAttribute("src", "");
-    });
+    for (const id of ["__audio_a", "__audio_b"]) {
+      const audio = document.getElementById(id) as HTMLAudioElement | null;
+      if (!audio) continue;
+      cancelFade(audio);
+      audio.pause();
+      audio.removeAttribute("src");
+      // Reinicia a seleção de mídia para liberar buffers e downloads pendentes.
+      audio.load();
+    }
+    $appdata.set("modules.media.config.is_paused", true);
   },
 
   clearVariables() {
@@ -704,10 +716,7 @@ ${data.name}` : data.name)
     const slideTimes = Array.isArray(times) ? times : $appdata.get("modules.media.times");
     if (!Array.isArray(slideTimes) || slideTimes.length <= 1) return false;
 
-    const numericTimes = slideTimes.map((time) => Number(time) || 0);
-    const lyricTimes = numericTimes.slice(1);
-
-    return lyricTimes.some((time) => time > 0);
+    return slideTimes.some((time, index) => index > 0 && Number(time) > 0);
   },
   goToTime(time) {
     const audio = this.getElement();
@@ -735,13 +744,16 @@ ${data.name}` : data.name)
   pause(bool = true, callback) {
     const audio = this.getElement();
 
+    cancelFade(audio);
     if (bool) {
       audio.pause();
       $appdata.set("modules.media.config.is_paused", bool);
       if (callback) callback();
     } else {
       const self = this;
+      const revision = openRevision;
       audio.play().catch((e) => {
+        if (revision !== openRevision || e?.name === "AbortError") return;
         $alert.error(
           {
             text: "modules.media.alerts.not_loaded",
@@ -778,6 +790,7 @@ ${data.name}` : data.name)
   },
   setVolume(val) {
     const audio = this.getElement();
+    cancelFade(audio);
     audio.volume = val / 100;
     $appdata.set("modules.media.config.volume", val);
   },
@@ -841,16 +854,11 @@ ${data.name}` : data.name)
     $appdata.set("modules.media.config.progress", progress);
 
     if (!$appdata.get("modules.media.config.lazy")) {
-      try {
-        audio.buffered = 100;
-      } catch (error) {
-        //
-      }
       buffered = 100;
     } else {
       buffered = 0;
       const audio_buffered = audio.buffered; // Obter intervalos de buffer carregados
-      if (audio_buffered.length > 0) {
+      if (audio_buffered.length > 0 && Number.isFinite(audio.duration) && audio.duration > 0) {
         buffered = (audio_buffered.end(0) / audio.duration) * 100;
       }
     }
@@ -887,40 +895,27 @@ ${data.name}` : data.name)
     }
   },
   async fadeOut(audio, durationMs = 1000) {
-    return new Promise<void>((resolve) => {
-      const startVolume = audio.volume;
-      if (startVolume <= 0 || audio.paused) return resolve();
-
-      const step = startVolume / (durationMs / 50);
-      const interval = setInterval(() => {
-        if (audio.volume - step > 0) {
-          audio.volume -= step;
-        } else {
-          audio.volume = 0;
-          audio.pause();
-          clearInterval(interval);
-          resolve();
-        }
-      }, 50);
+    return fadeVolume(audio, 0, audio.paused ? 0 : durationMs, true, () => {
+      audio.removeAttribute("src");
+      audio.load();
     });
   },
   async fadeIn(audio, targetVolume, durationMs = 1000) {
-    return new Promise<void>((resolve) => {
-      audio.volume = 0;
-      audio.play().catch(() => { });
-      $appdata.set("modules.media.config.is_paused", false);
-
-      const step = targetVolume / (durationMs / 50);
-      const interval = setInterval(() => {
-        if (audio.volume + step < targetVolume) {
-          audio.volume += step;
-        } else {
-          audio.volume = targetVolume;
-          clearInterval(interval);
-          resolve();
-        }
-      }, 50);
-    });
+    cancelFade(audio);
+    const revision = openRevision;
+    audio.volume = 0;
+    const fade = fadeVolume(audio, targetVolume, durationMs);
+    try {
+      await audio.play();
+      if (revision !== openRevision) return;
+      $appdata.set("modules.media.config.is_paused", audio.paused);
+    } catch (error) {
+      if (revision === openRevision) {
+        cancelFade(audio);
+        $appdata.set("modules.media.config.is_paused", true);
+      }
+    }
+    return fade;
   },
   switchActiveElement() {
     const active = $appdata.get("modules.media.config.active_audio") || "a";
@@ -941,19 +936,19 @@ ${data.name}` : data.name)
       el.addEventListener("timeupdate", function () {
         const currentActive = $appdata.get("modules.media.config.active_audio") || "a";
         if (this.id === `__audio_${currentActive}`) {
-          self.timeUpdate.bind(self)();
+          self.timeUpdate();
         }
       });
       el.addEventListener("progress", function () {
         const currentActive = $appdata.get("modules.media.config.active_audio") || "a";
         if (this.id === `__audio_${currentActive}`) {
-          self.timeUpdate.bind(self)();
+          self.timeUpdate();
         }
       });
       el.addEventListener("ended", function () {
         const currentActive = $appdata.get("modules.media.config.active_audio") || "a";
         if (this.id === `__audio_${currentActive}`) {
-          self.handleTrackEnded.bind(self)();
+          self.handleTrackEnded();
         }
       });
     }

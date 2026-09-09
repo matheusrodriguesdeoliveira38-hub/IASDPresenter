@@ -5,6 +5,34 @@ import $storage from "@/helpers/Storage";
 
 const isDesktop = !!(window.electronAPI && window.electronAPI.isElectron);
 
+// Cache descartável: não deve impedir a abertura de dados válidos quando
+// sessionStorage estiver cheio ou indisponível. Mantém as invalidações db:*.
+const MAX_CACHE_CHARS = 2 * 1024 * 1024;
+function cacheDatabase(key, data) {
+  try {
+    const serialized = JSON.stringify(data);
+    if (serialized.length > MAX_CACHE_CHARS) return;
+    const entries: { key: string; size: number }[] = [];
+    let size = serialized.length;
+    for (let index = 0; index < sessionStorage.length; index++) {
+      const cachedKey = sessionStorage.key(index);
+      if (cachedKey?.startsWith("db:") && cachedKey !== key) {
+        const entrySize = (sessionStorage.getItem(cachedKey) || "").length;
+        entries.push({ key: cachedKey, size: entrySize });
+        size += entrySize;
+      }
+    }
+    for (const entry of entries) {
+      if (size <= MAX_CACHE_CHARS) break;
+      sessionStorage.removeItem(entry.key);
+      size -= entry.size;
+    }
+    sessionStorage.setItem(key, serialized);
+  } catch (error) {
+    $dev.write("Cache de BD indisponível", error);
+  }
+}
+
 async function parseJsonResponse(response, file) {
   const contentType = response.headers.get("content-type") || "";
   const text = await response.text();
@@ -24,7 +52,12 @@ const helper: Record<string, any> = {
   async get(file, options: { silent?: boolean } = {}) {
     try {
       const cache_name = `db:${file}`;
-      const cache = $storage.get(cache_name, null, "session");
+      let cache = null;
+      try {
+        cache = $storage.get(cache_name, null, "session");
+      } catch (error) {
+        $dev.write("Cache de BD indisponível", error);
+      }
 
       if (cache) {
         $dev.write("Lendo BD do cache", file);
@@ -35,7 +68,7 @@ const helper: Record<string, any> = {
         const localData = await window.electronAPI.getLocalDb(file);
         if (localData) {
           $dev.write("Lendo BD do disco local (Offline)", file);
-          $storage.set(cache_name, localData, "session");
+          cacheDatabase(cache_name, localData);
           return localData;
         }
         if (navigator.onLine === false) {
@@ -95,7 +128,7 @@ const helper: Record<string, any> = {
       if (!data) throw new Error("Falha ao baixar dados após várias tentativas");
 
       $dev.write("Salvando BD em cache", file);
-      $storage.set(cache_name, data, "session");
+      cacheDatabase(cache_name, data);
 
       if (isDesktop) {
         await window.electronAPI.saveLocalDb(file, data);

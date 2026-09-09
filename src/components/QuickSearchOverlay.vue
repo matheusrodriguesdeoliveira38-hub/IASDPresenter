@@ -47,7 +47,7 @@
             type="button"
             class="quick-search-result d-flex align-center w-100 pa-3"
             :class="{ selected: index === selectedIndex }"
-            @mouseenter="selectedIndex = index"
+            @mouseenter="selectedIndex = Number(index)"
             @click="activate(item)"
           >
             <v-avatar size="40" color="primary" variant="tonal" class="mr-3 flex-shrink-0">

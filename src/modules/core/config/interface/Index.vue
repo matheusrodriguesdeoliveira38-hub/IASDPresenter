@@ -1,43 +1,27 @@
 <template>
   <v-slide-y-reverse-transition>
-    <div v-if="module?.show" class="module-full-page dashboard-home d-flex flex-column bg-main">
-      <div class="search-header pb-0 flex-shrink-0" style="padding-top: 24px; padding-left: 24px; padding-right: 24px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 16px;">
-        <div class="d-flex align-center" style="flex-shrink: 0;">
-          <MenuToggleButton style="margin-right: 16px; flex-shrink: 0;" @toggle-sidebar="toggleSidebar" />
-          
-          <div class="module-icon-box d-flex align-center justify-center mr-4" style="flex-shrink: 0;">
+    <div v-if="module?.show" class="module-full-page dashboard-home d-flex flex-column bg-main config-page">
+      <header class="search-header config-header flex-shrink-0">
+        <div class="config-title-group">
+          <MenuToggleButton class="flex-shrink-0" @toggle-sidebar="toggleSidebar" />
+          <div class="module-icon-box d-flex align-center justify-center flex-shrink-0">
             <v-icon :icon="manifest.icon || 'mdi-cog'" size="24" />
           </div>
-          <h2 class="section-title mb-0" style="color: var(--sidebar-text); font-size: 24px; font-weight: 600; line-height: 1; white-space: nowrap;">
-            {{ t('main_title') }}
-          </h2>
+          <div>
+            <h2 class="section-title">{{ t('main_title') }}</h2>
+            <p>{{ activeTabDescription }}</p>
+          </div>
         </div>
 
-        <div class="d-flex align-center" style="max-width: 100%; overflow-x: auto;">
-          <v-tabs v-model="tab" color="var(--accent-blue)">
-            <v-tab :value="1">
-              {{ t('tab_appearance') }}
-            </v-tab>
-            <v-tab :value="2">
-              {{ t('tab_general') }}
-            </v-tab>
-            <v-tab :value="3">
-              {{ t('tab_media') }}
-            </v-tab>
-            <v-tab :value="4">
-              {{ t('tab_projection') }}
-            </v-tab>
-            <v-tab :value="5">
-              Controle remoto
-            </v-tab>
-            <v-tab :value="6">
-              Automação
-            </v-tab>
-          </v-tabs>
-        </div>
-      </div>
+        <nav class="config-tabs" aria-label="Categorias de configurações">
+          <button v-for="item in configTabs" :key="item.value" type="button" :class="{ active: tab === item.value }" @click="tab = item.value">
+            <v-icon :icon="item.icon" size="18" />
+            <span>{{ item.label }}</span>
+          </button>
+        </nav>
+      </header>
 
-      <div class="content-main flex-grow-1 w-100" style="overflow: hidden; padding-top: 24px; background: var(--main-bg);">
+      <div class="content-main config-content flex-grow-1 w-100">
         <v-tabs-window v-model="tab" class="h-100 w-100">
           <v-tabs-window-item :value="1" class="h-100">
             <div class="h-100 overflow-auto px-6 pb-6">
@@ -462,7 +446,7 @@
                                   Transi&ccedil;&atilde;o entre itens da liturgia
                                 </div>
                                 <div class="text-caption" style="color: var(--sidebar-text-secondary);">
-                                  Suaviza a troca quando j&aacute; existe um item em execu&ccedil;&atilde;o.
+                                  Fade na proje&ccedil;&atilde;o: metade do tempo para apagar o item atual e metade para revelar o pr&oacute;ximo. 0 s desativa.
                                 </div>
                               </div>
                               <v-chip size="small" color="primary" variant="tonal" class="font-weight-bold">
@@ -636,67 +620,31 @@
                       </div>
                     </div>
                     
-                    <div class="d-flex flex-wrap mb-6 justify-center" style="gap: 32px; padding: 20px 0;">
+                    <div class="monitor-showcase">
                       <div
                         v-for="(display, index) in rawDisplays"
                         :key="display.id"
-                        class="d-flex flex-column align-center"
-                        style="transition: transform 0.2s ease;"
+                        class="monitor-device"
+                        :class="{ primary: display.isPrimary }"
                       >
-                        <!-- Tela do Monitor -->
-                        <div 
-                          class="d-flex flex-column align-center justify-center position-relative"
-                          :style="`
-                            width: 170px; 
-                            height: 106px; 
-                            border-radius: 12px; 
-                            background: ${display.isPrimary ? 'linear-gradient(135deg, var(--accent-blue) 0%, #0077b6 100%)' : 'var(--main-bg)'}; 
-                            color: ${display.isPrimary ? '#fff' : 'var(--sidebar-text)'};
-                            border: ${display.isPrimary ? '2px solid transparent' : '2px solid rgba(150,150,150,0.2)'};
-                            box-shadow: ${display.isPrimary ? '0 10px 25px rgba(var(--accent-blue-rgb), 0.4)' : '0 8px 20px rgba(0,0,0,0.06)'};
-                            z-index: 2;
-                          `"
-                        >
-                          <!-- Ícone de Estrela para o Primário -->
-                          <v-icon
-                            v-if="display.isPrimary"
-                            size="18"
-                            class="position-absolute"
-                            style="top: 10px; right: 10px; opacity: 0.9"
-                          >
-                            mdi-star
-                          </v-icon>
-                          
-                          <span class="font-weight-bold" style="font-size: 32px; line-height: 1; letter-spacing: -1px;">{{ index + 1 }}</span>
-                          <span class="text-caption font-weight-medium mt-1" :style="`opacity: ${display.isPrimary ? '0.9' : '0.5'}`">
-                            {{ display.bounds.width }} x {{ display.bounds.height }}
-                          </span>
-                          
-                          <div v-if="display.isPrimary" class="text-overline mt-1 font-weight-bold" style="line-height: 1; opacity: 0.9; font-size: 0.65rem; letter-spacing: 1px;">
-                            PRINCIPAL
+                        <div class="monitor-frame">
+                          <div class="monitor-toolbar">
+                            <span><i /><i /><i /></span>
+                            <strong>DISPLAY {{ String(Number(index) + 1).padStart(2, '0') }}</strong>
+                            <v-icon :icon="display.isPrimary ? 'mdi-star-four-points' : 'mdi-monitor'" size="15" />
+                          </div>
+                          <div class="monitor-screen-content">
+                            <span class="monitor-scan-line" />
+                            <span class="monitor-number">{{ Number(index) + 1 }}</span>
+                            <strong>{{ display.bounds.width }} × {{ display.bounds.height }}</strong>
+                            <small>{{ display.bounds.width / display.bounds.height > 1.7 ? 'WIDESCREEN' : 'DISPLAY' }}</small>
                           </div>
                         </div>
-                        
-                        <!-- Haste do Monitor -->
-                        <div 
-                          :style="`
-                            width: 30px; 
-                            height: 14px; 
-                            background: ${display.isPrimary ? '#0077b6' : 'rgba(150,150,150,0.3)'}; 
-                            opacity: ${display.isPrimary ? '0.9' : '0.6'};
-                          `"
-                        />
-                        
-                        <!-- Base do Monitor -->
-                        <div 
-                          class="rounded-pill"
-                          :style="`
-                            width: 80px; 
-                            height: 6px; 
-                            background: ${display.isPrimary ? '#0077b6' : 'rgba(150,150,150,0.3)'}; 
-                            opacity: ${display.isPrimary ? '0.9' : '0.6'};
-                          `"
-                        />
+                        <div class="monitor-neck" /><div class="monitor-base" />
+                        <div class="monitor-meta">
+                          <span :class="{ online: display.isPrimary }"><i />{{ display.isPrimary ? 'Monitor principal' : 'Monitor estendido' }}</span>
+                          <small>X {{ display.bounds.x }} · Y {{ display.bounds.y }}</small>
+                        </div>
                       </div>
                     </div>
                     
@@ -1415,7 +1363,7 @@
                                     size="small"
                                     variant="flat"
                                     color="white"
-                                    @click="$refs.bgImageInput.click()"
+                                    @click="($refs.bgImageInput as HTMLInputElement)?.click()"
                                   >
                                     <v-icon color="black">
                                       mdi-pencil
@@ -1431,7 +1379,7 @@
                                 v-else
                                 class="rounded-xl d-flex flex-column align-center justify-center cursor-pointer"
                                 style="height: 100px; border: 2px dashed var(--border-color); background: var(--card-bg); transition: all 0.2s;"
-                                @click="$refs.bgImageInput.click()"
+                                @click="($refs.bgImageInput as HTMLInputElement)?.click()"
                               >
                                 <v-icon size="32" color="grey-lighten-1" class="mb-2">
                                   mdi-cloud-upload-outline
@@ -1824,99 +1772,113 @@
 
           <v-tabs-window-item :value="6" class="h-100">
             <div class="h-100 overflow-auto px-6 pb-6">
-              <div class="settings-container mx-auto d-flex flex-column" style="max-width: 760px; gap: 24px;">
+              <div class="settings-container automation-settings mx-auto d-flex flex-column">
                 <CollapsiblePanel title="Gatilhos de automação" subtitle="Ativação e comportamento geral" icon="mdi-lightning-bolt" class="mt-6" :hide-first="false">
-                <v-card class="settings-card legacy-panel-content rounded-xl pa-2 mt-6" flat style="background: var(--card-bg); box-shadow: var(--shadow);">
-                  <v-card-text class="pa-6">
-                    <div class="d-flex align-center justify-space-between mb-6" style="gap: 16px; flex-wrap: wrap;">
-                      <div class="d-flex align-center">
-                        <v-icon color="primary" class="mr-3" size="28">
-                          mdi-lightning-bolt
-                        </v-icon>
-                        <div>
-                          <h3 class="font-weight-bold" style="color: var(--sidebar-text); font-size: 1.1rem; line-height: 1.2;">
-                            Gatilhos de automação
-                          </h3>
-                          <div class="text-caption" style="color: var(--sidebar-text-secondary);">
-                            Dispare comandos na mesa Soundcraft Ui16 junto da liturgia.
-                          </div>
-                        </div>
+                  <div class="automation-overview" :class="{ active: automation_config.enabled }">
+                    <div class="automation-overview-main">
+                      <div class="automation-hero-icon">
+                        <v-icon size="30">mdi-lightning-bolt</v-icon>
                       </div>
-                      <v-switch
-                        v-model="automation_config.enabled"
-                        label="Ativar"
-                        color="primary"
-                        inset
-                        hide-details
-                      />
+                      <div class="automation-overview-copy">
+                        <div class="automation-eyebrow">
+                          <span class="automation-status-dot" />
+                          {{ automation_config.enabled ? 'Sistema ativo' : 'Sistema desativado' }}
+                        </div>
+                        <h3>Automação inteligente de áudio</h3>
+                        <p>Execute cenas da Soundcraft junto aos momentos da liturgia, com controle e segurança.</p>
+                      </div>
+                      <div class="automation-master-control">
+                        <span>{{ automation_config.enabled ? 'Ativado' : 'Desativado' }}</span>
+                        <v-switch
+                          v-model="automation_config.enabled"
+                          color="primary"
+                          inset
+                          hide-details
+                          aria-label="Ativar gatilhos de automação"
+                        />
+                      </div>
                     </div>
 
-                    <div class="d-flex flex-column" style="gap: 14px;">
-                      <v-switch
-                        v-model="automation_config.simulationMode"
-                        label="Modo simulação"
-                        color="primary"
-                        inset
-                        hide-details
-                        density="compact"
-                      />
-                      <v-switch
-                        v-model="automation_config.showStatus"
-                        label="Mostrar status dos gatilhos durante a liturgia"
-                        color="primary"
-                        inset
-                        hide-details
-                        density="compact"
-                      />
+                    <div class="automation-options-grid">
+                      <label class="automation-option">
+                        <span class="automation-option-icon"><v-icon size="21">mdi-flask-outline</v-icon></span>
+                        <span class="automation-option-copy">
+                          <strong>Modo simulação</strong>
+                          <small>Valide os comandos sem alterar o áudio da mesa.</small>
+                        </span>
+                        <v-switch
+                          v-model="automation_config.simulationMode"
+                          color="primary"
+                          inset
+                          hide-details
+                          density="compact"
+                          aria-label="Ativar modo simulação"
+                        />
+                      </label>
+                      <label class="automation-option">
+                        <span class="automation-option-icon"><v-icon size="21">mdi-eye-outline</v-icon></span>
+                        <span class="automation-option-copy">
+                          <strong>Status na liturgia</strong>
+                          <small>Mostre o andamento dos gatilhos durante a apresentação.</small>
+                        </span>
+                        <v-switch
+                          v-model="automation_config.showStatus"
+                          color="primary"
+                          inset
+                          hide-details
+                          density="compact"
+                          aria-label="Mostrar status durante a liturgia"
+                        />
+                      </label>
                     </div>
-                  </v-card-text>
-                </v-card>
+                  </div>
                 </CollapsiblePanel>
 
                 <CollapsiblePanel title="Dispositivo Soundcraft Ui" subtitle="Conexão com a mesa de áudio" icon="mdi-mixer">
-                <v-card class="settings-card legacy-panel-content rounded-xl pa-2" flat style="background: var(--card-bg); box-shadow: var(--shadow);">
-                  <v-card-text class="pa-6">
-                    <div class="d-flex align-center justify-space-between mb-5" style="gap: 16px; flex-wrap: wrap;">
-                      <div class="d-flex align-center">
-                        <v-icon color="primary" class="mr-3" size="28">
-                          mdi-mixer
-                        </v-icon>
-                        <div>
-                          <h3 class="font-weight-bold" style="color: var(--sidebar-text); font-size: 1.1rem; line-height: 1.2;">
-                            Dispositivo Soundcraft Ui
-                          </h3>
-                          <div class="text-caption" style="color: var(--sidebar-text-secondary);">
-                            Cadastre o IP da mesa na mesma rede deste computador.
-                          </div>
-                        </div>
+                  <div class="automation-device-card">
+                    <div class="device-card-intro">
+                      <div class="device-visual">
+                        <v-icon size="26">mdi-mixer</v-icon>
+                        <span class="device-signal"><i /><i /><i /></span>
+                      </div>
+                      <div>
+                        <span class="automation-eyebrow">Dispositivo principal</span>
+                        <h3>Soundcraft Ui</h3>
+                        <p>Informe o endereço da mesa conectada à mesma rede deste computador.</p>
                       </div>
                     </div>
 
-                    <div class="d-flex" style="gap: 16px; flex-wrap: wrap;">
+                    <div class="device-fields">
                       <v-text-field
                         v-model="automation_device.name"
-                        label="Nome"
+                        label="Nome do dispositivo"
+                        prepend-inner-icon="mdi-tag-outline"
                         variant="outlined"
                         density="comfortable"
                         hide-details
-                        style="min-width: 220px; flex: 1;"
                       />
                       <v-text-field
                         v-model="automation_device.ip"
-                        label="IP da Ui16"
+                        label="Endereço IP"
                         placeholder="192.168.0.80"
+                        prepend-inner-icon="mdi-ip-network-outline"
                         variant="outlined"
                         density="comfortable"
                         hide-details
-                        style="min-width: 180px; flex: 1;"
                       />
                     </div>
 
-                    <div class="d-flex justify-end mt-4" style="gap: 8px; flex-wrap: wrap;">
+                    <div class="device-card-footer">
+                      <div class="device-network-hint">
+                        <v-icon size="17">mdi-lan</v-icon>
+                        Rede local segura
+                      </div>
+                      <div class="device-actions">
                       <v-btn
                         color="primary"
                         variant="tonal"
-                        class="text-none rounded-lg font-weight-bold"
+                        class="text-none font-weight-bold"
+                        prepend-icon="mdi-lan-connect"
                         :loading="automation_loading"
                         @click="testAutomationDevice"
                       >
@@ -1925,38 +1887,32 @@
                       <v-btn
                         color="primary"
                         variant="flat"
-                        class="text-none rounded-lg font-weight-bold"
+                        class="text-none font-weight-bold"
+                        prepend-icon="mdi-content-save-outline"
                         :loading="automation_loading"
                         @click="saveAutomationConfig"
                       >
                         Salvar automação
                       </v-btn>
+                      </div>
                     </div>
-                  </v-card-text>
-                </v-card>
+                  </div>
                 </CollapsiblePanel>
 
                 <CollapsiblePanel title="Gatilhos" subtitle="Cenas reutilizáveis associadas aos itens da liturgia" icon="mdi-playlist-check" :hide-first="false">
-                <v-card class="settings-card legacy-panel-content rounded-xl pa-2" flat style="background: var(--card-bg); box-shadow: var(--shadow);">
-                  <v-card-text class="pa-6">
-                    <div class="d-flex align-center justify-space-between mb-5" style="gap: 16px; flex-wrap: wrap;">
-                      <div class="d-flex align-center">
-                        <v-icon color="primary" class="mr-3" size="28">
-                          mdi-playlist-check
-                        </v-icon>
-                        <div>
-                          <h3 class="font-weight-bold" style="color: var(--sidebar-text); font-size: 1.1rem; line-height: 1.2;">
-                            Gatilhos
-                          </h3>
-                          <div class="text-caption" style="color: var(--sidebar-text-secondary);">
-                            Crie cenas reutilizáveis para escolher nos itens da liturgia.
-                          </div>
+                  <div class="triggers-workspace">
+                    <div class="triggers-toolbar">
+                      <div>
+                        <div class="triggers-title-line">
+                          <h3>Cenas de automação</h3>
+                          <span class="trigger-count">{{ automation_config.triggers.length }}</span>
                         </div>
+                        <p>Configure o comando que será disponibilizado nos itens da liturgia.</p>
                       </div>
                       <v-btn
                         color="primary"
-                        variant="tonal"
-                        class="text-none rounded-lg font-weight-bold"
+                        variant="flat"
+                        class="text-none font-weight-bold"
                         prepend-icon="mdi-plus"
                         @click="addAutomationTrigger"
                       >
@@ -1964,150 +1920,109 @@
                       </v-btn>
                     </div>
 
-                    <div v-if="automation_config.triggers.length === 0" class="text-body-2 py-6 text-center" style="color: var(--sidebar-text-secondary);">
-                      Nenhum gatilho configurado.
+                    <div v-if="automation_config.triggers.length === 0" class="automation-empty">
+                      <div class="automation-empty-icon"><v-icon size="34">mdi-lightning-bolt-outline</v-icon></div>
+                      <h3>Crie seu primeiro gatilho</h3>
+                      <p>Adicione uma cena para controlar canais, volumes e transições diretamente pela liturgia.</p>
+                      <v-btn
+                        color="primary"
+                        variant="tonal"
+                        class="text-none font-weight-bold"
+                        prepend-icon="mdi-plus"
+                        @click="addAutomationTrigger"
+                      >
+                        Criar gatilho
+                      </v-btn>
                     </div>
 
-                    <div
-                      v-for="(trigger, index) in automation_config.triggers"
-                      :key="trigger.id"
-                      class="rounded-xl pa-4 mb-4"
-                      style="border: 1px solid var(--border-color); background: rgba(var(--v-theme-surface), 0.08);"
-                    >
-                      <div class="d-flex align-center mb-4" style="gap: 12px;">
+                    <div v-else class="trigger-list">
+                      <article
+                        v-for="(trigger, index) in automation_config.triggers"
+                        :key="trigger.id"
+                        class="trigger-card"
+                        :class="{ disabled: !trigger.enabled }"
+                      >
+                      <div class="trigger-card-header">
+                        <div class="trigger-identity">
+                          <span class="trigger-index">{{ String(index + 1).padStart(2, '0') }}</span>
+                          <div>
+                            <strong>Gatilho de áudio</strong>
+                            <small>{{ trigger.enabled ? 'Pronto para uso' : 'Pausado' }}</small>
+                          </div>
+                        </div>
                         <v-text-field
                           v-model="trigger.name"
                           label="Nome do gatilho"
+                          prepend-inner-icon="mdi-lightning-bolt-outline"
                           variant="outlined"
                           density="comfortable"
                           hide-details
-                          style="flex: 1;"
+                          class="trigger-name-field"
                         />
-                        <v-switch
-                          v-model="trigger.enabled"
-                          color="primary"
-                          inset
-                          hide-details
-                        />
-                        <v-btn
-                          icon
-                          size="small"
-                          variant="text"
-                          color="error"
-                          @click="removeAutomationTrigger(index)"
-                        >
-                          <v-icon>mdi-delete</v-icon>
-                        </v-btn>
+                        <div class="trigger-header-actions">
+                          <label class="trigger-enabled-control">
+                            <span>{{ trigger.enabled ? 'Ativo' : 'Inativo' }}</span>
+                            <v-switch v-model="trigger.enabled" color="primary" inset hide-details density="compact" />
+                          </label>
+                          <v-tooltip text="Excluir gatilho" location="top">
+                            <template #activator="{ props }">
+                              <v-btn
+                                v-bind="props"
+                                icon="mdi-delete-outline"
+                                size="small"
+                                variant="tonal"
+                                color="error"
+                                aria-label="Excluir gatilho"
+                                @click="removeAutomationTrigger(index)"
+                              />
+                            </template>
+                          </v-tooltip>
+                        </div>
                       </div>
 
                       <div
-                        v-for="action in trigger.actions"
+                        v-for="(action, actionIndex) in trigger.actions"
                         :key="action.id"
-                        class="d-flex align-center"
-                        style="gap: 12px; flex-wrap: wrap;"
+                        class="trigger-action"
                       >
-                        <v-select
-                          v-model="action.operation"
-                          :items="automationOperationOptions"
-                          label="Ação"
-                          variant="outlined"
-                          density="comfortable"
-                          hide-details
-                          style="min-width: 170px; flex: 1;"
-                        />
-                        <v-select
-                          v-model="action.target"
-                          :items="automationTargetOptions"
-                          label="Alvo"
-                          variant="outlined"
-                          density="comfortable"
-                          hide-details
-                          style="min-width: 150px; flex: 1;"
-                        />
-                        <v-text-field
-                          v-if="action.target === 'input'"
-                          v-model.number="action.channel"
-                          type="number"
-                          label="Canal"
-                          min="1"
-                          max="16"
-                          variant="outlined"
-                          density="comfortable"
-                          hide-details
-                          style="max-width: 110px;"
-                        />
-                        <v-text-field
-                          v-if="['setFaderLevelDB', 'fadeToDB'].includes(action.operation)"
-                          v-model.number="action.valueDB"
-                          type="number"
-                          label="Volume dB"
-                          min="-90"
-                          max="10"
-                          variant="outlined"
-                          density="comfortable"
-                          hide-details
-                          style="max-width: 130px;"
-                        />
-                        <v-text-field
-                          v-if="action.operation === 'fadeToDB'"
-                          v-model.number="action.fadeMs"
-                          type="number"
-                          label="Fade ms"
-                          min="0"
-                          variant="outlined"
-                          density="comfortable"
-                          hide-details
-                          style="max-width: 130px;"
-                        />
-                        <v-switch
-                          v-if="['setFaderLevelDB', 'fadeToDB'].includes(action.operation)"
-                          v-model="action.restoreOnMediaEnd"
-                          label="Definir volume ao encerrar"
-                          color="primary"
-                          inset
-                          hide-details
-                          density="compact"
-                          style="min-width: 250px;"
-                        />
-                        <v-text-field
-                          v-if="action.restoreOnMediaEnd && ['setFaderLevelDB', 'fadeToDB'].includes(action.operation)"
-                          v-model.number="action.endValueDB"
-                          type="number"
-                          label="Volume final dB"
-                          min="-90"
-                          max="10"
-                          variant="outlined"
-                          density="comfortable"
-                          hide-details
-                          style="max-width: 150px;"
-                        />
-                        <v-text-field
-                          v-if="action.restoreOnMediaEnd && ['setFaderLevelDB', 'fadeToDB'].includes(action.operation)"
-                          v-model.number="action.endFadeMs"
-                          type="number"
-                          label="Fade final ms"
-                          min="0"
-                          variant="outlined"
-                          density="comfortable"
-                          hide-details
-                          style="max-width: 150px;"
-                        />
+                        <div class="trigger-action-title">
+                          <span><v-icon size="17">mdi-tune-vertical</v-icon></span>
+                          <div><strong>Ação {{ Number(actionIndex) + 1 }}</strong><small>Comando executado pela mesa</small></div>
+                        </div>
+                        <div class="trigger-action-grid">
+                          <v-select v-model="action.operation" :items="automationOperationOptions" label="Ação" prepend-inner-icon="mdi-playlist-play" variant="outlined" density="comfortable" hide-details />
+                          <v-select v-model="action.target" :items="automationTargetOptions" label="Alvo" prepend-inner-icon="mdi-target" variant="outlined" density="comfortable" hide-details />
+                          <v-text-field v-if="action.target === 'input'" v-model.number="action.channel" type="number" label="Canal" min="1" max="16" variant="outlined" density="comfortable" hide-details />
+                          <v-text-field v-if="['setFaderLevelDB', 'fadeToDB'].includes(action.operation)" v-model.number="action.valueDB" type="number" label="Volume dB" min="-90" max="10" variant="outlined" density="comfortable" hide-details />
+                          <v-text-field v-if="action.operation === 'fadeToDB'" v-model.number="action.fadeMs" type="number" label="Fade (ms)" min="0" variant="outlined" density="comfortable" hide-details />
+                        </div>
+                        <label v-if="['setFaderLevelDB', 'fadeToDB'].includes(action.operation)" class="restore-control">
+                          <span class="restore-icon"><v-icon size="19">mdi-restore</v-icon></span>
+                          <span class="restore-copy"><strong>Volume ao encerrar</strong><small>Defina o nível aplicado quando a mídia terminar.</small></span>
+                          <v-switch v-model="action.restoreOnMediaEnd" color="primary" inset hide-details density="compact" />
+                        </label>
+                        <div v-if="action.restoreOnMediaEnd && ['setFaderLevelDB', 'fadeToDB'].includes(action.operation)" class="trigger-end-grid">
+                          <v-text-field v-model.number="action.endValueDB" type="number" label="Volume final (dB)" min="-90" max="10" prepend-inner-icon="mdi-volume-medium" variant="outlined" density="comfortable" hide-details />
+                          <v-text-field v-model.number="action.endFadeMs" type="number" label="Fade final (ms)" min="0" prepend-inner-icon="mdi-timer-sand" variant="outlined" density="comfortable" hide-details />
+                        </div>
                       </div>
 
-                      <div class="d-flex justify-end mt-4" style="gap: 8px;">
+                      <div class="trigger-card-footer">
+                        <span><v-icon size="16">mdi-shield-check-outline</v-icon> Teste antes de usar na apresentação</span>
                         <v-btn
                           color="primary"
                           variant="tonal"
-                          class="text-none rounded-lg font-weight-bold"
+                          class="text-none font-weight-bold"
+                          prepend-icon="mdi-play-circle-outline"
                           :loading="automation_loading"
                           @click="testAutomationTrigger(trigger)"
                         >
                           Testar gatilho
                         </v-btn>
                       </div>
+                      </article>
                     </div>
-                  </v-card-text>
-                </v-card>
+                  </div>
                 </CollapsiblePanel>
               </div>
             </div>
@@ -2136,6 +2051,14 @@ export default {
   },
   data: () => ({
     tab: 1,
+    configTabs: [
+      { value: 1, label: "Aparência", icon: "mdi-palette-outline" },
+      { value: 2, label: "Geral", icon: "mdi-tune-variant" },
+      { value: 3, label: "Mídia e player", icon: "mdi-play-box-multiple-outline" },
+      { value: 4, label: "Projeção e telas", icon: "mdi-monitor-multiple" },
+      { value: 5, label: "Controle remoto", icon: "mdi-remote" },
+      { value: 6, label: "Automação", icon: "mdi-lightning-bolt-outline" },
+    ],
     language: "pt",
     accent_color: "#0097d7",
     home_layout: "classic",
@@ -2267,6 +2190,16 @@ export default {
     module() {
       return this.$modules.get(this.module_id);
     },
+    activeTabDescription() {
+      return {
+        1: "Personalize o tema e a experiência visual",
+        2: "Defina idioma, comportamento e desempenho",
+        3: "Organize reprodução, áudio e vídeo",
+        4: "Configure projeção, retorno e monitores",
+        5: "Conecte dispositivos pela rede local",
+        6: "Crie ações automáticas para sua operação",
+      }[this.tab] || "Ajuste o IASDPresenter ao seu fluxo de trabalho";
+    },
     active_theme_mode: {
       get() {
         return this.$vuetify.theme.global.current.dark ? "dark" : "light";
@@ -2286,8 +2219,8 @@ export default {
         ];
       }
       return this.rawDisplays.map((d, index) => ({
-        title: `Monitor ${index + 1} ${d.isPrimary ? "(Principal)" : "(Estendido)"}`,
-        detailTitle: `Monitor ${index + 1} - ${d.bounds.width}x${d.bounds.height} - X:${d.bounds.x} Y:${d.bounds.y}${d.isPrimary ? " - Principal" : ""}`,
+        title: `Monitor ${Number(index) + 1} ${d.isPrimary ? "(Principal)" : "(Estendido)"}`,
+        detailTitle: `Monitor ${Number(index) + 1} - ${d.bounds.width}x${d.bounds.height} - X:${d.bounds.x} Y:${d.bounds.y}${d.isPrimary ? " - Principal" : ""}`,
         detail: `${d.bounds.width}x${d.bounds.height} | X:${d.bounds.x} Y:${d.bounds.y}${d.isPrimary ? " | Principal" : ""}`,
         value: d.id,
         isPrimary: d.isPrimary,
@@ -2923,10 +2856,6 @@ export default {
         ? this.$userdata.get("modules.config.slide_fullscreen") !== false
         : this.$userdata.get("modules.config.media_slide_fullscreen") !== false;
 
-      if (fullscreen) {
-        this.$popup.closeProjection("external_media");
-        return;
-      }
         
       if (!Array.isArray(selectedMonitors)) {
         selectedMonitors = selectedMonitors ? [selectedMonitors] : [];
@@ -3112,5 +3041,174 @@ export default {
 <style scoped>
 .settings-section h3 {
   opacity: 0.9;
+}
+
+.config-page,
+.config-page *,
+.config-page *::before,
+.config-page *::after { box-sizing: border-box; }
+.config-page {
+  background:
+    radial-gradient(circle at 88% 2%, rgba(var(--accent-blue-rgb), .065), transparent 28%),
+    radial-gradient(circle at 5% 100%, rgba(255, 107, 53, .04), transparent 25%),
+    var(--main-bg);
+}
+.config-header {
+  width: 100%;
+  min-height: 150px;
+  padding: 24px clamp(24px, 3vw, 44px) 0 !important;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: flex-start;
+  gap: 20px;
+  border-bottom: 1px solid var(--border-color);
+  background: color-mix(in srgb, var(--main-bg) 93%, transparent) !important;
+}
+.config-title-group { min-width: 0; display: flex; align-items: center; gap: 14px; }
+.config-title-group .module-icon-box { margin: 0 !important; }
+.config-title-group h2 { margin: 0; }
+.config-title-group p { margin: 5px 0 0; color: var(--sidebar-text-secondary); font-size: 13px; }
+.config-tabs { min-width: 0; display: flex; align-items: flex-end; gap: 5px; overflow-x: auto; scrollbar-width: none; }
+.config-tabs::-webkit-scrollbar { display: none; }
+.config-tabs button { position: relative; min-width: max-content; min-height: 50px; padding: 0 16px 12px; display: inline-flex; align-items: center; justify-content: center; gap: 8px; color: var(--sidebar-text-secondary); border: 0; background: transparent; cursor: pointer; font: inherit; font-size: 13px; font-weight: 650; transition: color .18s ease, background .18s ease; }
+.config-tabs button::after { content: ""; position: absolute; right: 12px; bottom: 0; left: 12px; height: 3px; border-radius: 99px 99px 0 0; background: transparent; transform: scaleX(.45); transition: background .18s ease, transform .18s ease; }
+.config-tabs button:hover { color: var(--sidebar-text); background: linear-gradient(to top, var(--sidebar-hover), transparent 70%); }
+.config-tabs button.active { color: var(--accent-blue); }
+.config-tabs button.active::after { background: var(--accent-blue); box-shadow: 0 -3px 12px rgba(var(--accent-blue-rgb), .25); transform: scaleX(1); }
+.config-content { min-height: 0; padding: 28px clamp(24px, 3vw, 44px) 44px !important; overflow: hidden; background: transparent !important; }
+.config-content :deep(.v-window),
+.config-content :deep(.v-window__container),
+.config-content :deep(.v-window-item) { min-height: 0; height: 100%; }
+.config-content :deep(.v-window-item > .overflow-auto) { padding: 0 8px 24px !important; }
+.config-content :deep(.settings-container) { width: min(100%, 1080px); max-width: 1080px !important; margin: 0 auto !important; padding: 0 0 20px !important; gap: 18px !important; }
+.config-page :deep(.v-field:not(.v-field--variant-plain):not(.v-field--variant-underlined)) { border-radius: 12px; background: color-mix(in srgb, var(--card-bg) 93%, var(--main-bg)); }
+.config-page :deep(.v-field--variant-outlined .v-field__outline) { color: color-mix(in srgb, var(--sidebar-text-secondary) 42%, var(--border-color)); }
+.config-page :deep(.v-field--focused) { box-shadow: 0 0 0 3px rgba(var(--accent-blue-rgb), .1); }
+.config-page :deep(.v-field--focused .v-field__outline) { color: var(--accent-blue); }
+.config-page :deep(.v-label) { color: var(--sidebar-text-secondary); font-size: 13px; }
+.config-page :deep(.v-input__details) { color: var(--sidebar-text-secondary); }
+.config-page :deep(.v-btn-toggle) { padding: 4px; gap: 4px; border: 1px solid var(--border-color); border-radius: 13px !important; background: var(--main-bg) !important; box-shadow: none !important; }
+.config-page :deep(.v-btn-toggle .v-btn) { border: 0 !important; border-radius: 9px !important; }
+.config-page :deep(.v-btn-toggle .v-btn--active) { color: var(--accent-blue); background: var(--accent-soft); box-shadow: 0 3px 10px rgba(var(--accent-blue-rgb), .1); }
+.config-page :deep(.v-switch .v-selection-control__wrapper) { color: var(--sidebar-text-secondary); }
+.config-page :deep(.v-switch .v-selection-control--dirty .v-selection-control__wrapper) { color: var(--accent-blue); }
+.config-page :deep(.v-alert) { border: 1px solid color-mix(in srgb, currentColor 17%, var(--border-color)); border-radius: 14px !important; }
+.config-page :deep(.v-divider) { border-color: var(--border-color); opacity: .75 !important; }
+.config-page :deep(.v-chip) { font-weight: 650; }
+.config-page :deep(.settings-card h3) { letter-spacing: -.015em; }
+.config-page :deep(.legacy-panel-content > .v-card-text) { display: flex; flex-direction: column; gap: 12px; padding-top: 20px !important; }
+.config-page :deep(.legacy-panel-content > .v-card-text > *) { margin-top: 0 !important; margin-bottom: 0 !important; }
+.config-page :deep(.legacy-panel-content > .v-card-text > .v-divider) { display: none; }
+.config-page :deep(.legacy-panel-content > .v-card-text > .d-flex),
+.config-page :deep(.legacy-panel-content > .v-card-text > div:not(.monitor-showcase):not(.projection-block):not(.projection-grid)) { min-width: 0; padding: 15px 16px; border: 1px solid var(--border-color); border-radius: 14px; background: color-mix(in srgb, var(--card-bg) 82%, var(--main-bg)); transition: border-color .18s ease, background .18s ease, transform .18s ease; }
+.config-page :deep(.legacy-panel-content > .v-card-text > .d-flex:hover),
+.config-page :deep(.legacy-panel-content > .v-card-text > div:not(.monitor-showcase):not(.projection-block):not(.projection-grid):hover) { border-color: rgba(var(--accent-blue-rgb), .25); background: color-mix(in srgb, var(--card-bg) 90%, var(--accent-soft)); transform: translateY(-1px); }
+.config-page :deep(.legacy-panel-content > .v-card-text > .d-flex > .v-icon),
+.config-page :deep(.legacy-panel-content > .v-card-text > div > .d-flex:first-child > .v-icon) { width: 38px; height: 38px; margin-right: 12px !important; display: inline-grid; flex: 0 0 38px; place-items: center; border: 1px solid rgba(var(--accent-blue-rgb), .16); border-radius: 11px; background: var(--accent-soft); }
+.config-page :deep(.legacy-panel-content h3) { margin: 0; color: var(--sidebar-text); font-size: 13px !important; font-weight: 740 !important; line-height: 1.3 !important; letter-spacing: -.01em; }
+.config-page :deep(.legacy-panel-content .text-caption) { color: var(--sidebar-text-secondary) !important; font-size: 10px !important; line-height: 1.45 !important; }
+.config-page :deep(.legacy-panel-content .text-subtitle-1) { color: var(--sidebar-text); font-size: 12px !important; font-weight: 720 !important; }
+.config-page :deep(.legacy-panel-content .v-switch) { flex: 0 0 auto; }
+.config-page :deep(.legacy-panel-content .v-switch .v-label) { color: var(--sidebar-text); font-size: 11px; font-weight: 650; opacity: 1; }
+.config-page :deep(.legacy-panel-content .pl-4[style*="border-left"]) { margin-top: 12px !important; padding: 14px !important; border: 1px solid var(--border-color) !important; border-radius: 13px; background: color-mix(in srgb, var(--main-bg) 66%, transparent); }
+.config-page :deep(.legacy-panel-content .v-slider) { margin-top: 8px; }
+.config-page :deep(.legacy-panel-content .v-btn) { min-height: 40px; }
+.config-page :deep(.legacy-panel-content .v-alert) { margin-top: 4px; }
+.config-page :deep(.legacy-panel-content .cursor-pointer) { border-radius: 14px !important; box-shadow: 0 6px 18px rgba(15,37,68,.055) !important; transition: border-color .18s ease, box-shadow .18s ease, transform .18s ease !important; }
+.config-page :deep(.legacy-panel-content .cursor-pointer:hover) { transform: translateY(-2px); box-shadow: 0 10px 24px rgba(15,37,68,.1) !important; }
+.config-page :deep(.legacy-panel-content .projection-block) { border-radius: 15px; background: color-mix(in srgb, var(--card-bg) 83%, var(--main-bg)); box-shadow: inset 0 1px rgba(255,255,255,.12); }
+.config-page :deep(.legacy-panel-content .projection-block > .d-flex:first-child .v-icon) { width: 34px; height: 34px; margin-right: 10px !important; display: inline-grid; place-items: center; border-radius: 10px; background: var(--accent-soft); }
+.config-page :deep(.legacy-panel-content .v-btn-toggle) { min-height: 48px; }
+.config-page :deep(.legacy-panel-content .v-chip) { border-radius: 9px; }
+.config-page :deep(.legacy-panel-content img) { border-radius: 14px; }
+.monitor-showcase { width: 100%; padding: 18px 0 26px; display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 250px)); justify-content: center; gap: 32px; }
+.monitor-device { min-width: 0; display: flex; flex-direction: column; align-items: center; color: var(--sidebar-text-secondary); transition: transform .2s ease; }
+.monitor-device:hover { transform: translateY(-3px); }
+.monitor-frame { position: relative; z-index: 2; width: 238px; height: 148px; overflow: hidden; color: #8fa6c6; border: 1px solid rgba(116, 143, 181, .35); border-radius: 17px; background: linear-gradient(145deg, #111c2c, #18283d); box-shadow: 0 16px 34px rgba(8, 20, 39, .2), inset 0 0 0 4px rgba(4, 12, 24, .28); transition: border-color .2s ease, box-shadow .2s ease; }
+.monitor-device.primary .monitor-frame { color: #95ceff; border-color: color-mix(in srgb, var(--accent-blue) 65%, #8abfff); background: radial-gradient(circle at 78% 15%, rgba(72, 155, 255, .28), transparent 28%), linear-gradient(145deg, #06182f, #0b315b 66%, #0d4d80); box-shadow: 0 18px 40px rgba(var(--accent-blue-rgb), .28), inset 0 0 0 4px rgba(5, 21, 42, .4); }
+.monitor-toolbar { height: 32px; padding: 0 12px; display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; border-bottom: 1px solid rgba(151, 183, 224, .13); background: rgba(1, 8, 19, .25); }
+.monitor-toolbar > span { display: flex; gap: 4px; }.monitor-toolbar i { width: 5px; height: 5px; border-radius: 50%; background: currentColor; opacity: .35; }.monitor-toolbar strong { color: currentColor; font-size: 8px; letter-spacing: .15em; }.monitor-toolbar .v-icon { justify-self: end; }
+.monitor-screen-content { position: relative; height: calc(100% - 32px); display: flex; flex-direction: column; align-items: center; justify-content: center; overflow: hidden; }
+.monitor-screen-content::before { content: ""; position: absolute; inset: 0; opacity: .22; background-image: linear-gradient(rgba(124, 180, 240, .16) 1px, transparent 1px),linear-gradient(90deg, rgba(124, 180, 240, .16) 1px, transparent 1px); background-size: 18px 18px; mask-image: linear-gradient(to bottom, transparent, #000 30%, #000); }
+.monitor-screen-content::after { content: ""; position: absolute; width: 150px; height: 150px; top: 25px; border: 1px solid currentColor; border-radius: 50%; opacity: .09; }
+.monitor-scan-line { position: absolute; right: 13px; left: 13px; top: 22px; height: 1px; background: linear-gradient(90deg, transparent, currentColor, transparent); box-shadow: 0 0 9px currentColor; opacity: .38; }
+.monitor-number { position: relative; z-index: 1; color: #fff; font-size: 40px; font-weight: 750; line-height: .95; letter-spacing: -.05em; text-shadow: 0 4px 18px rgba(0,0,0,.32); }.monitor-screen-content strong { position: relative; z-index: 1; margin-top: 8px; color: currentColor; font-size: 12px; letter-spacing: .04em; }.monitor-screen-content small { position: relative; z-index: 1; margin-top: 3px; color: currentColor; font-size: 8px; font-weight: 800; letter-spacing: .16em; opacity: .64; }
+.monitor-neck { width: 36px; height: 17px; background: linear-gradient(to right, #17263a, #31445d 50%, #17263a); }.monitor-device.primary .monitor-neck { background: linear-gradient(to right, #092849, #14629b 50%, #092849); }.monitor-base { width: 92px; height: 7px; border-radius: 99px 99px 5px 5px; background: linear-gradient(to right, #17263a, #3a506c 50%, #17263a); box-shadow: 0 5px 10px rgba(0,0,0,.16); }.monitor-device.primary .monitor-base { background: linear-gradient(to right, #092849, #1680bd 50%, #092849); }
+.monitor-meta { width: 238px; margin-top: 13px; padding: 10px 12px; display: flex; align-items: center; justify-content: space-between; gap: 8px; border: 1px solid var(--border-color); border-radius: 11px; background: color-mix(in srgb, var(--card-bg) 92%, var(--main-bg)); }.monitor-meta span { min-width: 0; display: flex; align-items: center; gap: 6px; color: var(--sidebar-text); font-size: 10px; font-weight: 650; }.monitor-meta span i { width: 6px; height: 6px; flex: 0 0 6px; border-radius: 50%; background: #8090a6; }.monitor-meta span.online i { background: #21c77a; box-shadow: 0 0 7px rgba(33,199,122,.55); }.monitor-meta small { flex: 0 0 auto; color: var(--sidebar-text-secondary); font-size: 9px; }
+.automation-settings { max-width: 1080px !important; }
+.automation-overview,
+.automation-device-card,
+.triggers-workspace { overflow: hidden; border: 1px solid var(--border-color); border-radius: 18px; background: color-mix(in srgb, var(--card-bg) 97%, var(--main-bg)); box-shadow: 0 12px 32px rgba(15, 37, 68, .07); }
+.automation-overview { position: relative; padding: 24px; background: radial-gradient(circle at 92% 0, rgba(var(--accent-blue-rgb), .18), transparent 31%), linear-gradient(135deg, color-mix(in srgb, var(--card-bg) 96%, #102b50), color-mix(in srgb, var(--card-bg) 94%, var(--main-bg))); }
+.automation-overview::before { content: ""; position: absolute; inset: 0; pointer-events: none; opacity: .13; background-image: linear-gradient(rgba(var(--accent-blue-rgb), .28) 1px, transparent 1px), linear-gradient(90deg, rgba(var(--accent-blue-rgb), .28) 1px, transparent 1px); background-size: 26px 26px; mask-image: linear-gradient(90deg, transparent 38%, #000); }
+.automation-overview-main { position: relative; z-index: 1; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 17px; }
+.automation-hero-icon { width: 58px; height: 58px; display: grid; place-items: center; color: var(--accent-blue); border: 1px solid rgba(var(--accent-blue-rgb), .2); border-radius: 16px; background: linear-gradient(145deg, rgba(var(--accent-blue-rgb), .17), rgba(var(--accent-blue-rgb), .06)); box-shadow: inset 0 1px rgba(255,255,255,.2), 0 9px 22px rgba(var(--accent-blue-rgb), .12); }
+.automation-overview.active .automation-hero-icon { color: #fff; border-color: transparent; background: linear-gradient(145deg, color-mix(in srgb, var(--accent-blue) 82%, #5ea6ff), var(--accent-blue)); box-shadow: 0 10px 25px rgba(var(--accent-blue-rgb), .27); }
+.automation-eyebrow { display: flex; align-items: center; gap: 7px; color: var(--accent-blue); font-size: 10px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; }
+.automation-status-dot { width: 7px; height: 7px; border-radius: 50%; background: #8996a9; box-shadow: 0 0 0 4px rgba(137,150,169,.12); }
+.automation-overview.active .automation-status-dot { background: #20c77a; box-shadow: 0 0 0 4px rgba(32,199,122,.13), 0 0 10px rgba(32,199,122,.52); }
+.automation-overview-copy h3,
+.device-card-intro h3,
+.triggers-title-line h3 { margin: 5px 0 0; color: var(--sidebar-text); font-size: 17px; font-weight: 750; line-height: 1.25; letter-spacing: -.02em; }
+.automation-overview-copy p,
+.device-card-intro p,
+.triggers-toolbar p { margin: 5px 0 0; color: var(--sidebar-text-secondary); font-size: 12px; line-height: 1.5; }
+.automation-master-control { min-width: 138px; padding: 9px 12px 9px 15px; display: flex; align-items: center; justify-content: space-between; gap: 8px; border: 1px solid var(--border-color); border-radius: 13px; background: color-mix(in srgb, var(--card-bg) 82%, transparent); }
+.automation-master-control > span { color: var(--sidebar-text); font-size: 11px; font-weight: 750; }
+.automation-master-control :deep(.v-switch) { flex: 0 0 auto; }
+.automation-options-grid { position: relative; z-index: 1; margin-top: 22px; padding-top: 18px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; border-top: 1px solid var(--border-color); }
+.automation-option { min-width: 0; padding: 13px 14px; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 11px; border: 1px solid var(--border-color); border-radius: 13px; background: color-mix(in srgb, var(--card-bg) 84%, transparent); cursor: pointer; transition: border-color .18s ease, background .18s ease, transform .18s ease; }
+.automation-option:hover { border-color: rgba(var(--accent-blue-rgb), .34); background: color-mix(in srgb, var(--card-bg) 90%, var(--accent-soft)); transform: translateY(-1px); }
+.automation-option-icon { width: 36px; height: 36px; display: grid; place-items: center; color: var(--accent-blue); border-radius: 10px; background: var(--accent-soft); }
+.automation-option-copy { min-width: 0; display: flex; flex-direction: column; }
+.automation-option-copy strong { color: var(--sidebar-text); font-size: 12px; font-weight: 720; }
+.automation-option-copy small { margin-top: 2px; overflow: hidden; color: var(--sidebar-text-secondary); font-size: 10px; line-height: 1.35; text-overflow: ellipsis; white-space: nowrap; }
+.automation-device-card { padding: 22px; }
+.device-card-intro { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 15px; }
+.device-visual { position: relative; width: 54px; height: 54px; display: grid; place-items: center; color: #fff; border-radius: 15px; background: linear-gradient(145deg, #11243e, #0a4a75); box-shadow: 0 10px 24px rgba(10,43,76,.2); }
+.device-signal { position: absolute; right: 7px; bottom: 7px; display: flex; align-items: flex-end; gap: 2px; }
+.device-signal i { width: 2px; border-radius: 2px; background: #54d6ff; box-shadow: 0 0 5px rgba(84,214,255,.6); }.device-signal i:nth-child(1) { height: 4px; }.device-signal i:nth-child(2) { height: 7px; }.device-signal i:nth-child(3) { height: 10px; }
+.device-fields { margin-top: 20px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.device-card-footer { margin-top: 18px; padding-top: 17px; display: flex; align-items: center; justify-content: space-between; gap: 14px; border-top: 1px solid var(--border-color); }
+.device-network-hint { display: flex; align-items: center; gap: 7px; color: var(--sidebar-text-secondary); font-size: 10px; font-weight: 650; }
+.device-actions { display: flex; justify-content: flex-end; gap: 9px; flex-wrap: wrap; }
+.triggers-workspace { padding: 22px; }
+.triggers-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 18px; }
+.triggers-title-line { display: flex; align-items: center; gap: 9px; }
+.trigger-count { min-width: 25px; height: 20px; padding: 0 8px; display: inline-flex; align-items: center; justify-content: center; color: var(--accent-blue); border: 1px solid rgba(var(--accent-blue-rgb), .18); border-radius: 99px; background: var(--accent-soft); font-size: 10px; font-weight: 800; }
+.automation-empty { margin-top: 20px; padding: 42px 24px; display: flex; flex-direction: column; align-items: center; text-align: center; border: 1px dashed color-mix(in srgb, var(--accent-blue) 32%, var(--border-color)); border-radius: 16px; background: radial-gradient(circle at 50% 25%, rgba(var(--accent-blue-rgb), .09), transparent 34%), color-mix(in srgb, var(--main-bg) 60%, transparent); }
+.automation-empty-icon { width: 62px; height: 62px; display: grid; place-items: center; color: var(--accent-blue); border-radius: 18px; background: var(--accent-soft); box-shadow: 0 10px 25px rgba(var(--accent-blue-rgb), .12); }
+.automation-empty h3 { margin: 16px 0 0; color: var(--sidebar-text); font-size: 15px; }.automation-empty p { max-width: 450px; margin: 7px 0 17px; color: var(--sidebar-text-secondary); font-size: 11px; line-height: 1.55; }
+.trigger-list { margin-top: 20px; display: flex; flex-direction: column; gap: 14px; }
+.trigger-card { overflow: hidden; border: 1px solid var(--border-color); border-radius: 16px; background: color-mix(in srgb, var(--card-bg) 97%, var(--main-bg)); box-shadow: 0 7px 20px rgba(16,38,67,.055); transition: border-color .2s ease, opacity .2s ease, transform .2s ease; }
+.trigger-card:hover { border-color: rgba(var(--accent-blue-rgb), .28); transform: translateY(-1px); }.trigger-card.disabled { opacity: .7; }
+.trigger-card-header { padding: 16px; display: grid; grid-template-columns: auto minmax(240px, 1fr) auto; align-items: center; gap: 15px; border-bottom: 1px solid var(--border-color); background: linear-gradient(90deg, rgba(var(--accent-blue-rgb), .055), transparent 65%); }
+.trigger-identity { display: flex; align-items: center; gap: 10px; }
+.trigger-index { width: 36px; height: 36px; display: grid; place-items: center; color: var(--accent-blue); border: 1px solid rgba(var(--accent-blue-rgb), .18); border-radius: 10px; background: var(--accent-soft); font-size: 11px; font-weight: 800; }
+.trigger-identity > div { min-width: 105px; display: flex; flex-direction: column; }.trigger-identity strong { color: var(--sidebar-text); font-size: 11px; }.trigger-identity small { margin-top: 2px; color: var(--sidebar-text-secondary); font-size: 9px; }
+.trigger-name-field { min-width: 0; }
+.trigger-header-actions { display: flex; align-items: center; gap: 8px; }
+.trigger-enabled-control { height: 40px; padding-left: 11px; display: flex; align-items: center; gap: 3px; border: 1px solid var(--border-color); border-radius: 11px; cursor: pointer; }.trigger-enabled-control > span { color: var(--sidebar-text-secondary); font-size: 10px; font-weight: 700; }
+.trigger-action { padding: 17px; background: color-mix(in srgb, var(--main-bg) 40%, transparent); }
+.trigger-action-title { margin-bottom: 14px; display: flex; align-items: center; gap: 10px; }.trigger-action-title > span { width: 32px; height: 32px; display: grid; place-items: center; color: var(--accent-blue); border-radius: 9px; background: var(--accent-soft); }.trigger-action-title > div { display: flex; flex-direction: column; }.trigger-action-title strong { color: var(--sidebar-text); font-size: 11px; }.trigger-action-title small { margin-top: 1px; color: var(--sidebar-text-secondary); font-size: 9px; }
+.trigger-action-grid { display: grid; grid-template-columns: minmax(180px, 1.35fr) minmax(155px, 1fr) repeat(3, minmax(105px, .62fr)); gap: 11px; }
+.restore-control { margin-top: 13px; padding: 11px 12px; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 10px; border: 1px solid var(--border-color); border-radius: 12px; background: color-mix(in srgb, var(--card-bg) 80%, transparent); cursor: pointer; }.restore-icon { width: 32px; height: 32px; display: grid; place-items: center; color: var(--accent-blue); border-radius: 9px; background: var(--accent-soft); }.restore-copy { display: flex; flex-direction: column; }.restore-copy strong { color: var(--sidebar-text); font-size: 10px; }.restore-copy small { margin-top: 1px; color: var(--sidebar-text-secondary); font-size: 9px; }
+.trigger-end-grid { margin-top: 12px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 11px; }
+.trigger-card-footer { min-height: 59px; padding: 10px 16px; display: flex; align-items: center; justify-content: space-between; gap: 12px; border-top: 1px solid var(--border-color); }.trigger-card-footer > span { display: flex; align-items: center; gap: 6px; color: var(--sidebar-text-secondary); font-size: 9px; }
+@media (max-width: 980px) {
+  .trigger-card-header { grid-template-columns: auto minmax(0, 1fr); }.trigger-header-actions { grid-column: 1 / -1; justify-content: flex-end; }.trigger-action-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 760px) {
+  .config-header { min-height: 142px; padding: 18px 16px 0 !important; }
+  .config-tabs button { min-height: 47px; padding-inline: 12px; }
+  .config-content { padding: 20px 12px 30px !important; }
+  .config-content :deep(.v-window-item > .overflow-auto) { padding-inline: 4px !important; }
+  .config-page :deep(.legacy-panel-content > .v-card-text > .d-flex) { align-items: stretch !important; flex-direction: column; gap: 13px; }
+  .config-page :deep(.legacy-panel-content > .v-card-text > .d-flex > .v-btn),
+  .config-page :deep(.legacy-panel-content > .v-card-text > .d-flex > .v-select),
+  .config-page :deep(.legacy-panel-content > .v-card-text > .d-flex > .v-text-field) { width: 100%; max-width: none !important; }
+  .config-page :deep(.legacy-panel-content > .v-card-text > .d-flex > .v-switch) { align-self: flex-end; }
+  .automation-overview-main { grid-template-columns: auto minmax(0, 1fr); }.automation-master-control { grid-column: 1 / -1; }.automation-options-grid, .device-fields { grid-template-columns: 1fr; }.device-card-footer, .triggers-toolbar, .trigger-card-footer { align-items: stretch; flex-direction: column; }.device-actions { justify-content: stretch; }.device-actions :deep(.v-btn), .triggers-toolbar :deep(.v-btn), .trigger-card-footer :deep(.v-btn) { width: 100%; }.trigger-card-header { grid-template-columns: 1fr; }.trigger-header-actions { grid-column: auto; justify-content: space-between; }.trigger-action-grid, .trigger-end-grid { grid-template-columns: 1fr; }
 }
 </style>

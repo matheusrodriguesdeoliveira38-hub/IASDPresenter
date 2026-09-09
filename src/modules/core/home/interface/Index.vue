@@ -201,7 +201,7 @@
                   @click="playSong(song)"
                 >
                   <div class="music-number">
-                    {{ index + 1 }}
+                    {{ Number(index) + 1 }}
                   </div>
                   <div class="music-info">
                     <h4 class="music-title">
@@ -250,7 +250,7 @@ export default {
   data() {
     return {
       searchQuery: "",
-      searchData: [],
+      searchData: { data: [], count: 0, filter_count: 0 },
       manifest,
       dynamicCollectionInfo: {},
       show_home_history: true,
@@ -335,11 +335,11 @@ export default {
       (groups.utilities?.modules || []).forEach(id => addModule(id, "mdi-plus-circle"));
 
       const groupedIds = new Set();
-      Object.values(groups).forEach(group => {
+      Object.values<Record<string, any>>(groups).forEach(group => {
         (group.modules || []).forEach(id => groupedIds.add(id));
       });
 
-      Object.entries(modules)
+      Object.entries<Record<string, any>>(modules)
         .filter(([id, item]) => !groupedIds.has(id) && id !== "home" && item.showInMainMenu)
         .sort(([idA, itemA], [idB, itemB]) => {
           if (idA === "dev" && idB !== "dev") return 1;
@@ -442,7 +442,7 @@ export default {
       for (const col of collections) {
         if (!this.dynamicCollectionInfo[col.id]) {
           try {
-            const info = { songCount: 0, url_image: null };
+            const info: { songCount: number; url_image: string; local_url_image?: string } = { songCount: 0, url_image: null };
             
             if (col.type === "album") {
               const data = await this.$database.get(`album_${col.id}`);

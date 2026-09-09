@@ -1,6 +1,7 @@
 <template>
   <div class="w-100 h-100 bg-black d-flex align-center justify-center">
     <iframe
+      :key="'iframe:' + playbackSession"
       v-if="isYouTube && youtubeEmbedUrl"
       ref="popupYouTube"
       class="external-youtube-frame"
@@ -12,12 +13,15 @@
       @load="onYouTubeLoad"
     />
     <webview
+      :key="'webview:' + playbackSession"
       v-else-if="isWebLink"
       class="external-web-frame"
+
       :src="rawFilePath"
       webpreferences="contextIsolation=yes, sandbox=yes"
     />
     <video
+      :key="'video:' + playbackSession"
       v-else-if="isVideo && filePath"
       ref="popupVideo"
       class="w-100 h-100"
@@ -67,9 +71,13 @@ export default {
   name: "PopupExternalMediaPage",
   data() {
     return {
+      youtubeHandshakeTimer: null,
+      youtubeReady: false,
+
       hasSyncedInitialTime: false,
       popupYouTubeCurrentTime: 0,
       lastYouTubeSyncAt: 0,
+      youtubeSampleAt: 0,
     };
   },
   computed: {
@@ -78,6 +86,9 @@ export default {
     },
     module() {
       return this.$modules.get(this.module_id);
+    },
+    playbackSession() {
+      return this.rawFilePath + ":" + (this.$appdata.get("modules.external_media.config.session_id") || "");
     },
     rawFilePath() {
       return this.$appdata.get("modules.external_media.filePath") || "";
@@ -102,7 +113,7 @@ export default {
       return isWebUrl(this.rawFilePath) && !this.isYouTube;
     },
     youtubeEmbedUrl() {
-      return getYouTubeEmbedUrl(this.rawFilePath, { autoplay: true, muted: true });
+      return getYouTubeEmbedUrl(this.rawFilePath, { startSeconds: 0, autoplay: true, muted: true });
     },
     isVideo() {
       return isVideoFile(this.rawFilePath);
@@ -122,7 +133,7 @@ export default {
       return `${this.filePath}#toolbar=0&navpanes=0&scrollbar=0&page=${this.documentPage}`;
     },
     documentFrameKey() {
-      return `${this.filePath}:${this.documentPage}`;
+      return `${this.playbackSession}:${this.documentPage}`;
     },
     isPaused() {
       return this.$appdata.get("modules.external_media.config.is_paused");
@@ -136,11 +147,23 @@ export default {
     isWebOutput() {
       return new URLSearchParams(window.location.hash.split("?")[1] || "").get("webOutput") === "1";
     },
+    isBuffering() {
+      return this.$appdata.get("modules.external_media.config.is_buffering") === true;
+    },
     requestAction() {
       return this.$appdata.get("modules.external_media.config.request_action");
     },
   },
   watch: {
+    playbackSession() {
+      this.youtubeReady = false;
+      clearInterval(this.youtubeHandshakeTimer);
+        this.hasSyncedInitialTime = false;
+      this.popupYouTubeCurrentTime = 0;
+      this.lastYouTubeSyncAt = 0;
+
+    },
+    isBuffering() { this.syncPlaybackPosition(true); },
     requestAction(req) {
       if (!req) return;
       if (req.action === "seek") {
@@ -179,10 +202,7 @@ export default {
   mounted() {
     window.addEventListener("message", this.handleYouTubeMessage);
     this.$nextTick(() => {
-      if (this.isYouTube) {
-        this.onYouTubeLoad();
-        return;
-      }
+      if (this.isYouTube) return;
       const video = this.$refs.popupVideo;
       if (video) {
         video.currentTime = this.currentTime || 0;
@@ -196,15 +216,34 @@ export default {
     });
   },
   beforeUnmount() {
+    clearInterval(this.youtubeHandshakeTimer);
     window.removeEventListener("message", this.handleYouTubeMessage);
   },
   methods: {
     onYouTubeLoad() {
-      if (!this.isYouTube) return;
-      this.sendYouTubeCommand("mute");
+      clearInterval(this.youtubeHandshakeTimer);
+      this.youtubeReady = false;
+      const frame = this.$refs.popupYouTube;
+      if (!this.isYouTube || !frame?.contentWindow) return;
+      let attempts = 0;
+      const listen = () => {
+        if (this.youtubeReady || ++attempts > 20) {
+          clearInterval(this.youtubeHandshakeTimer);
+          return;
+        }
+        frame.contentWindow.postMessage(JSON.stringify({ event: "listening", id: "popupYouTube" }), YOUTUBE_PLAYER_ORIGIN);
+      };
+      this.youtubeHandshakeTimer = setInterval(listen, 500);
+      listen();
+    },
+    initializeYouTubePlayer() {
+      if (this.youtubeReady) return;
+      this.youtubeReady = true;
+      clearInterval(this.youtubeHandshakeTimer);
       this.sendYouTubeCommand("addEventListener", ["onStateChange"]);
+      this.sendYouTubeCommand("mute");
       this.sendYouTubeCommand("seekTo", [this.getSynchronizedTargetTime(), true]);
-      this.sendYouTubeCommand(this.isPaused ? "pauseVideo" : "playVideo");
+      this.sendYouTubeCommand(this.isPaused || this.isBuffering ? "pauseVideo" : "playVideo");
     },
     sendYouTubeCommand(func, args = []) {
       const frame = this.$refs.popupYouTube;
@@ -216,7 +255,7 @@ export default {
       }), YOUTUBE_PLAYER_ORIGIN);
     },
     handleYouTubeMessage(event) {
-      if (!this.isYouTube || !String(event.origin || "").includes("youtube")) return;
+      if (!this.isYouTube || event.source !== this.$refs.popupYouTube?.contentWindow || event.origin !== YOUTUBE_PLAYER_ORIGIN) return;
       let payload = event.data;
       if (typeof payload === "string") {
         try {
@@ -225,8 +264,10 @@ export default {
           return;
         }
       }
+      if (payload?.event === "onReady") { this.initializeYouTubePlayer(); return; }
       if (payload?.event === "infoDelivery" && typeof payload.info?.currentTime === "number") {
         this.popupYouTubeCurrentTime = payload.info.currentTime;
+        this.youtubeSampleAt = Date.now();
       }
     },
     onCanPlay() {
@@ -246,7 +287,7 @@ export default {
     },
     playProjectedVideo() {
       const video = this.$refs.popupVideo;
-      if (!video || this.isPaused) return;
+      if (!video || this.isPaused || this.isBuffering) return;
       video.play().catch((err) => {
         console.warn("Erro ao iniciar midia no popup:", err);
       });
@@ -254,19 +295,22 @@ export default {
     getSynchronizedTargetTime() {
       let target = Number(this.currentTime || 0);
       const updatedAt = Number(this.playbackUpdatedAt || 0);
-      if (!this.isPaused && updatedAt > 0) {
-        target += Math.max(0, Date.now() - updatedAt) / 1000;
+      if (!this.isPaused && !this.isBuffering && updatedAt > 0) {
+        target += Math.min(500, Math.max(0, Date.now() - updatedAt)) / 1000;
       }
-      if (this.isWebOutput && !this.isPaused) target += 0.12;
+      if (this.isWebOutput && !this.isPaused && !this.isBuffering) target += 0.12;
       const duration = Number(this.$appdata.get("modules.external_media.config.duration") || 0);
       return duration > 0 ? Math.min(target, Math.max(0, duration - 0.05)) : Math.max(0, target);
     },
     syncPlaybackPosition(force = false) {
       const target = this.getSynchronizedTargetTime();
       if (this.isYouTube) {
-        const drift = target - Number(this.popupYouTubeCurrentTime || 0);
+        if (!this.youtubeReady) return;
+        this.sendYouTubeCommand(this.isPaused || this.isBuffering ? "pauseVideo" : "playVideo");
+        const elapsed = !this.isPaused && !this.isBuffering ? Math.min(500, Math.max(0, Date.now() - this.youtubeSampleAt)) / 1000 : 0;
+        const drift = target - (Number(this.popupYouTubeCurrentTime || 0) + elapsed);
         const now = Date.now();
-        if ((force || Math.abs(drift) > 0.35) && now - this.lastYouTubeSyncAt > 900) {
+        if (force || (Math.abs(drift) > 0.15 && now - this.lastYouTubeSyncAt > 300)) {
           this.lastYouTubeSyncAt = now;
           this.sendYouTubeCommand("seekTo", [target, true]);
         }
@@ -275,13 +319,15 @@ export default {
 
       const video = this.$refs.popupVideo;
       if (!video || !Number.isFinite(video.currentTime)) return;
+      if (this.isPaused || this.isBuffering) video.pause();
+      else if (video.paused) this.playProjectedVideo();
       const drift = target - video.currentTime;
       if (force || Math.abs(drift) > 0.18) {
         video.currentTime = target;
       }
     },
     onEnded() {
-      this.$appdata.set("modules.external_media.config.is_paused", true);
+      // Playback state is owned by the operator, never by a follower window.
     },
     onError(event) {
       const el = event.target;

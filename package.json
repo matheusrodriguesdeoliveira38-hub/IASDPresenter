@@ -1,6 +1,6 @@
 {
   "name": "iasdpresenter",
-  "version": "1.9.0",
+  "version": "1.9.1",
   "private": true,
   "main": ".electron/main.js",
   "scripts": {
@@ -22,10 +22,11 @@
     "electron:dev": "npm run runtime:build && concurrently -k \"vite\" \"npm:runtime:watch\" \"wait-on http://localhost:5173 .electron/main.js && electron .\"",
     "electron:build": "npm run typecheck && npm run runtime:build && vite build --base=./ && electron-builder",
     "postinstall": "electron-builder install-app-deps",
-    "typecheck": "tsc -p tsconfig.app.json && tsc -p tsconfig.runtime.json --noEmit && tsc -p tsconfig.server.json --noEmit",
+    "typecheck": "vue-tsc -p tsconfig.app.json && tsc -p tsconfig.runtime.json --noEmit && tsc -p tsconfig.server.json --noEmit",
     "runtime:build": "tsc -p tsconfig.runtime.json && tsc -p tsconfig.server.json",
     "runtime:watch": "tsc -p tsconfig.runtime.json --watch --preserveWatchOutput",
-    "test:runtime": "npm run runtime:build && node --test .electron/*.test.js"
+    "test:runtime": "npm run runtime:build && node --test .electron/*.test.js",
+    "test:helpers": "node --test tests/*.test.cjs"
   },
   "dependencies": {
     "@mdi/font": "^7.4.47",

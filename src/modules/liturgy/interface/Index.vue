@@ -67,7 +67,7 @@
             :variant="selectedDay === day.value ? 'flat' : 'text'"
             class="flex-grow-1 text-none font-weight-bold rounded-lg"
             :style="{ color: selectedDay === day.value ? '#fff' : 'var(--sidebar-text)', letterSpacing: 0, height: '40px', minWidth: isCompactView ? '50px' : '80px' }"
-            @click="selectedDay = day.value; onDayChange(day.value)"
+            @click="selectedDay = day.value; onDayChange()"
           >
             {{ isCompactView ? day.label.substring(0, 3) : day.label }}
           </v-btn>
@@ -80,7 +80,7 @@
             class="flex-grow-1 text-none font-weight-bold rounded-lg"
             :style="{ color: selectedDay === 'custom' ? '#fff' : 'var(--sidebar-text)', letterSpacing: 0, height: '40px', minWidth: isCompactView ? '0' : '100px' }"
             prepend-icon="mdi-star-outline"
-            @click="selectedDay = 'custom'; onDayChange('custom')"
+            @click="selectedDay = 'custom'; onDayChange()"
           >
             {{ isCompactView ? 'Avul.' : (dayOptions.find(d => d.value === 'custom')?.label || 'Avulsa') }}
           </v-btn>
@@ -820,6 +820,7 @@ import draggable from "vuedraggable";
 import RichTextEditor from "./RichTextEditor.vue";
 import { isAudioFile, isWebUrl, openExternalMedia } from "@/helpers/ExternalMedia";
 import { isYouTubeUrl } from "@/helpers/YouTube";
+import { transitionProjection } from "@/helpers/ProjectionTransition";
 
 export default {
   name: "LiturgyModuleIndex",
@@ -886,7 +887,7 @@ export default {
     bibleVersions: [],
   }),
   computed: {
-    filteredMusicList() {
+    filteredMusicList(): Array<Record<string, any>> {
       const selectedMusic = this.musicList.find(m => m.id_music === this.addForm.musicId);
       const query = (this.musicSearchQuery || "").trim().toLowerCase();
       
@@ -1360,7 +1361,7 @@ export default {
         }
       }
 
-      const item = {
+      const item: Record<string, any> = {
         id: Date.now() + Math.random(),
         type: this.addForm.type,
         name: this.addForm.name.trim(),
@@ -1581,8 +1582,7 @@ export default {
       try {
         if (shouldTransition) {
           const audioFadeOut = this.fadeCurrentLiturgyAudioOut(phaseDurationMs);
-          this.setLiturgyProjectionTransition(true, phaseDurationMs);
-          await Promise.all([this.waitForLiturgyTransition(phaseDurationMs), audioFadeOut]);
+          await Promise.all([transitionProjection(this.$appdata, true, phaseDurationMs), audioFadeOut]);
         }
 
         await this.stopActiveLiturgyPlayback(item);
@@ -1721,12 +1721,11 @@ export default {
         if (shouldTransition) {
           await this.$nextTick();
           const audioFadeIn = this.fadeCurrentLiturgyAudioIn(item, musicMode, phaseDurationMs);
-          this.setLiturgyProjectionTransition(false, phaseDurationMs);
-          await Promise.all([this.waitForLiturgyTransition(phaseDurationMs), audioFadeIn]);
+          await Promise.all([transitionProjection(this.$appdata, false, durationMs - phaseDurationMs), audioFadeIn]);
         }
       } finally {
-        if (shouldTransition) {
-          this.setLiturgyProjectionTransition(false, phaseDurationMs);
+        if (shouldTransition && this.$appdata.get("projection_transition")?.active) {
+          await transitionProjection(this.$appdata, false, durationMs - phaseDurationMs);
         }
         this.liturgyTransitionInProgress = false;
       }
@@ -1751,18 +1750,6 @@ export default {
         this.$appdata.get("popup_module") ||
         popups.some(popup => popup && !popup.closed),
       );
-    },
-
-    setLiturgyProjectionTransition(active, durationMs) {
-      this.$appdata.set("projection_transition", {
-        active,
-        durationMs,
-        updatedAt: Date.now(),
-      });
-    },
-
-    waitForLiturgyTransition(durationMs) {
-      return new Promise(resolve => window.setTimeout(resolve, Math.max(0, durationMs) + 40));
     },
 
     getLiturgyExternalVolume() {

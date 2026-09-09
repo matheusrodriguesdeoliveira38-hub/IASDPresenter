@@ -2,23 +2,9 @@
   <div>
     <!-- Hidden audio player (ONLY for audio files) -->
     <audio
+      :key="'audio:' + playbackSession"
       v-if="isAudio && filePath"
       ref="audioEl"
-      :src="filePath"
-      preload="auto"
-      style="display: none;"
-      @loadedmetadata="onLoadedMetadata"
-      @timeupdate="onTimeUpdate"
-      @play="onPlay"
-      @pause="onPause"
-      @ended="onEnded"
-      @error="onMediaError"
-      @canplay="onCanPlay"
-    />
-
-    <audio
-      v-if="isVideo && filePath && isProjectionActive"
-      ref="videoAudioEl"
       :src="filePath"
       preload="auto"
       style="display: none;"
@@ -110,6 +96,7 @@
             <div class="w-100 h-100 position-absolute d-flex align-center justify-center bg-black">
               <!-- VIDEO: This is the MAIN player for video files -->
               <iframe
+      :key="'iframe:' + playbackSession"
                 v-if="isYouTube && youtubeEmbedUrl"
                 ref="youtubeFrame"
                 class="external-youtube-frame"
@@ -122,14 +109,17 @@
               />
 
               <webview
+      :key="'webview:' + playbackSession"
                 v-else-if="isWebLink"
                 class="external-web-frame"
+
                 :src="rawFilePath"
                 webpreferences="contextIsolation=yes, sandbox=yes"
               />
 
               <video
-                v-else-if="isVideo && filePath && !isProjectionActive"
+      :key="'video:' + playbackSession"
+                v-else-if="isVideo && filePath"
                 ref="videoEl"
                 class="w-100 h-100"
                 style="object-fit: contain;"
@@ -471,6 +461,7 @@
 </template>
 
 <script lang="ts">
+import { resolveProjectionPreferences } from "@/helpers/ProjectionPreferences";
 import manifest from "../manifest.json";
 import Window from "@/components/Window.vue";
 import ButtonScreen from "@/components/buttons/Screen.vue";
@@ -485,6 +476,9 @@ export default {
   },
   data() {
     return {
+      youtubeHandshakeTimer: null,
+      youtubeReady: false,
+
       isPaused: true,
       currentTime: 0,
       duration: 0,
@@ -492,6 +486,7 @@ export default {
       volume: 100,
       savedVolume: 100,
       isFullscreen: false,
+      preferenceRequest: 0,
       pillWidth: 800,
       pillResizeObserver: null,
       fullscreenControlsVisible: false,
@@ -511,24 +506,26 @@ export default {
       return this.$userdata.get("modules.config.media_auto_project_video") !== false;
     },
     isProjectionActive() {
-      const syncSettings = this.$userdata.get("modules.config.media_sync_projection_settings") !== false;
-      const showOnlyInOperator = syncSettings
-        ? this.$userdata.get("modules.config.slide_fullscreen") !== false
-        : this.$userdata.get("modules.config.media_slide_fullscreen") !== false;
-
-      if (showOnlyInOperator) return false;
-
       const popups = this.$appdata.get("popups") || [];
       return popups.some(popup => popup
         && !popup.closed
         && (popup.popupRole || "projection") === "projection"
         && popup.popupModule === "external_media");
     },
+    projectionSettingsKey() {
+      const get = key => this.$userdata.get(key);
+      const independent = get("modules.config.media_sync_projection_settings") === false;
+      const prefix = independent ? "modules.config.media_slide_" : "modules.config.slide_";
+      return JSON.stringify([independent, this.autoProject, ...["monitor", "fullscreen", "disable_main_if_extended", "minimize_player"].map(key => get(prefix + key)), this.$appdata.get("system_displays")]);
+    },
     module_id() {
       return manifest.id;
     },
     module() {
       return this.$modules.get(this.module_id);
+    },
+    playbackSession() {
+      return this.rawFilePath + ":" + (this.$appdata.get("modules.external_media.config.session_id") || "");
     },
     rawFilePath() {
       return this.$appdata.get("modules.external_media.filePath") || "";
@@ -550,7 +547,7 @@ export default {
       return isWebUrl(this.rawFilePath) && !this.isYouTube;
     },
     youtubeEmbedUrl() {
-      return getYouTubeEmbedUrl(this.rawFilePath, { autoplay: true });
+      return getYouTubeEmbedUrl(this.rawFilePath, { startSeconds: 0, autoplay: true });
     },
     mediaTitle() {
       return this.$appdata.get("modules.external_media.title") || "Mídia Externa";
@@ -599,7 +596,7 @@ export default {
       return `${this.filePath}#toolbar=0&navpanes=0&scrollbar=0&page=${this.documentPage}`;
     },
     documentFrameKey() {
-      return `${this.filePath}:${this.documentPage}`;
+      return `${this.playbackSession}:${this.documentPage}`;
     },
     windowHasOpenPath() {
       return Boolean(window.electronAPI?.openPath);
@@ -650,25 +647,22 @@ export default {
           this.setupPillObserver();
         });
 
-        const syncSettings = this.$userdata.get("modules.config.media_sync_projection_settings") !== false;
-        
-        const slideFullscreen = syncSettings 
-          ? this.$userdata.get("modules.config.slide_fullscreen") !== false
-          : this.$userdata.get("modules.config.media_slide_fullscreen") !== false;
+        this.projectVisualMediaIfNeeded();
 
-        if (slideFullscreen && this.isVisualMedia) {
-          this.$nextTick(() => {
-            setTimeout(() => {
-              this.isFullscreen = true;
-            }, 200);
-          });
-        }
       }
     },
-    filePath(newVal) {
+    playbackSession() {
+      this.youtubeReady = false;
+      clearInterval(this.youtubeHandshakeTimer);
+        const newVal = this.rawFilePath;
+      this.currentTime = 0;
+      this.progress = 0;
+      this.duration = 0;
+      this.volume = Number(this.$appdata.get("modules.external_media.config.volume") ?? 100);
+      this.isPaused = !newVal;
       this.mediaReady = false;
       this.userPaused = false;
-      this.isClosing = false;
+      this.isClosing = !newVal;
       this.lastSharedPlaybackAt = 0;
       if (newVal) {
         this.$nextTick(() => {
@@ -676,12 +670,8 @@ export default {
         });
       }
     },
-    isProjectionActive() {
-      if (!this.isVideo || !this.filePath) return;
-      this.mediaReady = false;
-      this.$nextTick(() => {
-        this.initPlayback();
-      });
+    projectionSettingsKey() {
+      if (this.rawFilePath && !this.isClosing) this.projectVisualMediaIfNeeded();
     },
   },
   mounted() {
@@ -698,6 +688,8 @@ export default {
     }
   },
   beforeUnmount() {
+    clearInterval(this.youtubeHandshakeTimer);
+    this.preferenceRequest++;
     window.removeEventListener("message", this.handleYouTubeMessage);
     this.stopPlayback();
     if (this.pillResizeObserver) {
@@ -715,7 +707,7 @@ export default {
       if (this.isYouTube) return null;
       if (!this.isPlayableMedia) return null;
       if (this.isVideo) {
-        return this.isProjectionActive ? this.$refs.videoAudioEl : this.$refs.videoEl;
+        return this.$refs.videoEl;
       }
       return this.$refs.audioEl;
     },
@@ -737,14 +729,9 @@ export default {
     // Initialize playback - waits for canplay before playing
     initPlayback() {
       this.projectVisualMediaIfNeeded();
-      this.applyMinimizePreference();
 
-      if (this.isYouTube) {
-        this.$nextTick(() => {
-          this.onYouTubeFrameLoad();
-        });
-        return;
-      }
+
+      if (this.isYouTube) return;
 
       const el = this.getMediaEl();
       if (!el) {
@@ -759,44 +746,39 @@ export default {
         }
       }
       
-      this.projectVisualMediaIfNeeded();
-      
       // Don't call play() here - wait for onCanPlay event
     },
 
-    projectVisualMediaIfNeeded() {
-      const syncSettings = this.$userdata.get("modules.config.media_sync_projection_settings") !== false;
-      const showOnlyInOperator = syncSettings
-        ? this.$userdata.get("modules.config.slide_fullscreen") !== false
-        : this.$userdata.get("modules.config.media_slide_fullscreen") !== false;
-
-      if (showOnlyInOperator && this.isVisualMedia) {
-        this.$popup.closeProjection("external_media");
-        this.isFullscreen = true;
-        return;
-      }
-
-      if (!this.autoProject || !this.$refs.btnScreen) return;
-      if (this.isVisualMedia && !this.$refs.btnScreen.is_selected) {
-        this.$refs.btnScreen.popup();
-      } else if (!this.isVisualMedia && this.$refs.btnScreen.is_selected) {
-        this.$refs.btnScreen.popup();
-      }
-    },
-
-    applyMinimizePreference() {
-      const syncSettings = this.$userdata.get("modules.config.media_sync_projection_settings") !== false;
-      const minimizePlayer = syncSettings 
-        ? this.$userdata.get("modules.config.slide_minimize_player") === true
-        : this.$userdata.get("modules.config.media_slide_minimize_player") === true;
-        
-      const slideFullscreen = syncSettings 
-        ? this.$userdata.get("modules.config.slide_fullscreen") !== false
-        : this.$userdata.get("modules.config.media_slide_fullscreen") !== false;
-
-      if (minimizePlayer && !slideFullscreen) {
-        this.$appdata.set("modules.external_media.show", false);
-        this.$appdata.set("modules.external_media.minimized", true);
+    async projectVisualMediaIfNeeded() {
+      const request = ++this.preferenceRequest;
+      const filePath = this.rawFilePath;
+      if (!filePath || this.isClosing) return;
+      const current = () => request === this.preferenceRequest && filePath === this.rawFilePath && !this.isClosing;
+      // Resolve the operator layout before entering fullscreen, as in the music player.
+      this.isFullscreen = false;
+      try {
+        const displays = window.electronAPI?.getDisplays ? await window.electronAPI.getDisplays() : [];
+        if (!current()) return;
+        const preferences = resolveProjectionPreferences(
+          key => this.$userdata.get(key), displays || [],
+          this.$userdata.get("modules.config.media_sync_projection_settings") === false,
+        );
+        if (!this.isVisualMedia) {
+          this.$popup.closeProjection("external_media");
+        } else if (this.autoProject) {
+          await this.$popup.syncMonitors(preferences.monitors, "external_media", true, preferences.fullscreen);
+          if (!current()) return;
+        }
+        const fullscreen = this.isVisualMedia && preferences.operatorFullscreen;
+        await this.$nextTick();
+        if (!current()) return;
+        this.isFullscreen = fullscreen;
+        if (preferences.minimize) {
+          this.$appdata.set("modules.external_media.show", false);
+          this.$appdata.set("modules.external_media.minimized", true);
+        }
+      } catch (error) {
+        if (current()) console.warn("Falha ao aplicar configuracoes de projecao:", error);
       }
     },
 
@@ -818,7 +800,7 @@ export default {
         if (this.isPaused) {
           this.userPaused = false;
           this.sendYouTubeCommand("playVideo");
-          this.onPlay();
+
         } else {
           this.userPaused = true;
           this.sendYouTubeCommand("pauseVideo");
@@ -867,15 +849,31 @@ export default {
     },
 
     onYouTubeFrameLoad() {
-      if (!this.isYouTube) return;
-      this.sendYouTubeCommand("setVolume", [this.volume]);
-      this.sendYouTubeCommand("addEventListener", ["onStateChange"]);
-      if (!this.userPaused) {
-        this.sendYouTubeCommand("playVideo");
-        this.onPlay();
-      }
+      clearInterval(this.youtubeHandshakeTimer);
+      this.youtubeReady = false;
+      const frame = this.$refs.youtubeFrame;
+      if (!this.isYouTube || !frame?.contentWindow || this.isClosing) return;
+      let attempts = 0;
+      const listen = () => {
+        if (this.youtubeReady || ++attempts > 20) {
+          clearInterval(this.youtubeHandshakeTimer);
+          return;
+        }
+        frame.contentWindow.postMessage(JSON.stringify({ event: "listening", id: "youtubeFrame" }), YOUTUBE_PLAYER_ORIGIN);
+      };
+      this.youtubeHandshakeTimer = setInterval(listen, 500);
+      listen();
     },
-
+    initializeYouTubePlayer() {
+      if (this.youtubeReady || this.isClosing) return;
+      this.youtubeReady = true;
+      clearInterval(this.youtubeHandshakeTimer);
+      this.sendYouTubeCommand("addEventListener", ["onStateChange"]);
+      this.sendYouTubeCommand("unMute");
+      this.sendYouTubeCommand("setVolume", [this.volume]);
+      this.sendYouTubeCommand("seekTo", [this.currentTime || 0, true]);
+      this.sendYouTubeCommand(this.userPaused ? "pauseVideo" : "playVideo");
+    },
     sendYouTubeCommand(func, args = []) {
       const frame = this.$refs.youtubeFrame;
       if (!frame?.contentWindow) return;
@@ -887,7 +885,7 @@ export default {
     },
 
     handleYouTubeMessage(event) {
-      if (!this.isYouTube || !String(event.origin || "").includes("youtube")) return;
+      if (this.isClosing || !this.isYouTube || event.source !== this.$refs.youtubeFrame?.contentWindow || event.origin !== YOUTUBE_PLAYER_ORIGIN) return;
 
       let payload = event.data;
       if (typeof payload === "string") {
@@ -898,6 +896,8 @@ export default {
         }
       }
 
+      if (payload?.event === "onReady") { this.initializeYouTubePlayer(); return; }
+      if (payload?.event === "onStateChange") payload = { event: "infoDelivery", info: { playerState: payload.info } };
       if (payload?.event !== "infoDelivery" || !payload.info) return;
 
       const info = payload.info;
@@ -913,6 +913,7 @@ export default {
         this.sharePlaybackPosition();
       }
       if (typeof info.playerState === "number") {
+        this.$appdata.set("modules.external_media.config.is_buffering", info.playerState === 3 || info.playerState === -1);
         if (info.playerState === 1) this.onPlay();
         if (info.playerState === 2) this.onPause();
         if (info.playerState === 0) this.onEnded();
@@ -922,6 +923,8 @@ export default {
     // --- Media Events ---
 
     onCanPlay() {
+      if (this.isClosing || !this.rawFilePath) return;
+      this.$appdata.set("modules.external_media.config.is_buffering", false);
       if (!this.mediaReady) {
         this.mediaReady = true;
         const el = this.getMediaEl();
@@ -940,9 +943,11 @@ export default {
     },
 
     onWaiting() {
+      if (!this.isClosing) this.$appdata.set("modules.external_media.config.is_buffering", true);
     },
 
     onStalled() {
+      this.onWaiting();
     },
 
     onMediaError(event) {
@@ -965,6 +970,7 @@ export default {
     },
 
     sharePlaybackPosition(force = false) {
+      if (this.isClosing || !this.rawFilePath) return;
       const now = Date.now();
       if (!force && now - this.lastSharedPlaybackAt < 250) return;
       this.lastSharedPlaybackAt = now;
@@ -974,6 +980,7 @@ export default {
     },
 
     onLoadedMetadata() {
+      if (this.isClosing || !this.rawFilePath) return;
       const el = this.getMediaEl();
       if (el) {
         this.duration = el.duration;
@@ -993,12 +1000,15 @@ export default {
     },
 
     onPlay() {
+      if (this.isClosing || !this.rawFilePath) return;
       this.isPaused = false;
+      this.$appdata.set("modules.external_media.config.is_buffering", false);
       this.$appdata.set("modules.external_media.config.is_paused", false);
       this.sharePlaybackPosition(true);
     },
 
     onPause() {
+      if (this.isClosing || !this.rawFilePath) return;
       this.isPaused = true;
       this.$appdata.set("modules.external_media.config.is_paused", true);
       this.sharePlaybackPosition(true);
@@ -1067,7 +1077,7 @@ export default {
       this.$appdata.set("modules.external_media.minimized", true);
     },
 
-    closeMedia(force = false, options = {}) {
+    closeMedia(force = false, options: { restore?: boolean } = {}) {
       if (!force) {
         this.$alert.yesno(
           { text: this.t("alerts.close"), translate: false },
@@ -1079,8 +1089,15 @@ export default {
         );
         return;
       }
+        clearInterval(this.youtubeHandshakeTimer);
       this.isClosing = true;
+      this.preferenceRequest++;
       this.stopPlayback();
+      this.currentTime = 0;
+      this.duration = 0;
+      this.progress = 0;
+      this.isPaused = true;
+      this.mediaReady = false;
       if (options.restore !== false) {
         this.$automation.restore("external_media_closed");
       }

@@ -21,6 +21,7 @@
 </template>
 
 <script lang="ts">
+import type { PropType } from "vue";
 import $userdata from "@/helpers/UserData";
 
 export default {
@@ -35,7 +36,7 @@ export default {
       default: "small",
     },
     variant: {
-      type: String,
+      type: String as PropType<"flat" | "elevated" | "outlined" | "plain" | "text" | "tonal">,
       default: "text",
     },
     monitorConfigKey: {
@@ -58,8 +59,8 @@ export default {
     },
   },
   methods: {
-    async popup() {
-      if (this.is_selected) {
+    async popup(forceOpen = false, isCurrent = () => true) {
+      if (this.is_selected && forceOpen !== true) {
         this.$popup.exit();
         if (this.module === "bible" && window.electronAPI?.setPresentationShortcutsEnabled) {
           window.electronAPI.setPresentationShortcutsEnabled(false);
@@ -78,6 +79,7 @@ export default {
 
         if (window.electronAPI && window.electronAPI.getDisplays) {
           const displays = await window.electronAPI.getDisplays();
+          if (!isCurrent()) return;
           if (displays && displays.length > 1) {
             let configMonitors = [];
             if (this.monitorConfigKey) {
@@ -91,7 +93,9 @@ export default {
               configMonitors = configMonitors ? [configMonitors] : [];
             }
             const primary = displays.find(d => d.isPrimary) || displays[0];
-            selectedMonitors = configMonitors.filter(m => m !== primary.id);
+            selectedMonitors = displays
+              .filter(display => display.id !== primary.id && configMonitors.some(id => String(id) === String(display.id)))
+              .map(display => display.id);
           }
         }
         

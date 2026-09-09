@@ -57,7 +57,7 @@
           <v-tabs-window-item :value="4" class="h-100">
             <div class="h-100 overflow-auto pa-4">
               <v-card class="glass-card pa-4" elevation="0">
-                <VueJsonPretty v-if="tab === 4" :data="$vuetify" />
+                <VueJsonPretty v-if="tab === 4" :data="JSON.parse(JSON.stringify($vuetify))" />
               </v-card>
             </div>
           </v-tabs-window-item>

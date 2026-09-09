@@ -125,6 +125,65 @@ select {
     letter-spacing: -0.02em !important;
 }
 
+/* Identidade compartilhada dos botões. Mantém altura e densidade definidas
+   por cada módulo, padronizando forma, tipografia, foco e variantes. */
+:root {
+    --button-radius: 10px;
+    --button-border: color-mix(in srgb, var(--accent-blue) 16%, var(--border-color));
+    --button-focus: 0 0 0 3px rgba(var(--accent-blue-rgb), 0.16);
+}
+
+:where(#app-container, .v-overlay-container) .v-btn {
+    font-family: var(--font-family-ui);
+    letter-spacing: 0;
+    transition: box-shadow 0.18s ease, border-color 0.18s ease, filter 0.18s ease, background-color 0.18s ease;
+}
+
+:where(#app-container, .v-overlay-container) .v-btn:not(.v-btn--icon) {
+    border-radius: var(--button-radius);
+    text-transform: none;
+    font-weight: var(--font-weight-semibold);
+}
+
+:where(#app-container, .v-overlay-container) .v-btn:not(.v-btn--icon) .v-btn__content {
+    gap: 7px;
+}
+
+:where(#app-container, .v-overlay-container) .v-btn.bg-primary:is(.v-btn--variant-flat, .v-btn--variant-elevated) {
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    background: linear-gradient(135deg, var(--accent-blue), var(--accent-blue-dark)) !important;
+    box-shadow: 0 7px 17px rgba(var(--accent-blue-rgb), 0.24);
+}
+
+:where(#app-container, .v-overlay-container) .v-btn.bg-primary:is(.v-btn--variant-flat, .v-btn--variant-elevated):hover {
+    box-shadow: 0 9px 22px rgba(var(--accent-blue-rgb), 0.3);
+    filter: brightness(1.04);
+}
+
+:where(#app-container, .v-overlay-container) .v-btn.v-btn--variant-tonal {
+    border: 1px solid var(--button-border);
+    box-shadow: none;
+}
+
+:where(#app-container, .v-overlay-container) .v-btn.v-btn--variant-outlined {
+    border-color: var(--border-color);
+    background: var(--card-bg);
+}
+
+:where(#app-container, .v-overlay-container) .v-btn.v-btn--variant-text:not(.v-btn--icon):hover {
+    background: var(--sidebar-hover);
+}
+
+:where(#app-container, .v-overlay-container) .v-btn:focus-visible {
+    outline: none;
+    box-shadow: var(--button-focus);
+}
+
+:where(#app-container, .v-overlay-container) .v-btn.v-btn--disabled {
+    opacity: 0.48;
+    box-shadow: none !important;
+}
+
 input, textarea {
     -webkit-user-select: auto;
     user-select: auto;

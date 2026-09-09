@@ -44,8 +44,7 @@ export default {
   },
   methods: {
     clickBtn(value) {
-      this.$appdata.set("alert.value", value);
-      this.$appdata.set("alert.show", false);
+      this.$alert.respond(value);
     },
   },
 };

@@ -213,7 +213,7 @@ export default {
         return "sync";
       }
       
-      for (const [key, module] of Object.entries(modules)) {
+      for (const [key, module] of Object.entries<Record<string, any>>(modules)) {
         if (module.show && !overlays.includes(key) && key !== "sync") {
           return key;
         }
@@ -222,7 +222,7 @@ export default {
     },
     moduleGroups() {
       const groups = this.$appdata.get("module_group") || {};
-      const result = {};
+      const result: Record<string, Record<string, any>> = {};
       
       const groupIcons = {
         musics: "mdi-play",
@@ -230,7 +230,7 @@ export default {
         utilities: "mdi-plus-circle",
       };
 
-      for (const [key, group] of Object.entries(groups)) {
+      for (const [key, group] of Object.entries<Record<string, any>>(groups)) {
         if (group.modules && group.modules.length > 0) {
           result[key] = {
             ...group,
@@ -246,13 +246,13 @@ export default {
       const groups = this.$appdata.get("module_group") || {};
       const groupedModuleIds = new Set();
       
-      Object.values(groups).forEach((group) => {
+      Object.values<Record<string, any>>(groups).forEach((group) => {
         if (group.modules) {
           group.modules.forEach((id) => groupedModuleIds.add(id));
         }
       });
       
-      const entries = Object.entries(allModules)
+      const entries = Object.entries<Record<string, any>>(allModules)
         .filter(([key, module]) => !groupedModuleIds.has(key) && module.showInMainMenu)
         .sort(([k1, v1], [k2, v2]) => {
           if (k1 === "dev" && k2 !== "dev") return 1;
@@ -263,7 +263,7 @@ export default {
           return t1.localeCompare(t2);
         });
         
-      const result = {};
+      const result: Record<string, Record<string, any>> = {};
       for (const [key, module] of entries) {
         result[key] = module;
       }
