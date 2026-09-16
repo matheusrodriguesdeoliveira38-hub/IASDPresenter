@@ -189,6 +189,46 @@ Plataformas configuradas:
 - macOS: DMG/ZIP
 - Linux: AppImage
 
+### Linux (x64)
+
+A versao Linux e distribuida como `IASDPresenter-VERSAO-linux-x64.AppImage`.
+Baixe o arquivo na pagina de Releases, abra um terminal na pasta do download e execute
+(substituindo `VERSAO` pelo numero baixado):
+
+```bash
+chmod +x IASDPresenter-VERSAO-linux-x64.AppImage
+./IASDPresenter-VERSAO-linux-x64.AppImage
+```
+
+Use uma sessao grafica de usuario comum. O AppImage deve ficar em uma pasta com
+permissao de escrita para permitir atualizacoes. A publicacao inclui `latest-linux.yml`,
+utilizado pelo atualizador para localizar a versao Linux.
+
+Para importar PPT/PPTX, instale o LibreOffice Impress pelo gerenciador de pacotes da
+distribuicao. PDFs nao precisam do LibreOffice. O aplicativo procura `soffice` ou
+`libreoffice` no `PATH`; tambem e possivel definir `LIBREOFFICE_PATH` com o caminho
+completo do executavel. A conversao via Microsoft PowerPoint e exclusiva do Windows.
+
+Para desenvolver e gerar o AppImage **em Linux x64**, use Node.js 22 e as ferramentas
+de compilacao C/C++ e Python exigidas pelas dependencias nativas:
+
+```bash
+npm ci
+npm run test:runtime
+npm run test:helpers
+npm run electron:build:linux
+```
+
+O resultado fica em `dist-electron/`. O workflow de release compila em Ubuntu 22.04
+e Windows, executa os testes e publica os arquivos de ambas as plataformas na tag.
+As dependencias nativas, incluindo SQLite, sao recompiladas para o Electron de cada sistema.
+
+Antes de distribuir uma release Linux, valide em uma maquina Linux com interface grafica:
+abertura do aplicativo, biblioteca offline, audio/video, importacao PPT/PDF, projecao
+e retorno em monitores separados, controle remoto e atualizacao entre duas versoes.
+O posicionamento de janelas e os atalhos globais tambem precisam ser conferidos na
+sessao grafica utilizada (X11 ou Wayland).
+
 ## Publicacao e Atualizacoes
 
 O app usa `electron-builder` com publicacao no GitHub:

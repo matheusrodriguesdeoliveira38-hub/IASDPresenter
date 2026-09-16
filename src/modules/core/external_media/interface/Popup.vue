@@ -28,7 +28,6 @@
       style="object-fit: contain;"
       :src="filePath"
       preload="auto"
-      autoplay
       muted
       playsinline
       disablepictureinpicture
@@ -113,7 +112,7 @@ export default {
       return isWebUrl(this.rawFilePath) && !this.isYouTube;
     },
     youtubeEmbedUrl() {
-      return getYouTubeEmbedUrl(this.rawFilePath, { startSeconds: 0, autoplay: true, muted: true });
+      return getYouTubeEmbedUrl(this.rawFilePath, { startSeconds: 0, autoplay: false, muted: true });
     },
     isVideo() {
       return isVideoFile(this.rawFilePath);
@@ -158,9 +157,10 @@ export default {
     playbackSession() {
       this.youtubeReady = false;
       clearInterval(this.youtubeHandshakeTimer);
-        this.hasSyncedInitialTime = false;
+      this.hasSyncedInitialTime = false;
       this.popupYouTubeCurrentTime = 0;
       this.lastYouTubeSyncAt = 0;
+      this.youtubeSampleAt = 0;
 
     },
     isBuffering() { this.syncPlaybackPosition(true); },
@@ -178,22 +178,8 @@ export default {
         }
       }
     },
-    isPaused(val) {
-      if (this.isYouTube) {
-        this.sendYouTubeCommand(val ? "pauseVideo" : "playVideo");
-        return;
-      }
-      this.$nextTick(() => {
-        const video = this.$refs.popupVideo;
-        if (!video) return;
-        if (val) {
-          video.pause();
-        } else {
-          video.play().catch((err) => {
-            console.warn("Erro ao retomar mídia no popup:", err);
-          });
-        }
-      });
+    isPaused() {
+      this.$nextTick(() => this.syncPlaybackPosition(true));
     },
     playbackUpdatedAt() {
       this.$nextTick(() => this.syncPlaybackPosition());
@@ -201,19 +187,7 @@ export default {
   },
   mounted() {
     window.addEventListener("message", this.handleYouTubeMessage);
-    this.$nextTick(() => {
-      if (this.isYouTube) return;
-      const video = this.$refs.popupVideo;
-      if (video) {
-        video.currentTime = this.currentTime || 0;
-        this.hasSyncedInitialTime = true;
-        if (!this.isPaused) {
-          video.play().catch((err) => {
-            console.warn("Erro ao iniciar mídia no popup:", err);
-          });
-        }
-      }
-    });
+    this.$nextTick(() => this.syncPlaybackPosition(true));
   },
   beforeUnmount() {
     clearInterval(this.youtubeHandshakeTimer);
@@ -271,19 +245,8 @@ export default {
       }
     },
     onCanPlay() {
-      if (this.hasSyncedInitialTime) {
-        this.syncPlaybackPosition();
-        this.playProjectedVideo();
-        return;
-      }
-      const video = this.$refs.popupVideo;
-      if (video && !this.isPaused) {
-        video.currentTime = this.getSynchronizedTargetTime();
-        this.hasSyncedInitialTime = true;
-        video.play().catch((err) => {
-          console.warn("Erro ao iniciar mídia no popup:", err);
-        });
-      }
+      this.syncPlaybackPosition(!this.hasSyncedInitialTime);
+      this.hasSyncedInitialTime = true;
     },
     playProjectedVideo() {
       const video = this.$refs.popupVideo;

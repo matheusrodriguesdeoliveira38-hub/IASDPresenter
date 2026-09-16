@@ -9,6 +9,7 @@ const os = require('os');
 const QRCode = require('qrcode');
 const { spawn } = require('child_process');
 const { autoUpdater } = require('electron-updater');
+const { findSofficeExecutable } = require('./LibreOffice');
 const DbExtractor = require('./DbExtractor');
 const { migrateLocalMusicLibrary } = require('./LocalMusicMigration');
 const { readUserData, writeUserData } = require('./UserDataStorage');
@@ -74,6 +75,9 @@ const mediaFolders = {
 let presentationShortcutsEnabled = false;
 let mainAppWindow = null;
 let remoteControlServer = null;
+let remoteControlStartPromise = null;
+let remoteControlError = '';
+let remoteControlHost = '0.0.0.0';
 const webOutputClients = new Set();
 const webOutputFrameWaiters = new Set();
 let webOutputCaptureTimer = null;
@@ -445,7 +449,7 @@ function getRemoteControlAddresses() {
   Object.values(interfaces).forEach((items = []) => {
     items.forEach((item) => {
       if (item.family === 'IPv4' && !item.internal) {
-        if (remoteControlConfig.host === '0.0.0.0' || remoteControlConfig.host === item.address) {
+        if (remoteControlHost === '0.0.0.0' || remoteControlHost === item.address) {
           addresses.push(`http://${item.address}:${port}`);
         }
       }
@@ -1751,8 +1755,11 @@ async function handleRemoteControlRequest(request, response) {
 }
 
 function startRemoteControlServer() {
-  if (remoteControlServer) return;
-  if (remoteControlConfig.enabled === false) return;
+  if (remoteControlStartPromise) return remoteControlStartPromise;
+  if (remoteControlServer?.listening || remoteControlConfig.enabled === false) return Promise.resolve();
+  remoteControlError = '';
+  const availableHosts = getRemoteControlNetworkOptions().map(option => option.value);
+  remoteControlHost = availableHosts.includes(remoteControlConfig.host) ? remoteControlConfig.host : '0.0.0.0';
 
   remoteControlServer = http.createServer((request, response) => {
     handleRemoteControlRequest(request, response).catch((error) => {
@@ -1765,18 +1772,26 @@ function startRemoteControlServer() {
     });
   });
 
-  remoteControlServer.listen(remoteControlConfig.port, remoteControlConfig.host, () => {
-    const addresses = getRemoteControlAddresses();
-    console.log(`[RemoteControl] Controle remoto ativo: ${addresses.join(' | ') || `http://localhost:${remoteControlConfig.port}`}`);
-  });
-
-  remoteControlServer.on('error', (error) => {
-    console.error('[RemoteControl] Nao foi possivel iniciar:', error.message);
-    remoteControlServer = null;
-  });
+  const server = remoteControlServer;
+  remoteControlStartPromise = new Promise<void>((resolve) => {
+    server.once('error', (error) => {
+      remoteControlError = error.code === 'EADDRINUSE'
+        ? 'A porta do controle remoto já está em uso. Escolha outra porta ou feche a outra instância do app.'
+        : 'Não foi possível iniciar o controle remoto: ' + error.message;
+      console.error('[RemoteControl] ' + remoteControlError);
+      if (remoteControlServer === server) remoteControlServer = null;
+      resolve();
+    });
+    server.listen(remoteControlConfig.port, remoteControlHost, () => {
+      console.log('[RemoteControl] Controle remoto ativo: ' + getRemoteControlAddresses().join(' | '));
+      resolve();
+    });
+  }).finally(() => { remoteControlStartPromise = null; });
+  return remoteControlStartPromise;
 }
 
-function stopRemoteControlServer() {
+async function stopRemoteControlServer() {
+  await remoteControlStartPromise;
   return new Promise((resolve) => {
     webOutputClients.forEach((client) => {
       client.closed = true;
@@ -1803,7 +1818,9 @@ function stopRemoteControlServer() {
 }
 
 async function getRemoteControlStatus() {
-  const addresses = getRemoteControlAddresses();
+  await remoteControlStartPromise;
+  const running = remoteControlServer?.listening === true;
+  const addresses = running ? getRemoteControlAddresses() : [];
   let qrCode = '';
   if (addresses[0]) {
     try {
@@ -1818,10 +1835,12 @@ async function getRemoteControlStatus() {
   }
 
   return {
-    running: Boolean(remoteControlServer),
+    running,
+    error: remoteControlError,
+    effectiveHost: remoteControlHost,
     config: { ...remoteControlConfig, password: remoteControlConfig.password ? '********' : '' },
     addresses,
-    outputAddresses: getWebOutputAddresses(),
+    outputAddresses: running ? getWebOutputAddresses() : [],
     qrCode,
     networkOptions: getRemoteControlNetworkOptions(),
   };
@@ -1868,21 +1887,6 @@ if (fs.existsSync(oldDbPath)) {
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
 });
 
-function findSofficeExecutable() {
-  const candidates = [
-    process.env.LIBREOFFICE_PATH,
-    'soffice',
-    'libreoffice',
-    'C:\\Program Files\\LibreOffice\\program\\soffice.exe',
-    'C:\\Program Files (x86)\\LibreOffice\\program\\soffice.exe',
-  ].filter(Boolean);
-
-  return candidates.find((candidate) => {
-    if (candidate === 'soffice' || candidate === 'libreoffice') return true;
-    return fs.existsSync(candidate);
-  });
-}
-
 function runProcess(command, args, options = {}) {
   return new Promise((resolve, reject) => {
     const child = spawn(command, args, { windowsHide: true, ...options });
@@ -1923,6 +1927,7 @@ async function convertPresentationWithLibreOffice(sourcePath, outputDir) {
 }
 
 async function convertPresentationWithPowerPoint(sourcePath, outputPath) {
+  if (process.platform !== 'win32') throw new Error('Microsoft PowerPoint COM disponivel apenas no Windows.');
   const scriptPath = path.join(path.dirname(outputPath), 'convert-powerpoint.ps1');
   const script = [
     'param($sourceFile, $targetFile)',
@@ -2011,7 +2016,9 @@ async function preparePresentationFile(sourcePath) {
         sourcePath,
         sourceType: ext.slice(1),
         needsConversion: true,
-        error: 'Nao foi possivel converter PowerPoint para PDF. Instale o Microsoft PowerPoint ou o LibreOffice, ou exporte o arquivo para PDF.',
+        error: process.platform === 'win32'
+          ? 'Nao foi possivel converter PowerPoint para PDF. Instale o Microsoft PowerPoint ou o LibreOffice, ou exporte o arquivo para PDF.'
+          : 'Nao foi possivel converter a apresentacao para PDF. Instale o LibreOffice Impress ou exporte o arquivo para PDF.',
         details: `${powerPointError.message || powerPointError}; ${libreOfficeError.message || libreOfficeError}`,
       };
     }
@@ -3001,7 +3008,7 @@ async function createWindow() {
     minWidth: 920,
     minHeight: 760,
     title: 'IASDPresenter',
-    icon: path.join(__dirname, '../public/ico/favicon.png'),
+    icon: path.join(app.getAppPath(), app.isPackaged ? 'dist/ico/favicon-256x256.png' : 'public/ico/favicon-256x256.png'),
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,

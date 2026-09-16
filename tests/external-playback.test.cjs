@@ -111,3 +111,61 @@ test('projection cannot start or seek before its YouTube player is ready', () =>
     sendYouTubeCommand() { assert.fail('Player is not ready'); },
   }, true);
 });
+
+
+test('minimizing YouTube honors the pause preference', () => {
+  for (const enabled of [true, false]) {
+    const calls = [];
+    const state = {};
+    const context = {
+      isYouTube: true, userPaused: false,
+      $userdata: { get: () => enabled },
+      $appdata: { set: (key, value) => { state[key] = value; } },
+      sendYouTubeCommand: command => calls.push(command),
+      onPause: () => calls.push('publishPause'),
+      getMediaEl() { assert.fail('YouTube has no native media element'); },
+    };
+    component('Index').methods.minimizeMedia.call(context);
+    assert.deepEqual(calls, enabled ? ['pauseVideo', 'publishPause'] : []);
+    assert.equal(state['modules.external_media.minimized'], true);
+  }
+});
+
+test('ending an old media session cannot close the replacement session', async () => {
+  let finish;
+  let closes = 0;
+  const context = {
+    isClosing: false, playbackSession: 'old',
+    $appdata: { set() {} },
+    $automation: { restore: () => new Promise(resolve => { finish = resolve; }) },
+    closeMedia: () => closes++,
+  };
+  const pending = component('Index').methods.onEnded.call(context);
+  context.playbackSession = 'new';
+  finish();
+  await pending;
+  assert.equal(closes, 0);
+  const current = component('Index').methods.onEnded.call(context);
+  finish();
+  await current;
+  assert.equal(closes, 1);
+});
+
+test('native projection stays paused during buffering across load and pause changes', () => {
+  const definition = component('Popup');
+  const calls = [];
+  const video = { currentTime: 0, paused: true, pause() { calls.push('pause'); }, play() { calls.push('play'); return Promise.resolve(); } };
+  const context = {
+    isYouTube: false, isPaused: false, isBuffering: true, hasSyncedInitialTime: false,
+    $refs: { popupVideo: video }, getSynchronizedTargetTime: () => 4,
+    $nextTick: callback => callback(),
+  };
+  for (const name of ['syncPlaybackPosition', 'playProjectedVideo']) context[name] = definition.methods[name].bind(context);
+  definition.methods.onCanPlay.call(context);
+  definition.watch.isPaused.call(context, false);
+  assert.deepEqual(calls, ['pause', 'pause']);
+  assert.equal(video.currentTime, 4);
+  context.isBuffering = false;
+  definition.watch.isBuffering.call(context);
+  assert.deepEqual(calls, ['pause', 'pause', 'play']);
+});

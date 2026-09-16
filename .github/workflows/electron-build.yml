@@ -16,10 +16,13 @@ permissions:
 jobs:
   build:
     strategy:
+      fail-fast: false
       matrix:
         include:
           - os: windows-latest
             platform: win
+          - os: ubuntu-22.04
+            platform: linux
     runs-on: ${{ matrix.os }}
 
     steps:
@@ -31,7 +34,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: 'npm'
 
       - name: Install dependencies
@@ -46,12 +49,18 @@ jobs:
       - name: Build Vite
         run: npx vite build --base=./
 
+      - name: Test runtime and helpers
+        run: npm run test:runtime && npm run test:helpers
+
       - name: Build Electron
         run: npx electron-builder --${{ matrix.platform }} --publish never
 
       - name: Extract release notes from tag
+        shell: pwsh
+        env:
+          RELEASE_TAG: ${{ inputs.release_tag || github.ref_name }}
         run: |
-          $tag = "${{ inputs.release_tag || github.ref_name }}"
+          $tag = $env:RELEASE_TAG
           git for-each-ref "refs/tags/$tag" --format="%(contents)" | Out-File -FilePath release_notes.md -Encoding utf8
 
       - name: Create Release and Upload Assets
@@ -62,6 +71,7 @@ jobs:
           body_path: release_notes.md
           files: |
             dist-electron/*.exe
+            dist-electron/*.AppImage
             dist-electron/*.yml
             dist-electron/*.blockmap
         env:

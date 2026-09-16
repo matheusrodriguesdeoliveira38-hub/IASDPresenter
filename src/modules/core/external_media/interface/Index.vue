@@ -654,7 +654,7 @@ export default {
     playbackSession() {
       this.youtubeReady = false;
       clearInterval(this.youtubeHandshakeTimer);
-        const newVal = this.rawFilePath;
+      const newVal = this.rawFilePath;
       this.currentTime = 0;
       this.progress = 0;
       this.duration = 0;
@@ -995,7 +995,9 @@ export default {
       this.progress = 0;
       this.currentTime = 0;
       this.$appdata.set("modules.external_media.config.is_paused", true);
+      const session = this.playbackSession;
       await this.$automation.restore("external_media_ended");
+      if (this.isClosing || this.playbackSession !== session) return;
       this.closeMedia(true, { restore: false });
     },
 
@@ -1070,7 +1072,12 @@ export default {
       const pauseOnMinimize = this.$userdata.get("modules.config.media_pause_on_minimize") === true;
       if (pauseOnMinimize) {
         this.userPaused = true;
-        this.getMediaEl()?.pause();
+        if (this.isYouTube) {
+          this.sendYouTubeCommand("pauseVideo");
+          this.onPause();
+        } else {
+          this.getMediaEl()?.pause();
+        }
       }
       
       this.$appdata.set("modules.external_media.show", false);
@@ -1089,7 +1096,7 @@ export default {
         );
         return;
       }
-        clearInterval(this.youtubeHandshakeTimer);
+      clearInterval(this.youtubeHandshakeTimer);
       this.isClosing = true;
       this.preferenceRequest++;
       this.stopPlayback();

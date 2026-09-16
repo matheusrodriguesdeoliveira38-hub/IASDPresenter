@@ -1505,7 +1505,7 @@
                       density="comfortable"
                       class="rounded-lg mb-6"
                     >
-                      Nenhum endereço disponível. Inicie o servidor e verifique se o computador está conectado à rede.
+                      {{ remote_control_error || "Nenhum endereço disponível. Inicie o servidor e verifique se o computador está conectado à rede." }}
                     </v-alert>
 
                     <div
@@ -2136,6 +2136,7 @@ export default {
     return_monitor_ratio: 75,
     remote_control_loading: false,
     remote_control_running: false,
+      remote_control_error: "",
     remote_control_addresses: [],
     web_output_addresses: [],
     web_output_source_options: [
@@ -2617,6 +2618,7 @@ export default {
     applyRemoteControlStatus(status) {
       if (!status) return;
       this.remote_control_running = status.running === true;
+      this.remote_control_error = status.error || "";
       this.remote_control_addresses = status.addresses || [];
       this.web_output_addresses = status.outputAddresses || [];
       this.remote_control_qr_code = status.qrCode || "";

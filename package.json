@@ -1,6 +1,6 @@
 {
   "name": "iasdpresenter",
-  "version": "1.9.1",
+  "version": "1.9.2",
   "private": true,
   "main": ".electron/main.js",
   "scripts": {
@@ -21,6 +21,7 @@
     "git:publish": "git pull origin main && git checkout main && git merge develop && git push -u origin main && git checkout develop",
     "electron:dev": "npm run runtime:build && concurrently -k \"vite\" \"npm:runtime:watch\" \"wait-on http://localhost:5173 .electron/main.js && electron .\"",
     "electron:build": "npm run typecheck && npm run runtime:build && vite build --base=./ && electron-builder",
+    "electron:build:linux": "npm run typecheck && npm run runtime:build && vite build --base=./ && electron-builder --linux --x64 --publish never",
     "postinstall": "electron-builder install-app-deps",
     "typecheck": "vue-tsc -p tsconfig.app.json && tsc -p tsconfig.runtime.json --noEmit && tsc -p tsconfig.server.json --noEmit",
     "runtime:build": "tsc -p tsconfig.runtime.json && tsc -p tsconfig.server.json",
@@ -141,6 +142,8 @@
       "uninstallerSidebar": "build/installerSidebar.bmp"
     },
     "linux": {
+      "artifactName": "${productName}-${version}-linux-${arch}.${ext}",
+      "category": "AudioVideo",
       "target": [
         {
           "target": "AppImage",
@@ -149,7 +152,7 @@
           ]
         }
       ],
-      "icon": "public/ico/favicon.png"
+      "icon": "public/ico/favicon-256x256.png"
     }
   }
 }
