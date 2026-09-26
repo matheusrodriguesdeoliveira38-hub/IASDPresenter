@@ -468,11 +468,13 @@ export const manualSections: ManualSection[] = [
       {
         id: "automacao-liturgia",
         title: "Automatize ações pela liturgia",
-        summary: "Dispare comandos da mesa Soundcraft Ui16 ao abrir itens do roteiro.",
+        summary: "Controle mesas Soundcraft Ui, Behringer X32/X Air e Midas M32 ao abrir itens do roteiro.",
         icon: "mdi-lightning-bolt-outline",
         steps: [
           "Abra Configurações > Automação e ative os gatilhos.",
-          "Cadastre a conexão da Soundcraft Ui16 e crie ações como volume, mute ou desmute.",
+          "Clique em Adicionar mesa, escolha o modelo e informe o IP. Para X32, M32 e X Air, confira também a porta UDP sugerida.",
+          "Teste a conexão de cada mesa. Crie um gatilho e escolha a mesa de destino de cada ação de volume, fade, mute ou desmute.",
+          "Use Adicionar ação para controlar mais de uma mesa no mesmo gatilho e salve a automação.",
           "Na Liturgia, edite um item compatível e selecione o gatilho de automação.",
           "Ao abrir o item durante o culto, confirme que a ação foi executada na mesa.",
           "Faça um ensaio completo e mantenha uma forma de controle manual disponível.",
@@ -480,7 +482,7 @@ export const manualSections: ManualSection[] = [
         warning: "Automação de áudio altera o som ao vivo. Teste canais, níveis e conexão fora do horário da programação.",
         moduleId: "config",
         actionLabel: "Configurar Automação",
-        keywords: ["soundcraft", "ui16", "mesa", "automação", "gatilho", "mute", "volume", "liturgia"],
+        keywords: ["soundcraft", "ui12", "ui16", "ui24r", "behringer", "x32", "x air", "xr18", "midas", "m32", "mesa", "automação", "gatilho", "mute", "volume", "liturgia"],
       },
       {
         id: "atalhos-apresentacao",

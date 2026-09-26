@@ -16,6 +16,7 @@ function runtime(port = 0) {
     handleRemoteControlRequest: async (_, response) => response.end('remote ready'),
   });
   const code = section('function getRemoteControlPort()', 'function isRemoteControlPasswordValid')
+    + section('function shouldRunNetworkServer()', 'function loadRemoteControlConfig')
     + section('function startRemoteControlServer()', 'async function stopRemoteControlServer')
     + section('async function getRemoteControlStatus()', 'function resolveInsideBase');
   vm.runInContext(ts.transpileModule(code, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText, context);
@@ -50,4 +51,22 @@ test('occupied port reports failure without advertising a dead URL or QR code', 
     assert.equal(status.qrCode, '');
     assert.match(status.error, /porta.*uso/);
   } finally { await new Promise(resolve => occupied.close(resolve)); }
+});
+
+test('virtual monitor alone starts the network server and advertises its viewer', async () => {
+  const app = runtime();
+  Object.assign(app.remoteControlConfig, { enabled: false, webOutputEnabled: false, virtualMonitorEnabled: true });
+  try {
+    await app.startRemoteControlServer();
+    const status = await app.getRemoteControlStatus();
+    assert.equal(status.running, true);
+    assert.equal(status.outputAddresses.length, 0);
+    assert.equal(status.virtualMonitorAddresses[0], 'http://192.168.100.228:0/virtual-monitor');
+    app.remoteControlConfig.virtualMonitorEnabled = false;
+    assert.equal(app.shouldRunNetworkServer(), false);
+    assert.equal((await app.getRemoteControlStatus()).virtualMonitorAddresses.length, 0);
+  } finally {
+    app.remoteControlServer?.closeAllConnections();
+    if (app.remoteControlServer) await new Promise(resolve => app.remoteControlServer.close(resolve));
+  }
 });

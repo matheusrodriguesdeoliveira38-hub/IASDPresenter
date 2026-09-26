@@ -7,11 +7,63 @@ const helper: Record<string, any> = {
   projectionRole: "projection",
   returnRole: "return_monitor",
   webOutputRole: "web_output",
+  clockRole: "clock",
+
+  managedWindow(nativeWindow, metadata) {
+    let closed = false;
+    return markRaw({
+      ...metadata,
+      nativeWindow,
+      get closed() { return closed || nativeWindow.closed; },
+      close() { closed = true; nativeWindow.close(); },
+      focus() { nativeWindow.focus(); },
+      postMessage(message, origin) { nativeWindow.postMessage(message, origin); },
+    });
+  },
+
+  isClockMonitor(monitorId) {
+    return ($appdata.get("popups") || []).some(p => p && !p.closed
+      && p.popupRole === this.clockRole && String(p.monitorId) === String(monitorId));
+  },
+  async openClock(monitorId) {
+    if (monitorId == null) return;
+    if (monitorId === 'virtual-monitor' && !this.virtualMonitorAvailable()) return;
+    let popups = ($appdata.get("popups") || []).filter(p => p && !p.closed);
+    const existing = popups.find(p => p.popupRole === this.clockRole && String(p.monitorId) === String(monitorId));
+    if (existing) return;
+    popups.forEach(p => {
+      if (p.popupRole === this.clockRole) p.close();
+    });
+    popups = popups.filter(p => !p.closed);
+    const clockWindow = $window.open("#/popup?module=clock", `Clock_${monitorId}`, `width=800,height=600,monitor=${monitorId},fullscreen=yes`);
+    if (!clockWindow) return;
+    // Window properties can be reset when its document loads. Keep the control
+    // data in the opener so the toggle survives loading.
+    const popup = this.managedWindow(clockWindow, {
+      monitorId,
+      popupRole: this.clockRole,
+      popupModule: "clock",
+      popupFullscreen: true,
+    });
+    popups.push(markRaw(popup));
+    $appdata.set("popups", popups);
+    $appdata.set("popup", popups[0] || null);
+  },
+  closeClock() {
+    const popups = ($appdata.get("popups") || []).filter(p => {
+      if (p?.popupRole === this.clockRole && !p.closed) p.close();
+      return p && !p.closed && p.popupRole !== this.clockRole;
+    });
+    $appdata.set("popups", popups);
+    $appdata.set("popup", popups[0] || null);
+  },
 
   async open(params) {
     if (typeof params !== "object") {
       params = { module: params };
     }
+    if (params.module === "clock") return this.openClock(params.monitorId);
+    if (params.monitorId === 'virtual-monitor' && !this.virtualMonitorAvailable()) return;
 
     let popups = $appdata.get("popups") || [];
 
@@ -29,6 +81,7 @@ const helper: Record<string, any> = {
       const existing = popups.find(p => p.monitorId === params.monitorId && (p.popupRole || this.projectionRole) === role);
       const existingMatchesFullscreen = existing?.popupFullscreen === !!params.fullscreen;
       if (existing && !existing.closed && existingMatchesFullscreen) {
+        existing.popupModule = popupModule;
         existing.focus();
       } else {
         if (existing && !existing.closed) {
@@ -45,8 +98,11 @@ const helper: Record<string, any> = {
         popups.push(markRaw(newPopup));
       }
     } else {
+      const clockPopups = popups.filter(p => p.popupRole === this.clockRole);
+      popups = popups.filter(p => p.popupRole !== this.clockRole);
       const existingMatchesFullscreen = popups[0]?.popupFullscreen === !!params.fullscreen;
       if (popups.length > 0 && !popups[0].closed && existingMatchesFullscreen) {
+        popups[0].popupModule = popupModule;
         popups[0].focus();
       } else {
         popups.forEach(popup => {
@@ -60,6 +116,7 @@ const helper: Record<string, any> = {
         newPopup.popupFullscreen = !!params.fullscreen;
         popups = [markRaw(newPopup)];
       }
+      popups.push(...clockPopups);
     }
 
     $appdata.set("popups", popups);
@@ -68,13 +125,14 @@ const helper: Record<string, any> = {
   async exit() {
     const popups = $appdata.get("popups") || [];
     popups.forEach(popup => {
-      if (popup && !popup.closed) {
+      if (popup && !popup.closed && popup.popupRole !== this.clockRole) {
         popup.close();
       }
     });
     $appdata.set("popup_module", "");
-    $appdata.set("popups", []);
-    $appdata.set("popup", null);
+    const remaining = popups.filter(p => p && !p.closed && p.popupRole === this.clockRole);
+    $appdata.set("popups", remaining);
+    $appdata.set("popup", remaining[0] || null);
   },
   closeProjection(moduleName) {
     let popups = $appdata.get("popups") || [];
@@ -125,6 +183,8 @@ const helper: Record<string, any> = {
     $appdata.set("popup", popups[0] || null);
   },
   async syncMonitors(monitors, moduleName = "media", forceOpen = false, fullscreen = true) {
+    if (moduleName === "clock") return this.openClock(monitors?.[0]);
+    monitors = (monitors || []).filter(id => id !== 'virtual-monitor' || this.virtualMonitorAvailable());
     let popups = $appdata.get("popups") || [];
     popups = popups.filter(p => !p.closed);
     const targetMonitors = $performance.limitProjectionWindows()
@@ -171,6 +231,7 @@ const helper: Record<string, any> = {
   },
 
   async syncReturnMonitor(monitorId, forceOpen = false) {
+    if (monitorId === 'virtual-monitor' && !this.virtualMonitorAvailable()) monitorId = null;
     if ($performance.limitProjectionWindows()) {
       this.closeReturnMonitor();
       return;
@@ -198,10 +259,13 @@ const helper: Record<string, any> = {
       if (!existing || existing.closed) {
         const features = `width=800,height=600,monitor=${monitorId},fullscreen=yes`;
         const newPopup = $window.open("#/popup?module=return_monitor", `ReturnMonitor_${monitorId}`, features);
-        newPopup.monitorId = monitorId;
-        newPopup.popupRole = this.returnRole;
-        newPopup.popupModule = "return_monitor";
-        popups.push(markRaw(newPopup));
+        if (newPopup) popups.push(this.managedWindow(newPopup, {
+          monitorId,
+          popupRole: this.returnRole,
+          popupModule: "return_monitor",
+        }));
+      } else {
+        existing.focus();
       }
     }
 
@@ -211,6 +275,9 @@ const helper: Record<string, any> = {
     }
   },
 
+  virtualMonitorAvailable() {
+    return ($appdata.get('system_displays') || []).some(display => display.id === 'virtual-monitor');
+  },
   closeReturnMonitor() {
     let popups = $appdata.get("popups") || [];
     popups.forEach(popup => {
@@ -220,6 +287,7 @@ const helper: Record<string, any> = {
     });
     popups = popups.filter(p => p && !p.closed);
     $appdata.set("popups", popups);
+    $appdata.set("popup", popups[0] || null);
   },
 };
 

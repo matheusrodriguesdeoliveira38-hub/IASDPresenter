@@ -49,23 +49,44 @@ export default {
       return this.$appdata.get("is_mobile");
     },
     is_popup_opened() {
+      if (this.module === "clock") {
+        return (this.$appdata.get("popups") || []).some(p => p && !p.closed && p.popupRole === "clock");
+      }
       return !!this.$appdata.get("popup");
     },
     popup_module() {
       return this.$appdata.get("popup_module");
     },
     is_selected() {
+      if (this.module === "clock") return this.is_popup_opened;
       return this.is_popup_opened && this.popup_module == this.module;
     },
   },
   methods: {
     async popup(forceOpen = false, isCurrent = () => true) {
       if (this.is_selected && forceOpen !== true) {
-        this.$popup.exit();
+        if (this.module === "clock") this.$popup.closeClock();
+        else this.$popup.exit();
         if (this.module === "bible" && window.electronAPI?.setPresentationShortcutsEnabled) {
           window.electronAPI.setPresentationShortcutsEnabled(false);
         }
       } else {
+        if (this.module === "clock") {
+          const monitorId = $userdata.get("modules.config.return_monitor");
+          const displays = await window.electronAPI?.getDisplays?.();
+          if (!isCurrent()) return;
+          const monitor = monitorId != null && displays?.find(display => String(display.id) === String(monitorId));
+          if (!monitor) {
+            this.$alert.info({
+              text: "Selecione um monitor de retorno conectado em Configurações → Projeção para projetar o relógio.",
+              translate: false,
+            });
+            return;
+          }
+          await this.$popup.openClock(monitor.id);
+          return;
+        }
+
         let selectedMonitors = [];
         let fullscreen = true;
         const usesIndependentMediaSettings = this.module === "external_media"

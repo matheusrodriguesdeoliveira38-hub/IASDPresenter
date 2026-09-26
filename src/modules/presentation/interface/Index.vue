@@ -375,7 +375,7 @@ export default {
       ];
 
       return options.concat(this.displays.map((display, index) => ({
-        title: `Monitor ${index + 1}${display.isPrimary ? " (Principal)" : ""}`,
+        title: display.isVirtual ? "Monitor virtual" : `Monitor ${index + 1}${display.isPrimary ? " (Principal)" : ""}`,
         value: display.id,
       })));
     },

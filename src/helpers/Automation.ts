@@ -2,7 +2,6 @@ import $userdata from "@/helpers/UserData";
 
 const DEFAULT_CONFIG = {
   enabled: false,
-  simulationMode: false,
   showStatus: true,
   devices: [],
   triggers: [],

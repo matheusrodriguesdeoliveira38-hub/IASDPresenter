@@ -382,7 +382,7 @@ export default {
       }
       if (window.electronAPI.setRemoteControlState) {
         this.publishRemoteControlState();
-        const publishInterval = this.$performance.isLightMode() ? 2000 : 750;
+        const publishInterval = this.$performance.isLightMode() ? 500 : 250;
         this.remoteControlStateTimer = window.setInterval(this.publishRemoteControlState, publishInterval);
       }
     }
@@ -475,6 +475,16 @@ export default {
       window.electronAPI.setRemoteControlState({
         webOutputModule,
         returnMonitorActive: this.$appdata.get("modules.media.id_music") != null,
+        externalMedia: externalFilePath ? {
+          filePath: externalFilePath,
+          title: this.$appdata.get("modules.external_media.title") || "",
+          sessionId: this.$appdata.get("modules.external_media.config.session_id") || externalFilePath,
+          currentTime: Number(this.$appdata.get("modules.external_media.config.current_time") || 0),
+          playbackUpdatedAt: Number(this.$appdata.get("modules.external_media.config.playback_updated_at") || 0),
+          duration: Number(this.$appdata.get("modules.external_media.config.duration") || 0),
+          paused: this.$appdata.get("modules.external_media.config.is_paused") !== false,
+          buffering: this.$appdata.get("modules.external_media.config.is_buffering") === true,
+        } : null,
         projection: { active: Boolean(popupModule), module: popupModule, override },
         current,
         next,
@@ -920,8 +930,13 @@ export default {
       }
     },
     async onExternalMiniPlayerEnded() {
+      const filePath = this.$appdata.get("modules.external_media.filePath");
+      const sessionId = this.$appdata.get("modules.external_media.config.session_id");
+      if (!filePath) return;
       this.$appdata.set("modules.external_media.config.is_paused", true);
       await this.$automation.restore("external_media_miniplayer_ended");
+      if (filePath !== this.$appdata.get("modules.external_media.filePath")
+        || sessionId !== this.$appdata.get("modules.external_media.config.session_id")) return;
       this.$appdata.set("modules.external_media.show", false);
       this.$appdata.set("modules.external_media.minimized", false);
       this.$appdata.set("modules.external_media.filePath", "");
@@ -933,7 +948,7 @@ export default {
         playback_updated_at: Date.now(),
         progress: 0,
         duration: 0,
-        volume: this.$appdata.get("modules.external_media.config.volume") || 100,
+        volume: this.$appdata.get("modules.external_media.config.volume") ?? 100,
         document_page: 1,
         request_action: null,
       });

@@ -86,3 +86,9 @@ test('projection animates opacity for the requested duration and acknowledges on
   await promise;
   assert.equal(messages[0].requestId, 'fade-test');
 });
+
+test('independent clock does not hold up projection transitions', async () => {
+  const context = setup([{ popupRole: 'clock', closed: false }]);
+  await context.run();
+  assert.equal(context.clean(), true);
+});

@@ -620,6 +620,38 @@
                       </div>
                     </div>
                     
+                    <v-switch
+                      :model-value="remote_control_config.virtualMonitorEnabled"
+                      label="Ativar monitor virtual"
+                      color="primary" hide-details
+                      :disabled="remote_control_loading || !virtual_monitor_supported"
+                      @update:model-value="updateVirtualMonitorEnabled"
+                    />
+                    <v-alert v-if="!remote_control_loading && !virtual_monitor_supported" type="warning" variant="tonal" class="mt-3 mb-4">
+                      Reinicie o aplicativo para carregar o suporte ao monitor virtual.
+                      <v-btn class="ml-3" size="small" variant="outlined" @click="restartForVirtualMonitor">Reiniciar aplicativo</v-btn>
+                    </v-alert>
+                    <p class="text-body-2 mt-2 mb-4">
+                      Ao ativar, selecione o Monitor virtual como destino da projeção ou do retorno.
+                      Abra o endereço abaixo no navegador de outro dispositivo da mesma rede.
+                      A transmissão exibe a imagem em 1920 × 1080, sem áudio.
+                    </p>
+                    <template v-if="remote_control_config.virtualMonitorEnabled">
+                      <v-alert v-if="remote_control_error" type="error" variant="tonal" class="mb-4">{{ remote_control_error }}</v-alert>
+                      <v-text-field
+                        v-for="address in virtual_monitor_addresses" :key="address"
+                        :model-value="address" label="Endereço do monitor virtual" readonly
+                        variant="outlined" append-inner-icon="mdi-content-copy"
+                        @click:append-inner="copyVirtualMonitorAddress(address)"
+                      />
+                      <v-alert v-if="!virtual_monitor_addresses.length && !remote_control_error" type="info" variant="tonal" class="mb-4">
+                        Conecte o computador à rede e atualize os endereços.
+                      </v-alert>
+                      <v-btn variant="text" size="small" :loading="remote_control_loading" class="mb-4" @click="loadRemoteControlStatus">
+                        Atualizar endereços
+                      </v-btn>
+                      <p class="text-caption mb-4">O endereço usa o IP e a porta do computador, configurados em Controle remoto. Qualquer dispositivo da rede com esse endereço pode visualizar a imagem.</p>
+                    </template>
                     <div class="monitor-showcase">
                       <div
                         v-for="(display, index) in rawDisplays"
@@ -630,7 +662,7 @@
                         <div class="monitor-frame">
                           <div class="monitor-toolbar">
                             <span><i /><i /><i /></span>
-                            <strong>DISPLAY {{ String(Number(index) + 1).padStart(2, '0') }}</strong>
+                            <strong>{{ display.isVirtual ? 'MONITOR VIRTUAL' : 'DISPLAY ' + String(Number(index) + 1).padStart(2, '0') }}</strong>
                             <v-icon :icon="display.isPrimary ? 'mdi-star-four-points' : 'mdi-monitor'" size="15" />
                           </div>
                           <div class="monitor-screen-content">
@@ -642,7 +674,7 @@
                         </div>
                         <div class="monitor-neck" /><div class="monitor-base" />
                         <div class="monitor-meta">
-                          <span :class="{ online: display.isPrimary }"><i />{{ display.isPrimary ? 'Monitor principal' : 'Monitor estendido' }}</span>
+                          <span :class="{ online: display.isPrimary || display.isVirtual }"><i />{{ display.isVirtual ? 'Monitor virtual · Rede' : display.isPrimary ? 'Monitor principal' : 'Monitor estendido' }}</span>
                           <small>X {{ display.bounds.x }} · Y {{ display.bounds.y }}</small>
                         </div>
                       </div>
@@ -1625,89 +1657,6 @@
                 </v-card>
                 </CollapsiblePanel>
 
-                <CollapsiblePanel title="Saída web para OBS e vMix" subtitle="Vídeo 1080p pela rede local" icon="mdi-broadcast" :hide-first="false">
-                <v-card class="settings-card legacy-panel-content rounded-xl pa-2" flat style="background: var(--card-bg); box-shadow: var(--shadow);">
-                  <v-card-text class="pa-6">
-                    <div class="d-flex align-center mb-5">
-                      <v-icon color="primary" class="mr-3" size="28">
-                        mdi-broadcast
-                      </v-icon>
-                      <div>
-                        <h3 class="font-weight-bold" style="color: var(--sidebar-text); font-size: 1.1rem; line-height: 1.2;">
-                          Saída web nativa
-                        </h3>
-                        <div class="text-caption" style="color: var(--sidebar-text-secondary);">
-                          Espelha a projeção em 1920×1080 e 30 quadros por segundo, sem placa de captura ou plugin.
-                        </div>
-                      </div>
-                    </div>
-
-                    <div class="d-flex align-center justify-space-between mb-5" style="gap: 16px; flex-wrap: wrap;">
-                      <div>
-                        <div class="font-weight-bold" style="color: var(--sidebar-text);">
-                          Ativar saída web
-                        </div>
-                        <div class="text-caption" style="color: var(--sidebar-text-secondary);">
-                          Permite que dispositivos na rede acessem o vídeo da projeção.
-                        </div>
-                      </div>
-                      <v-switch
-                        :model-value="remote_control_config.webOutputEnabled"
-                        color="primary"
-                        inset
-                        hide-details
-                        :loading="remote_control_loading"
-                        @update:model-value="updateWebOutputEnabled"
-                      />
-                    </div>
-
-                    <v-select
-                      v-if="remote_control_config.webOutputEnabled"
-                      class="mb-5"
-                      label="Conteúdo transmitido"
-                      :items="web_output_source_options"
-                      item-title="title"
-                      item-value="value"
-                      :model-value="remote_control_config.webOutputSource"
-                      variant="outlined"
-                      density="comfortable"
-                      persistent-hint
-                      hint="Projeção mostra a saída principal. Retorno mostra letras, próximo slide e informações do monitor de retorno."
-                      :loading="remote_control_loading"
-                      @update:model-value="updateWebOutputSource"
-                    />
-
-                    <v-alert v-if="!remote_control_config.webOutputEnabled" type="info" variant="tonal" density="comfortable" class="rounded-lg">
-                      A saída web está desativada. O controle remoto pode continuar funcionando normalmente.
-                    </v-alert>
-                    <v-alert v-else-if="!remote_control_running" type="warning" variant="tonal" density="comfortable" class="rounded-lg">
-                      Inicie o servidor de rede acima para disponibilizar a saída web.
-                    </v-alert>
-                    <div v-else-if="web_output_addresses.length" class="d-flex flex-column" style="gap: 12px;">
-                      <div
-                        v-for="address in web_output_addresses"
-                        :key="address"
-                        class="d-flex align-center pa-3 rounded-lg"
-                        style="gap: 10px; background: var(--main-bg); border: 1px solid var(--border-color);"
-                      >
-                        <code style="min-width: 0; flex: 1; overflow-wrap: anywhere; color: var(--sidebar-text);">{{ address }}</code>
-                        <v-btn
-                          icon="mdi-content-copy"
-                          size="small"
-                          variant="tonal"
-                          color="primary"
-                          title="Copiar URL"
-                          @click="copyWebOutputAddress(address)"
-                        />
-                      </div>
-                      <div class="text-body-2" style="color: var(--sidebar-text-secondary);">
-                        Cole uma das URLs no <strong>Browser Source</strong> do OBS ou no <strong>Web Input</strong> do vMix. Defina a fonte como 1920×1080.
-                      </div>
-                    </div>
-                  </v-card-text>
-                </v-card>
-                </CollapsiblePanel>
-
                 <CollapsiblePanel title="Segurança de acesso" subtitle="Senha e proteção do controle remoto" icon="mdi-shield-key">
                 <v-card class="settings-card legacy-panel-content rounded-xl pa-2" flat style="background: var(--card-bg); box-shadow: var(--shadow);">
                   <v-card-text class="pa-6">
@@ -1772,6 +1721,160 @@
 
           <v-tabs-window-item :value="6" class="h-100">
             <div class="h-100 overflow-auto px-6 pb-6">
+              <div class="settings-container mx-auto d-flex flex-column" style="max-width: 720px; gap: 24px;">
+                <CollapsiblePanel title="Saída web para OBS e vMix" subtitle="Transmissão pela rede local" icon="mdi-broadcast" class="mt-6" :hide-first="false">
+                <v-card class="settings-card legacy-panel-content rounded-xl pa-2" flat style="background: var(--card-bg); box-shadow: var(--shadow);">
+                  <v-card-text class="pa-6">
+                    <div class="d-flex align-center mb-5">
+                      <v-icon color="primary" class="mr-3" size="28">
+                        mdi-broadcast
+                      </v-icon>
+                      <div>
+                        <h3 class="font-weight-bold" style="color: var(--sidebar-text); font-size: 1.1rem; line-height: 1.2;">
+                          Saída para transmissão
+                        </h3>
+                        <div class="text-caption" style="color: var(--sidebar-text-secondary);">
+                          Use a URL no Browser Source do OBS ou no Web Input do vMix.
+                        </div>
+                      </div>
+                    </div>
+
+                    <div class="d-flex align-center justify-space-between mb-5" style="gap: 16px; flex-wrap: wrap;">
+                      <div>
+                        <div class="font-weight-bold" style="color: var(--sidebar-text);">
+                          Ativar saída web
+                        </div>
+                        <div class="text-caption" style="color: var(--sidebar-text-secondary);">
+                          Permite que programas na rede acessem a saída de transmissão.
+                        </div>
+                      </div>
+                      <v-switch
+                        :model-value="remote_control_config.webOutputEnabled"
+                        color="primary"
+                        inset
+                        hide-details
+                        :loading="remote_control_loading"
+                        @update:model-value="updateWebOutputEnabled"
+                      />
+                    </div>
+
+                    <v-select
+                      v-if="remote_control_config.webOutputEnabled"
+                      class="mb-5"
+                      label="Conteúdo transmitido"
+                      :items="web_output_source_options"
+                      item-title="title"
+                      item-value="value"
+                      :model-value="remote_control_config.webOutputSource"
+                      variant="outlined"
+                      density="comfortable"
+                      persistent-hint
+                      hint="Somente letra gera uma tarja transparente para sobrepor no OBS/vMix. Projeção e Retorno mostram as telas completas."
+                      :loading="remote_control_loading"
+                      @update:model-value="updateWebOutputSource"
+                    />
+
+                    <div
+                      v-if="remote_control_config.webOutputEnabled && remote_control_config.webOutputSource === 'broadcast'"
+                      class="mb-5 pa-4 rounded-xl"
+                      style="background: var(--main-bg); border: 1px solid var(--border-color);"
+                    >
+                      <div class="d-flex align-center justify-space-between mb-3" style="gap: 16px; flex-wrap: wrap;">
+                        <div>
+                          <div class="font-weight-bold" style="color: var(--sidebar-text);">
+                            Opacidade da faixa preta
+                          </div>
+                          <div class="text-caption" style="color: var(--sidebar-text-secondary);">
+                            Controla o fundo atrás da letra na transmissão.
+                          </div>
+                        </div>
+                        <v-chip color="primary" variant="tonal" class="font-weight-bold">
+                          {{ remote_control_config.broadcastBarOpacity }}%
+                        </v-chip>
+                      </div>
+                      <v-slider
+                        :model-value="remote_control_config.broadcastBarOpacity"
+                        min="0"
+                        max="100"
+                        step="1"
+                        color="primary"
+                        track-color="grey"
+                        hide-details
+                        @update:model-value="updateBroadcastBarOpacity"
+                      />
+                      <div class="d-flex align-center justify-space-between mt-5 mb-3" style="gap: 16px; flex-wrap: wrap;">
+                        <div>
+                          <div class="font-weight-bold" style="color: var(--sidebar-text);">
+                            Tamanho da fonte
+                          </div>
+                          <div class="text-caption" style="color: var(--sidebar-text-secondary);">
+                            Ajusta o tamanho da letra exibida na faixa da transmissão.
+                          </div>
+                        </div>
+                        <v-chip color="primary" variant="tonal" class="font-weight-bold">
+                          {{ remote_control_config.broadcastFontSize }}%
+                        </v-chip>
+                      </div>
+                      <v-slider
+                        :model-value="remote_control_config.broadcastFontSize"
+                        min="50"
+                        max="160"
+                        step="1"
+                        color="primary"
+                        track-color="grey"
+                        hide-details
+                        @update:model-value="updateBroadcastFontSize"
+                      />
+                      <div class="broadcast-preview mt-4">
+                        <div
+                          class="broadcast-preview-bar"
+                          :style="{
+                            backgroundColor: `rgba(0,0,0,${Number(remote_control_config.broadcastBarOpacity || 0) / 100})`,
+                            fontSize: `${Math.max(10, Math.round(20 * Number(remote_control_config.broadcastFontSize || 100) / 100))}px`,
+                          }"
+                        >
+                          DIFERENTE UM DO OUTRO,<br>
+                          MAS PRA DEUS É COMO SE HOUVESSE
+                        </div>
+                      </div>
+                    </div>
+
+                    <v-alert v-if="!remote_control_config.webOutputEnabled" type="info" variant="tonal" density="comfortable" class="rounded-lg">
+                      A transmissão está desativada. O controle remoto pode continuar funcionando normalmente.
+                    </v-alert>
+                    <v-alert v-else-if="!remote_control_running" type="warning" variant="tonal" density="comfortable" class="rounded-lg">
+                      A transmissão ainda não está disponível na rede. Salve/ative a saída web para iniciar o serviço.
+                    </v-alert>
+                    <div v-else-if="web_output_addresses.length" class="d-flex flex-column" style="gap: 12px;">
+                      <div
+                        v-for="address in web_output_addresses"
+                        :key="address"
+                        class="d-flex align-center pa-3 rounded-lg"
+                        style="gap: 10px; background: var(--main-bg); border: 1px solid var(--border-color);"
+                      >
+                        <code style="min-width: 0; flex: 1; overflow-wrap: anywhere; color: var(--sidebar-text);">{{ address }}</code>
+                        <v-btn
+                          icon="mdi-content-copy"
+                          size="small"
+                          variant="tonal"
+                          color="primary"
+                          title="Copiar URL"
+                          @click="copyWebOutputAddress(address)"
+                        />
+                      </div>
+                      <div class="text-body-2" style="color: var(--sidebar-text-secondary);">
+                        Cole uma das URLs no <strong>Browser Source</strong> do OBS ou no <strong>Web Input</strong> do vMix. Defina a fonte como 1920×1080.
+                      </div>
+                    </div>
+                  </v-card-text>
+                </v-card>
+                </CollapsiblePanel>
+              </div>
+            </div>
+          </v-tabs-window-item>
+
+          <v-tabs-window-item :value="7" class="h-100">
+            <div class="h-100 overflow-auto px-6 pb-6">
               <div class="settings-container automation-settings mx-auto d-flex flex-column">
                 <CollapsiblePanel title="Gatilhos de automação" subtitle="Ativação e comportamento geral" icon="mdi-lightning-bolt" class="mt-6" :hide-first="false">
                   <div class="automation-overview" :class="{ active: automation_config.enabled }">
@@ -1785,7 +1888,7 @@
                           {{ automation_config.enabled ? 'Sistema ativo' : 'Sistema desativado' }}
                         </div>
                         <h3>Automação inteligente de áudio</h3>
-                        <p>Execute cenas da Soundcraft junto aos momentos da liturgia, com controle e segurança.</p>
+                        <p>Controle suas mesas digitais junto aos momentos da liturgia.</p>
                       </div>
                       <div class="automation-master-control">
                         <span>{{ automation_config.enabled ? 'Ativado' : 'Desativado' }}</span>
@@ -1800,21 +1903,6 @@
                     </div>
 
                     <div class="automation-options-grid">
-                      <label class="automation-option">
-                        <span class="automation-option-icon"><v-icon size="21">mdi-flask-outline</v-icon></span>
-                        <span class="automation-option-copy">
-                          <strong>Modo simulação</strong>
-                          <small>Valide os comandos sem alterar o áudio da mesa.</small>
-                        </span>
-                        <v-switch
-                          v-model="automation_config.simulationMode"
-                          color="primary"
-                          inset
-                          hide-details
-                          density="compact"
-                          aria-label="Ativar modo simulação"
-                        />
-                      </label>
                       <label class="automation-option">
                         <span class="automation-option-icon"><v-icon size="21">mdi-eye-outline</v-icon></span>
                         <span class="automation-option-copy">
@@ -1834,23 +1922,29 @@
                   </div>
                 </CollapsiblePanel>
 
-                <CollapsiblePanel title="Dispositivo Soundcraft Ui" subtitle="Conexão com a mesa de áudio" icon="mdi-mixer">
-                  <div class="automation-device-card">
+                <CollapsiblePanel title="Mesas de som" subtitle="Soundcraft Ui, Behringer X32 / X Air e Midas M32" icon="mdi-mixer">
+                  <div class="device-card-footer mb-4">
+                    <v-btn color="primary" variant="tonal" prepend-icon="mdi-plus" @click="addAutomationDevice">Adicionar mesa</v-btn>
+                    <v-btn color="primary" prepend-icon="mdi-content-save-outline" :loading="automation_loading" @click="saveAutomationConfig">Salvar automação</v-btn>
+                  </div>
+                  <p v-if="!automation_config.devices.length" class="mb-4">Adicione uma mesa e informe o endereço dela na rede local.</p>
+                  <div v-for="device in automation_config.devices" :key="device.id" class="automation-device-card mb-4">
                     <div class="device-card-intro">
                       <div class="device-visual">
                         <v-icon size="26">mdi-mixer</v-icon>
                         <span class="device-signal"><i /><i /><i /></span>
                       </div>
                       <div>
-                        <span class="automation-eyebrow">Dispositivo principal</span>
-                        <h3>Soundcraft Ui</h3>
+                        <span class="automation-eyebrow">Mesa de som</span>
+                        <h3>{{ device.name || 'Nova mesa' }}</h3>
                         <p>Informe o endereço da mesa conectada à mesma rede deste computador.</p>
                       </div>
                     </div>
 
                     <div class="device-fields">
+                      <v-select v-model="device.model" :items="automationModelOptions" label="Modelo da mesa" variant="outlined" density="comfortable" hide-details @update:model-value="changeAutomationModel(device)" />
                       <v-text-field
-                        v-model="automation_device.name"
+                        v-model="device.name"
                         label="Nome do dispositivo"
                         prepend-inner-icon="mdi-tag-outline"
                         variant="outlined"
@@ -1858,7 +1952,7 @@
                         hide-details
                       />
                       <v-text-field
-                        v-model="automation_device.ip"
+                        v-model="device.ip"
                         label="Endereço IP"
                         placeholder="192.168.0.80"
                         prepend-inner-icon="mdi-ip-network-outline"
@@ -1866,6 +1960,7 @@
                         density="comfortable"
                         hide-details
                       />
+                      <v-text-field v-if="device.type !== 'soundcraft-ui'" v-model.number="device.port" type="number" min="1" max="65535" label="Porta UDP" variant="outlined" density="comfortable" hide-details />
                     </div>
 
                     <div class="device-card-footer">
@@ -1880,19 +1975,18 @@
                         class="text-none font-weight-bold"
                         prepend-icon="mdi-lan-connect"
                         :loading="automation_loading"
-                        @click="testAutomationDevice"
+                        @click="testAutomationDevice(device)"
                       >
                         Testar conexão
                       </v-btn>
                       <v-btn
-                        color="primary"
-                        variant="flat"
+                        color="error"
+                        variant="text"
                         class="text-none font-weight-bold"
-                        prepend-icon="mdi-content-save-outline"
-                        :loading="automation_loading"
-                        @click="saveAutomationConfig"
+                        prepend-icon="mdi-delete-outline"
+                        @click="removeAutomationDevice(device.id)"
                       >
-                        Salvar automação
+                        Remover mesa
                       </v-btn>
                       </div>
                     </div>
@@ -1988,11 +2082,13 @@
                         <div class="trigger-action-title">
                           <span><v-icon size="17">mdi-tune-vertical</v-icon></span>
                           <div><strong>Ação {{ Number(actionIndex) + 1 }}</strong><small>Comando executado pela mesa</small></div>
+                          <v-btn icon="mdi-delete-outline" variant="text" size="small" aria-label="Remover ação" @click="trigger.actions.splice(actionIndex, 1)" />
                         </div>
                         <div class="trigger-action-grid">
-                          <v-select v-model="action.operation" :items="automationOperationOptions" label="Ação" prepend-inner-icon="mdi-playlist-play" variant="outlined" density="comfortable" hide-details />
-                          <v-select v-model="action.target" :items="automationTargetOptions" label="Alvo" prepend-inner-icon="mdi-target" variant="outlined" density="comfortable" hide-details />
-                          <v-text-field v-if="action.target === 'input'" v-model.number="action.channel" type="number" label="Canal" min="1" max="16" variant="outlined" density="comfortable" hide-details />
+                          <v-select v-model="action.deviceId" :items="automationDeviceOptions" label="Mesa de destino" variant="outlined" density="comfortable" hide-details @update:model-value="updateAutomationActionDevice(action)" />
+                          <v-select v-model="action.operation" :items="automationOperationsFor(action)" label="Ação" prepend-inner-icon="mdi-playlist-play" variant="outlined" density="comfortable" hide-details />
+                          <v-select v-model="action.target" :items="automationTargetsFor(action)" label="Alvo" prepend-inner-icon="mdi-target" variant="outlined" density="comfortable" hide-details />
+                          <v-text-field v-if="action.target === 'input'" v-model.number="action.channel" type="number" label="Canal" min="1" :max="automationInputCount(action)" variant="outlined" density="comfortable" hide-details />
                           <v-text-field v-if="['setFaderLevelDB', 'fadeToDB'].includes(action.operation)" v-model.number="action.valueDB" type="number" label="Volume dB" min="-90" max="10" variant="outlined" density="comfortable" hide-details />
                           <v-text-field v-if="action.operation === 'fadeToDB'" v-model.number="action.fadeMs" type="number" label="Fade (ms)" min="0" variant="outlined" density="comfortable" hide-details />
                         </div>
@@ -2009,6 +2105,7 @@
 
                       <div class="trigger-card-footer">
                         <span><v-icon size="16">mdi-shield-check-outline</v-icon> Teste antes de usar na apresentação</span>
+                        <v-btn variant="tonal" prepend-icon="mdi-plus" @click="addAutomationAction(trigger)">Adicionar ação</v-btn>
                         <v-btn
                           color="primary"
                           variant="tonal"
@@ -2040,6 +2137,7 @@ import ModernColorPicker from "@/components/inputs/ModernColorPicker.vue";
 import ConfigMiniPreview from "./ConfigMiniPreview.vue";
 import CollapsiblePanel from "./CollapsiblePanel.vue";
 import $media from "@/helpers/Media";
+import { mixerProfiles, getMixerProfile, mixerTargetOptions, normalizeMixerDevice, validateMixerConfig } from "../../../../../electron/MixerProfiles";
 
 export default {
   name: manifest.id,
@@ -2057,7 +2155,8 @@ export default {
       { value: 3, label: "Mídia e player", icon: "mdi-play-box-multiple-outline" },
       { value: 4, label: "Projeção e telas", icon: "mdi-monitor-multiple" },
       { value: 5, label: "Controle remoto", icon: "mdi-remote" },
-      { value: 6, label: "Automação", icon: "mdi-lightning-bolt-outline" },
+      { value: 6, label: "Transmissão", icon: "mdi-broadcast" },
+      { value: 7, label: "Automação", icon: "mdi-lightning-bolt-outline" },
     ],
     language: "pt",
     accent_color: "#0097d7",
@@ -2139,32 +2238,33 @@ export default {
       remote_control_error: "",
     remote_control_addresses: [],
     web_output_addresses: [],
+    virtual_monitor_addresses: [],
+    virtual_monitor_supported: false,
     web_output_source_options: [
       { title: "Projeção", value: "projection" },
       { title: "Retorno", value: "return_monitor" },
+      { title: "Somente letra (transparente)", value: "broadcast" },
     ],
     remote_control_qr_code: "",
     remote_control_network_options: [],
     show_remote_control_password: false,
+    broadcast_save_timer: null,
     remote_control_config: {
+      virtualMonitorEnabled: false,
       enabled: true,
       webOutputEnabled: true,
       webOutputSource: "projection",
+      broadcastBarOpacity: 72,
+      broadcastFontSize: 100,
       host: "0.0.0.0",
       port: 1975,
       password: "",
       requirePassword: false,
     },
     automation_loading: false,
-    automation_device: {
-      id: "soundcraft_ui16",
-      name: "Soundcraft Ui16",
-      type: "soundcraft-ui",
-      ip: "",
-    },
+    automationModelOptions: mixerProfiles.map(profile => ({ title: profile.name, value: profile.id })),
     automation_config: {
       enabled: false,
-      simulationMode: false,
       showStatus: true,
       devices: [],
       triggers: [],
@@ -2175,16 +2275,13 @@ export default {
       { title: "Mutar", value: "mute" },
       { title: "Desmutar", value: "unmute" },
     ],
-    automationTargetOptions: [
-      { title: "Canal de entrada", value: "input" },
-      { title: "Line In L", value: "line-left" },
-      { title: "Line In R", value: "line-right" },
-      { title: "Master", value: "master" },
-    ],
     
     manifest,
   }),
   computed: {
+    automationDeviceOptions() {
+      return this.automation_config.devices.map(device => ({ title: device.name || 'Nova mesa', value: device.id }));
+    },
     module_id() {
       return manifest.id;
     },
@@ -2198,7 +2295,8 @@ export default {
         3: "Organize reprodução, áudio e vídeo",
         4: "Configure projeção, retorno e monitores",
         5: "Conecte dispositivos pela rede local",
-        6: "Crie ações automáticas para sua operação",
+        6: "Configure a saída para OBS, vMix e lives",
+        7: "Crie ações automáticas para sua operação",
       }[this.tab] || "Ajuste o IASDPresenter ao seu fluxo de trabalho";
     },
     active_theme_mode: {
@@ -2220,8 +2318,8 @@ export default {
         ];
       }
       return this.rawDisplays.map((d, index) => ({
-        title: `Monitor ${Number(index) + 1} ${d.isPrimary ? "(Principal)" : "(Estendido)"}`,
-        detailTitle: `Monitor ${Number(index) + 1} - ${d.bounds.width}x${d.bounds.height} - X:${d.bounds.x} Y:${d.bounds.y}${d.isPrimary ? " - Principal" : ""}`,
+        title: d.isVirtual ? "Monitor virtual (Rede)" : `Monitor ${Number(index) + 1} ${d.isPrimary ? "(Principal)" : "(Estendido)"}`,
+        detailTitle: d.isVirtual ? "Monitor virtual - 1920x1080 - Rede" : `Monitor ${Number(index) + 1} - ${d.bounds.width}x${d.bounds.height} - X:${d.bounds.x} Y:${d.bounds.y}${d.isPrimary ? " - Principal" : ""}`,
         detail: `${d.bounds.width}x${d.bounds.height} | X:${d.bounds.x} Y:${d.bounds.y}${d.isPrimary ? " | Principal" : ""}`,
         value: d.id,
         isPrimary: d.isPrimary,
@@ -2617,15 +2715,19 @@ export default {
     },
     applyRemoteControlStatus(status) {
       if (!status) return;
+      this.virtual_monitor_supported = typeof status.config?.virtualMonitorEnabled === "boolean"
+        && Array.isArray(status.virtualMonitorAddresses);
       this.remote_control_running = status.running === true;
       this.remote_control_error = status.error || "";
       this.remote_control_addresses = status.addresses || [];
       this.web_output_addresses = status.outputAddresses || [];
+      this.virtual_monitor_addresses = status.virtualMonitorAddresses || [];
       this.remote_control_qr_code = status.qrCode || "";
       this.remote_control_network_options = status.networkOptions || [];
       this.remote_control_config = {
         ...this.remote_control_config,
         ...(status.config || {}),
+        virtualMonitorEnabled: this.virtual_monitor_supported && status.config.virtualMonitorEnabled === true,
       };
     },
     async loadRemoteControlStatus() {
@@ -2634,6 +2736,7 @@ export default {
       try {
         const status = await window.electronAPI.getRemoteControlStatus();
         this.applyRemoteControlStatus(status);
+        await this.refreshMonitorDisplays();
       } finally {
         this.remote_control_loading = false;
       }
@@ -2646,17 +2749,59 @@ export default {
         this.$alert.error({ text: "Não foi possível copiar a URL.", error, translate: false });
       }
     },
+    async updateVirtualMonitorEnabled(value) {
+      if (!this.virtual_monitor_supported) return;
+      this.remote_control_config.virtualMonitorEnabled = value === true;
+      await this.saveRemoteControlConfig();
+      await this.loadRemoteControlStatus();
+    },
+    async refreshMonitorDisplays() {
+      if (!window.electronAPI?.getDisplays) return;
+      const displays = await window.electronAPI.getDisplays();
+      this.$appdata.set("system_displays", displays || []);
+    },
+    async restartForVirtualMonitor() {
+      try {
+        if (!window.electronAPI?.restartApp) throw new Error("Feche e abra o aplicativo novamente.");
+        await window.electronAPI.restartApp();
+      } catch (error) {
+        this.$alert.error({ text: "Feche e abra o aplicativo novamente para carregar o monitor virtual.", error, translate: false });
+      }
+    },
+    async copyVirtualMonitorAddress(address) {
+      try {
+        await navigator.clipboard.writeText(address);
+        this.$alert.info({ text: "Endereço do monitor virtual copiado.", translate: false });
+      } catch (error) {
+        this.$alert.error({ text: "Não foi possível copiar o endereço.", error, translate: false });
+      }
+    },
     async updateWebOutputEnabled(value) {
       this.remote_control_config.webOutputEnabled = value === true;
       await this.saveRemoteControlConfig();
     },
     async updateWebOutputSource(value) {
-      this.remote_control_config.webOutputSource = value === "return_monitor" ? "return_monitor" : "projection";
+      this.remote_control_config.webOutputSource = ["return_monitor", "broadcast"].includes(value) ? value : "projection";
       await this.saveRemoteControlConfig();
     },
-    async saveRemoteControlConfig() {
+    async updateBroadcastBarOpacity(value) {
+      this.remote_control_config.broadcastBarOpacity = Math.max(0, Math.min(100, Math.round(Number(value) || 0)));
+      this.scheduleSilentBroadcastSave();
+    },
+    async updateBroadcastFontSize(value) {
+      this.remote_control_config.broadcastFontSize = Math.max(50, Math.min(160, Math.round(Number(value) || 100)));
+      this.scheduleSilentBroadcastSave();
+    },
+    scheduleSilentBroadcastSave() {
+      window.clearTimeout(this.broadcast_save_timer);
+      this.broadcast_save_timer = window.setTimeout(() => {
+        this.saveRemoteControlConfig({ silent: true });
+      }, 250);
+    },
+    async saveRemoteControlConfig(options: { silent?: boolean } = {}) {
+      const silent = options?.silent === true;
       if (!window.electronAPI?.saveRemoteControlConfig) {
-        this.$alert.error({ text: "Configuração disponível apenas na versão desktop.", translate: false });
+        if (!silent) this.$alert.error({ text: "Configuração disponível apenas na versão desktop.", translate: false });
         return;
       }
 
@@ -2667,9 +2812,10 @@ export default {
           port: Number(this.remote_control_config.port),
         });
         this.applyRemoteControlStatus(status);
-        this.$alert.info({ text: "Configurações do controle remoto salvas.", translate: false });
+        await this.refreshMonitorDisplays();
+        if (!silent) this.$alert.info({ text: "Configurações salvas.", translate: false });
       } catch (error) {
-        this.$alert.error({ text: "Não foi possível salvar as configurações do controle remoto.", error, translate: false });
+        if (!silent) this.$alert.error({ text: "Não foi possível salvar as configurações.", error, translate: false });
       } finally {
         this.remote_control_loading = false;
       }
@@ -2697,38 +2843,58 @@ export default {
     newAutomationId(prefix) {
       return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
     },
-    normalizeAutomationTarget(value) {
-      return String(value || "")
-        .trim()
-        .replace(/^https?:\/\//i, "")
-        .replace(/^wss?:\/\//i, "")
-        .split("/")[0]
-        .trim();
+    addAutomationDevice() {
+      this.automation_config.devices.push({
+        id: this.newAutomationId("mixer"), name: "Soundcraft Ui16",
+        type: "soundcraft-ui", model: "ui16", ip: "", port: 0,
+      });
+    },
+    removeAutomationDevice(id) {
+      if (this.automation_config.triggers.some(trigger => trigger.actions.some(action => action.deviceId === id))) {
+        this.$alert.error({ text: "Esta mesa está em uso. Escolha outra mesa nas ações ou remova as ações antes de excluí-la.", translate: false });
+        return;
+      }
+      this.automation_config.devices = this.automation_config.devices.filter(device => device.id !== id);
+    },
+    changeAutomationModel(device) {
+      const profile = mixerProfiles.find(item => item.id === device.model);
+      if (!profile) return;
+      if (!device.name || mixerProfiles.some(item => item.name === device.name)) device.name = profile.name;
+      device.type = profile.type;
+      device.port = profile.port;
+    },
+    automationTargetsFor(action) {
+      return mixerTargetOptions(this.automation_config.devices.find(device => device.id === action.deviceId));
+    },
+    automationOperationsFor(action) {
+      const device = this.automation_config.devices.find(item => item.id === action.deviceId);
+      return device?.type === "soundcraft-ui" && action.target === "master"
+        ? this.automationOperationOptions.filter(option => !["mute", "unmute"].includes(option.value))
+        : this.automationOperationOptions;
+    },
+    automationInputCount(action) {
+      return getMixerProfile(this.automation_config.devices.find(device => device.id === action.deviceId))?.inputs || 1;
+    },
+    updateAutomationActionDevice(action) {
+      if (!this.automationTargetsFor(action).some(item => item.value === action.target)) action.target = "input";
+      if (action.channel > this.automationInputCount(action)) action.channel = 1;
     },
     normalizeAutomationConfig(config = this.automation_config) {
-      const device = {
-        ...this.automation_device,
-        id: this.automation_device.id || "soundcraft_ui16",
-        type: "soundcraft-ui",
-        ip: this.normalizeAutomationTarget(this.automation_device.ip),
-      };
-
       return {
         enabled: config.enabled === true,
-        simulationMode: config.simulationMode === true,
         showStatus: config.showStatus !== false,
-        devices: device.ip ? [device] : [],
+        devices: (config.devices || []).map(normalizeMixerDevice),
         triggers: (config.triggers || []).map(trigger => ({
           ...trigger,
           actions: (trigger.actions || []).map(action => ({
             ...action,
-            deviceId: device.id,
-            channel: Number(action.channel) || 1,
-            valueDB: Number(action.valueDB),
-            fadeMs: Number(action.fadeMs) || 0,
+            deviceId: action.deviceId,
+            channel: Number(action.channel ?? 1),
+            valueDB: Number(action.valueDB ?? 0),
+            fadeMs: Number(action.fadeMs ?? 0),
             restoreOnMediaEnd: action.restoreOnMediaEnd === true,
-            endValueDB: Number.isFinite(Number(action.endValueDB)) ? Number(action.endValueDB) : Number(action.valueDB),
-            endFadeMs: Number(action.endFadeMs ?? action.fadeMs) || 0,
+            endValueDB: Number(action.endValueDB ?? action.valueDB ?? 0),
+            endFadeMs: Number(action.endFadeMs ?? action.fadeMs ?? 0),
           })),
         })),
       };
@@ -2738,24 +2904,16 @@ export default {
       this.automation_config = {
         ...this.automation_config,
         ...config,
-        devices: Array.isArray(config.devices) ? config.devices : [],
+        devices: Array.isArray(config.devices) ? config.devices.map(normalizeMixerDevice) : [],
         triggers: Array.isArray(config.triggers) ? config.triggers.map(trigger => ({
           ...trigger,
           actions: Array.isArray(trigger.actions) ? trigger.actions.map(action => ({
             ...action,
-            endValueDB: Number.isFinite(Number(action.endValueDB)) ? Number(action.endValueDB) : Number(action.valueDB),
-            endFadeMs: Number(action.endFadeMs ?? action.fadeMs) || 0,
+            endValueDB: Number(action.endValueDB ?? action.valueDB ?? 0),
+            endFadeMs: Number(action.endFadeMs ?? action.fadeMs ?? 0),
           })) : [],
         })) : [],
       };
-
-      const device = this.automation_config.devices.find(item => item.type === "soundcraft-ui");
-      if (device) {
-        this.automation_device = {
-          ...this.automation_device,
-          ...device,
-        };
-      }
     },
     async loadAutomationConfig() {
       const saved = this.$userdata.get("modules.config.automation");
@@ -2774,6 +2932,7 @@ export default {
       const config = this.normalizeAutomationConfig();
       this.automation_loading = true;
       try {
+        validateMixerConfig(config);
         let saved = config;
         if (window.electronAPI?.saveAutomationConfig) {
           saved = await window.electronAPI.saveAutomationConfig(config);
@@ -2781,57 +2940,62 @@ export default {
         this.applyAutomationConfig(saved);
         this.$userdata.set("modules.config.automation", saved);
         this.$alert.info({ text: "Configurações de automação salvas.", translate: false });
+        return true;
       } catch (error) {
-        this.$alert.error({ text: "Não foi possível salvar a automação.", error, translate: false });
+        this.$alert.error({ text: error.message || "Não foi possível salvar a automação.", error, translate: false });
+        return false;
       } finally {
         this.automation_loading = false;
       }
     },
     addAutomationTrigger() {
-      const deviceId = this.automation_device.id || "soundcraft_ui16";
-      this.automation_config.triggers.push({
+      const trigger = {
         id: this.newAutomationId("trigger"),
         name: "Vídeo",
         enabled: true,
-        actions: [{
+        actions: [],
+      };
+      this.addAutomationAction(trigger);
+      this.automation_config.triggers.push(trigger);
+    },
+    addAutomationAction(trigger) {
+      trigger.actions.push({
           id: this.newAutomationId("action"),
-          deviceId,
+          deviceId: this.automation_config.devices[0]?.id || "",
           target: "input",
-          channel: 9,
+          channel: 1,
           operation: "fadeToDB",
           valueDB: -18,
           fadeMs: 800,
           restoreOnMediaEnd: false,
           endValueDB: 0,
           endFadeMs: 800,
-        }],
       });
     },
     removeAutomationTrigger(index) {
       this.automation_config.triggers.splice(index, 1);
     },
-    async testAutomationDevice() {
+    async testAutomationDevice(device) {
       if (!window.electronAPI?.testAutomationDevice) {
         this.$alert.error({ text: "Teste disponível apenas na versão desktop.", translate: false });
         return;
       }
       this.automation_loading = true;
       try {
-        const result = await window.electronAPI.testAutomationDevice({
-          ...this.automation_device,
-          ip: this.normalizeAutomationTarget(this.automation_device.ip),
-        });
+        const result = await window.electronAPI.testAutomationDevice(normalizeMixerDevice(device));
         if (result.ok) {
-          this.$alert.info({ text: "Conexão com a Soundcraft Ui realizada.", translate: false });
+          this.$alert.info({ text: `Conexão com ${device.name} realizada.`, translate: false });
         } else {
           this.$alert.error({ text: result.error || "Não foi possível conectar na mesa.", translate: false });
         }
+      } catch (error) {
+        this.$alert.error({ text: "Não foi possível conectar na mesa.", error, translate: false });
       } finally {
         this.automation_loading = false;
       }
     },
     async testAutomationTrigger(trigger) {
-      await this.saveAutomationConfig();
+      if (!await this.saveAutomationConfig()) return;
       if (!window.electronAPI?.testAutomationTrigger) return;
       this.automation_loading = true;
       try {
@@ -3139,6 +3303,33 @@ export default {
 .monitor-neck { width: 36px; height: 17px; background: linear-gradient(to right, #17263a, #31445d 50%, #17263a); }.monitor-device.primary .monitor-neck { background: linear-gradient(to right, #092849, #14629b 50%, #092849); }.monitor-base { width: 92px; height: 7px; border-radius: 99px 99px 5px 5px; background: linear-gradient(to right, #17263a, #3a506c 50%, #17263a); box-shadow: 0 5px 10px rgba(0,0,0,.16); }.monitor-device.primary .monitor-base { background: linear-gradient(to right, #092849, #1680bd 50%, #092849); }
 .monitor-meta { width: 238px; margin-top: 13px; padding: 10px 12px; display: flex; align-items: center; justify-content: space-between; gap: 8px; border: 1px solid var(--border-color); border-radius: 11px; background: color-mix(in srgb, var(--card-bg) 92%, var(--main-bg)); }.monitor-meta span { min-width: 0; display: flex; align-items: center; gap: 6px; color: var(--sidebar-text); font-size: 10px; font-weight: 650; }.monitor-meta span i { width: 6px; height: 6px; flex: 0 0 6px; border-radius: 50%; background: #8090a6; }.monitor-meta span.online i { background: #21c77a; box-shadow: 0 0 7px rgba(33,199,122,.55); }.monitor-meta small { flex: 0 0 auto; color: var(--sidebar-text-secondary); font-size: 9px; }
 .automation-settings { max-width: 1080px !important; }
+.broadcast-preview {
+  height: 126px;
+  display: flex;
+  align-items: end;
+  overflow: hidden;
+  border: 1px solid var(--border-color);
+  border-radius: 16px;
+  background:
+    linear-gradient(135deg, rgba(var(--accent-blue-rgb), .16), transparent 42%),
+    color-mix(in srgb, var(--main-bg) 70%, #000);
+}
+.broadcast-preview-bar {
+  width: 100%;
+  min-height: 72px;
+  padding: 12px 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  text-align: center;
+  text-transform: uppercase;
+  font-size: 20px;
+  font-weight: 950;
+  line-height: 1.08;
+  letter-spacing: .02em;
+  text-shadow: 0 2px 0 #000, 2px 2px 0 rgba(0,0,0,.95), 0 0 8px rgba(0,0,0,.9);
+}
 .automation-overview,
 .automation-device-card,
 .triggers-workspace { overflow: hidden; border: 1px solid var(--border-color); border-radius: 18px; background: color-mix(in srgb, var(--card-bg) 97%, var(--main-bg)); box-shadow: 0 12px 32px rgba(15, 37, 68, .07); }
@@ -3159,7 +3350,7 @@ export default {
 .automation-master-control { min-width: 138px; padding: 9px 12px 9px 15px; display: flex; align-items: center; justify-content: space-between; gap: 8px; border: 1px solid var(--border-color); border-radius: 13px; background: color-mix(in srgb, var(--card-bg) 82%, transparent); }
 .automation-master-control > span { color: var(--sidebar-text); font-size: 11px; font-weight: 750; }
 .automation-master-control :deep(.v-switch) { flex: 0 0 auto; }
-.automation-options-grid { position: relative; z-index: 1; margin-top: 22px; padding-top: 18px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; border-top: 1px solid var(--border-color); }
+.automation-options-grid { position: relative; z-index: 1; margin-top: 22px; padding-top: 18px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; border-top: 1px solid var(--border-color); }
 .automation-option { min-width: 0; padding: 13px 14px; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 11px; border: 1px solid var(--border-color); border-radius: 13px; background: color-mix(in srgb, var(--card-bg) 84%, transparent); cursor: pointer; transition: border-color .18s ease, background .18s ease, transform .18s ease; }
 .automation-option:hover { border-color: rgba(var(--accent-blue-rgb), .34); background: color-mix(in srgb, var(--card-bg) 90%, var(--accent-soft)); transform: translateY(-1px); }
 .automation-option-icon { width: 36px; height: 36px; display: grid; place-items: center; color: var(--accent-blue); border-radius: 10px; background: var(--accent-soft); }

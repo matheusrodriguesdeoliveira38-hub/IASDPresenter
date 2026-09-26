@@ -16,7 +16,7 @@
     "language": "Idioma",
     "language_desc": "Idioma de interfaz de la aplicación",
     "primary_hymnal": "Himnario principal",
-    "primary_hymnal_desc": "Prioriza esta edición en las búsquedas por número",
+    "primary_hymnal_desc": "En las búsquedas, muestra solo la edición seleccionada del himnario",
     "primary_hymnal_current": "Himnario Adventista",
     "primary_hymnal_1996": "Himnario Adventista 1996",
     "home_layout": "Diseño de Inicio",

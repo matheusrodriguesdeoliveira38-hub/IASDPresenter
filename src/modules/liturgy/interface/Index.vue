@@ -13,6 +13,9 @@
           </h2>
         </div>
         <div class="d-flex align-center flex-shrink-0" style="gap: 8px;">
+<v-btn variant="tonal" color="primary" prepend-icon="mdi-calendar-clock" @click="showScheduledManager = true">
+Itens Agendados
+</v-btn>
           <v-btn
             icon
             variant="tonal"
@@ -153,7 +156,7 @@
                 rounded="lg"
                 class="text-none font-weight-bold px-5"
                 prepend-icon="mdi-plus"
-                @click="showAddMenu = true; addStep = 1"
+                @click="openAddMenu()"
               >
                 {{ t('add_item') }}
               </v-btn>
@@ -181,25 +184,50 @@
               handle=".drag-handle"
               ghost-class="liturgy-ghost"
               animation="200"
-              @end="saveLiturgy"
+              @start="startItemDrag"
+              @end="finishItemDrag"
             >
               <template #item="{ element, index }">
                 <div
                   v-if="element.type === 'category'"
                   class="liturgy-category-item"
                   :class="{ 'liturgy-item-active': selectedItemIndex === index }"
-                  @click="selectItem(index)"
+                  @click="toggleCategory(element)"
                 >
                   <v-icon class="drag-handle mr-2" size="18" style="cursor: grab; opacity: 0.3;">
                     mdi-drag-vertical
                   </v-icon>
-                  <v-icon color="warning" size="18" class="mr-2">
-                    mdi-tag
-                  </v-icon>
+                  <v-btn
+                    icon
+                    size="x-small"
+                    variant="text"
+                    :aria-label="t(element.collapsed ? 'actions.expand_category' : 'actions.collapse_category')"
+                    :aria-expanded="!element.collapsed"
+                    @click.stop="toggleCategory(element)"
+                  >
+                    <v-icon size="18">
+                      {{ element.collapsed ? 'mdi-chevron-right' : 'mdi-chevron-down' }}
+                    </v-icon>
+                  </v-btn>
                   <span class="font-weight-black text-uppercase" style="font-size: 0.85rem; letter-spacing: 1px; color: var(--sidebar-text);">
                     {{ element.name }}
                   </span>
+                  <span class="text-caption ml-2" style="color: var(--sidebar-text-secondary);">{{ categoryItemCount(index) }}</span>
                   <v-spacer />
+                  <v-btn
+                    icon
+                    size="x-small"
+                    variant="text"
+                    :aria-label="t('actions.add_subitem')"
+                    @click.stop="openAddMenu(element.id)"
+                  >
+                    <v-icon size="16">
+                      mdi-plus
+                    </v-icon>
+                    <v-tooltip activator="parent" location="top">
+                      {{ t('actions.add_subitem') }}
+                    </v-tooltip>
+                  </v-btn>
                   <v-btn
                     icon
                     size="x-small"
@@ -241,8 +269,9 @@
 
                 <div
                   v-else
+                  v-show="!itemCategory(index)?.collapsed"
                   class="liturgy-item"
-                  :class="{ 'liturgy-item-active': selectedItemIndex === index }"
+                  :class="{ 'liturgy-item-active': selectedItemIndex === index, 'liturgy-subitem': !!itemCategory(index) }"
                   @click="selectItem(index)"
                 >
                   <v-icon class="drag-handle mr-3" size="18" style="cursor: grab; opacity: 0.3;">
@@ -273,7 +302,7 @@
                   </v-icon>
                   <div class="flex-grow-1 d-flex flex-column" style="min-width: 0;" :style="element.done ? 'opacity: 0.5; text-decoration: line-through;' : ''">
                     <div class="font-weight-bold" style="font-size: 0.95rem; color: var(--sidebar-text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
-                      {{ element.name ? element.name.replace(/^undefined\s*-\s*/, '') : '' }}
+                      {{ itemDisplayName(element) }}
                     </div>
                     <div v-if="element.subtitle" class="text-caption" style="color: var(--sidebar-text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
                       {{ element.subtitle }}
@@ -300,7 +329,7 @@
                         {{ getExecuteTooltip(element.type) }}
                       </v-tooltip>
                     </v-btn>
-                    <template v-if="element.type === 'music'">
+                    <template v-if="element.type === 'music' && element.musicId">
                       <v-btn
                         icon
                         size="x-small"
@@ -500,7 +529,7 @@
               <v-card-text class="px-6 pb-2 pt-4">
                 <!-- Name -->
                 <v-text-field
-                  v-model="addForm.name"
+                  v-if="addForm.type !== 'scheduled_item'" v-model="addForm.name"
                   :label="t('fields.name')"
                   variant="outlined"
                   rounded="lg"
@@ -511,6 +540,27 @@
                   autofocus
                 />
 
+                <v-select
+                  v-if="addForm.type !== 'category'"
+                  v-model="addForm.categoryId"
+                  :items="categoryOptions"
+                  :label="t('fields.category')"
+                  variant="outlined"
+                  rounded="lg"
+                  density="comfortable"
+                  hide-details
+                  class="modern-input-no-thick mb-4"
+                />
+
+                <div v-if="addForm.type === 'scheduled_item'" class="mb-4">
+                  <v-select v-model="addForm.scheduledCategoryId" :items="scheduledCategories" item-title="name" item-value="id" label="Categoria agendada" variant="outlined" rounded="lg" />
+                  <v-alert v-if="!scheduledCategories.length" type="info" variant="tonal" class="mb-3">
+                    Crie uma categoria em Itens Agendados para incluí-la na programação.
+                  </v-alert>
+                  <v-btn variant="tonal" @click="showScheduledManager = true">
+                    Gerenciar Itens Agendados
+                  </v-btn>
+                </div>
                 <!-- Description (annotation only) -->
                 <v-textarea
                   v-if="addForm.type === 'annotation'"
@@ -574,6 +624,16 @@
                       </v-list-item>
                     </template>
                   </v-autocomplete>
+                  <v-btn
+                    v-if="!addForm.musicId"
+                    variant="text"
+                    size="small"
+                    class="text-none font-weight-regular mt-2 px-2"
+                    style="color: var(--sidebar-text-secondary);"
+                    @click="chooseMusicLater"
+                  >
+                    {{ t('actions.choose_later') }}
+                  </v-btn>
                 </div>
 
                 <!-- Verse selector -->
@@ -683,6 +743,16 @@
                   >
                     {{ addForm.filePath ? 'Trocar Arquivo' : t('fields.select_file') }}
                   </v-btn>
+                  <v-btn
+                    v-if="!addForm.filePath"
+                    variant="text"
+                    size="small"
+                    class="text-none font-weight-regular mt-2 px-2"
+                    style="color: var(--sidebar-text-secondary);"
+                    @click="chooseMediaLater"
+                  >
+                    {{ t('actions.choose_later') }}
+                  </v-btn>
                   <div v-if="addForm.filePath" class="text-caption mt-2" style="color: var(--sidebar-text-secondary); word-break: break-all;">
                     {{ addForm.filePath }}
                   </div>
@@ -760,6 +830,82 @@
         </v-card>
       </v-dialog>
 
+      <v-dialog v-model="showScheduledManager" :theme="$theme.primary()" max-width="1060" :z-index="10010" content-class="scheduled-dialog-wrapper" scrollable>
+        <v-card class="modern-alert-card rounded-xl scheduled-manager">
+          <div class="scheduled-header">
+            <div class="scheduled-icon"><v-icon size="26">mdi-calendar-clock</v-icon></div>
+            <div class="flex-grow-1">
+              <h2>Itens Agendados</h2>
+              <p>Um lugar na programação. O arquivo certo a cada dia.</p>
+            </div>
+            <v-btn icon="mdi-close" size="small" variant="text" aria-label="Fechar" @click="showScheduledManager = false" />
+          </div>
+          <v-card-text class="pa-0 scheduled-body">
+            <aside class="scheduled-sidebar">
+              <div class="scheduled-section-label">CATEGORIAS <span>{{ scheduledCategories.length }}</span></div>
+              <div class="scheduled-category-list">
+                <button v-for="category in scheduledCategories" :key="category.id" type="button" class="scheduled-category" :class="{ 'is-selected': selectedScheduledCategoryId === category.id }" :aria-pressed="selectedScheduledCategoryId === category.id" @click="selectScheduledCategory(category.id)">
+                  <v-icon size="20">mdi-folder-outline</v-icon>
+                  <span class="scheduled-category-name">{{ category.name }}<small>{{ category.items.length }} {{ category.items.length === 1 ? 'arquivo' : 'arquivos' }}</small></span>
+                  <v-icon v-if="selectedScheduledCategoryId === category.id" size="16">mdi-chevron-right</v-icon>
+                </button>
+                <p v-if="!scheduledCategories.length" class="scheduled-muted text-body-2">Crie sua primeira categoria para começar.</p>
+              </div>
+              <form class="scheduled-create" @submit.prevent="createScheduledCategory">
+                <v-text-field v-model="newScheduledCategoryName" placeholder="Nome da categoria" aria-label="Nome da nova categoria" variant="outlined" rounded="lg" density="compact" hide-details class="modern-input-no-thick" />
+                <v-btn type="submit" block variant="tonal" color="primary" prepend-icon="mdi-plus" rounded="lg" :disabled="!newScheduledCategoryName.trim()">Criar categoria</v-btn>
+              </form>
+              <div class="scheduled-sidebar-tip"><v-icon size="18">mdi-lightbulb-outline</v-icon><span>Use nomes como Provai e Vede ou Informativo Mundial.</span></div>
+            </aside>
+            <main class="scheduled-content">
+              <template v-if="selectedScheduledCategory">
+                <div class="d-flex align-center ga-3 mb-5">
+                  <div class="flex-grow-1" style="min-width: 0;"><h3 class="scheduled-category-heading">{{ selectedScheduledCategory.name }}</h3><p class="scheduled-muted text-body-2">Associe um arquivo a cada data de apresentação.</p></div>
+                  <v-menu location="bottom end">
+                    <template #activator="{ props }"><v-btn v-bind="props" icon="mdi-dots-horizontal" variant="text" size="small" aria-label="Opções da categoria" /></template>
+                    <v-list rounded="lg" density="compact"><v-list-item prepend-icon="mdi-delete-outline" title="Excluir categoria" base-color="error" @click="deleteScheduledCategory" /></v-list>
+                  </v-menu>
+                </div>
+                <section class="scheduled-composer">
+                  <div class="scheduled-section-label mb-3">NOVO AGENDAMENTO</div>
+                  <button type="button" class="scheduled-file-picker" :class="{ 'has-file': scheduledFilePath }" @click="selectScheduledFile">
+                    <div class="scheduled-file-icon"><v-icon size="26">{{ scheduledFilePath ? 'mdi-file-check-outline' : 'mdi-folder-open-outline' }}</v-icon></div>
+                    <span class="scheduled-file-copy"><strong>{{ scheduledFilePath ? scheduledFilePath.split(/[\\/]/).pop() : 'Escolher arquivo' }}</strong><small>{{ scheduledFilePath || 'Vídeo, áudio ou documento do seu computador' }}</small></span>
+                    <v-icon size="20">{{ scheduledFilePath ? 'mdi-swap-horizontal' : 'mdi-plus' }}</v-icon>
+                  </button>
+                  <div class="scheduled-date-row">
+                    <v-text-field v-model="scheduledDate" type="date" label="Data da apresentação" variant="outlined" rounded="lg" density="comfortable" hide-details class="modern-input-no-thick scheduled-date-input" />
+                    <div class="scheduled-shortcuts"><v-btn variant="text" size="small" rounded="lg" @click="setScheduledDay('today')">Hoje</v-btn><v-btn variant="text" size="small" rounded="lg" @click="setScheduledDay('saturday')">Próximo sábado</v-btn></div>
+                    <v-btn color="primary" variant="flat" rounded="lg" height="44" prepend-icon="mdi-calendar-plus" :disabled="!scheduledDate || !scheduledFilePath || scheduledDateConflict" @click="addScheduledFile">Agendar</v-btn>
+                  </div>
+                  <p v-if="scheduledDateConflict" class="text-error text-caption mt-3" role="alert">Esta data já tem um arquivo. Escolha outra data ou remova o agendamento existente.</p>
+                  <p v-else class="scheduled-muted text-caption mt-3">A reprodução acontece quando você aciona o item na programação.</p>
+                </section>
+                <div class="scheduled-section-label mt-6 mb-3">ARQUIVOS AGENDADOS <span>{{ sortedScheduledItems.length }}</span></div>
+                <div v-if="!sortedScheduledItems.length" class="scheduled-empty">
+                  <v-icon size="34" class="mb-3">mdi-calendar-blank-outline</v-icon>
+                  <strong>Seu primeiro agendamento começa aqui</strong>
+                  <p>Escolha um arquivo acima, defina a data e clique em Agendar.</p>
+                </div>
+                <div v-else class="scheduled-entries">
+                  <article v-for="entry in sortedScheduledItems" :key="entry.id" class="scheduled-entry">
+                    <div class="scheduled-date-badge"><strong>{{ entry.date.slice(8) }}</strong><span>{{ scheduledMonth(entry.date) }}</span></div>
+                    <div class="scheduled-entry-copy"><strong>{{ entry.name }}</strong><span :title="entry.filePath">{{ entry.filePath }}</span></div>
+                    <v-text-field :model-value="entry.date" type="date" aria-label="Alterar data do agendamento" variant="outlined" rounded="lg" density="compact" hide-details class="modern-input-no-thick scheduled-entry-date" @change="changeScheduledDate(entry, $event)" />
+                    <v-btn icon="mdi-close" variant="text" size="x-small" aria-label="Remover agendamento" @click="removeScheduledFile(entry.id)" />
+                  </article>
+                </div>
+              </template>
+              <div v-else class="scheduled-empty scheduled-welcome">
+                <div class="scheduled-icon mb-4"><v-icon size="30">mdi-calendar-multiple</v-icon></div>
+                <h3>Organize hoje. Apresente no dia certo.</h3>
+                <p>Crie uma categoria ao lado, agende seus arquivos e adicione essa categoria uma única vez à programação.</p>
+              </div>
+            </main>
+          </v-card-text>
+          <div class="scheduled-footer"><v-icon size="16">mdi-check-circle-outline</v-icon> Agendamentos salvos automaticamente</div>
+        </v-card>
+      </v-dialog>
       <!-- ====== NEW CUSTOM LITURGY DIALOG ====== -->
       <v-dialog
         v-model="showNewCustomDialog"
@@ -813,7 +959,7 @@
 </template>
 
 <script lang="ts">
-import { getHymnalSearchPriority, getPreferredHymnalAlbum } from "@/helpers/HymnalPreference";
+import { matchesPrimaryHymnal, getHymnalSearchPriority, getPreferredHymnalAlbum } from "@/helpers/HymnalPreference";
 import manifest from "../manifest.json";
 import MenuToggleButton from "@/components/MenuToggleButton.vue";
 import draggable from "vuedraggable";
@@ -821,6 +967,7 @@ import RichTextEditor from "./RichTextEditor.vue";
 import { isAudioFile, isWebUrl, openExternalMedia } from "@/helpers/ExternalMedia";
 import { isYouTubeUrl } from "@/helpers/YouTube";
 import { transitionProjection } from "@/helpers/ProjectionTransition";
+import { categoryForIndex, categoryEnd, insertInCategory, keepCategoryTogether } from "@/helpers/LiturgyGroups";
 
 export default {
   name: "LiturgyModuleIndex",
@@ -830,6 +977,12 @@ export default {
     RichTextEditor,
   },
   data: () => ({
+    showScheduledManager: false,
+    scheduledCategories: [],
+    selectedScheduledCategoryId: null,
+    newScheduledCategoryName: "",
+    scheduledDate: "",
+    scheduledFilePath: "",
     isCompactView: false,
     selectedDay: null,
     selectedItemIndex: null,
@@ -862,7 +1015,12 @@ export default {
     showAddMenu: false,
     addStep: 1,
     editingIndex: null,
+    addCategoryId: null,
+    dragItemsBefore: [],
+    dragSelectedId: null,
     addForm: {
+      scheduledCategoryId: null,
+      categoryId: null,
       type: "annotation",
       name: "",
       subtitle: "",
@@ -887,6 +1045,17 @@ export default {
     bibleVersions: [],
   }),
   computed: {
+    scheduledDateConflict() {
+      return Boolean(this.selectedScheduledCategory?.items.some(entry => entry.date === this.scheduledDate));
+    },
+    selectedScheduledCategory() { return this.scheduledCategories.find(category => category.id === this.selectedScheduledCategoryId); },
+    sortedScheduledItems() { return [...(this.selectedScheduledCategory?.items || [])].sort((a, b) => a.date.localeCompare(b.date)); },
+    categoryOptions() {
+      return [
+        { title: this.t("fields.no_category"), value: null },
+        ...this.currentItems.filter(item => item.type === "category").map(item => ({ title: item.name, value: item.id })),
+      ];
+    },
     filteredMusicList(): Array<Record<string, any>> {
       const selectedMusic = this.musicList.find(m => m.id_music === this.addForm.musicId);
       const query = (this.musicSearchQuery || "").trim().toLowerCase();
@@ -899,10 +1068,11 @@ export default {
       const numQuery = isNum ? Number(query) : null;
       
       const results = this.musicList.filter(m => {
+        if (!matchesPrimaryHymnal(m)) return false;
         const title = (m.name || "").toLowerCase();
         
         if (isNum) {
-          const isHymnalTrack = m.albums?.some(a => a.type === "hymnal" && Number(a.pivot?.track) === numQuery);
+          const isHymnalTrack = getHymnalSearchPriority(m, numQuery) === 2;
           return title.includes(query) || isHymnalTrack;
         } 
         return title.includes(query);
@@ -982,6 +1152,7 @@ export default {
     },
     itemTypes() {
       return [
+        { value: "scheduled_item", icon: "mdi-calendar-clock", color: "orange", label: "Item Agendado", description: "Reproduz o arquivo da categoria para a data de hoje." },
         { value: "annotation", icon: "mdi-text", color: "info", label: this.t("types.annotation"), description: this.t("type_descriptions.annotation") },
         { value: "category", icon: "mdi-tag", color: "warning", label: this.t("types.category"), description: this.t("type_descriptions.category") },
         { value: "music", icon: "mdi-music-note", color: "success", label: this.t("types.music"), description: this.t("type_descriptions.music") },
@@ -998,10 +1169,9 @@ export default {
       ];
     },
     isFormValid() {
+      if (this.addForm.type === "scheduled_item") return this.scheduledCategories.some(category => category.id === this.addForm.scheduledCategoryId);
       if (!this.addForm.name.trim()) return false;
-      if (this.addForm.type === "music" && !this.addForm.musicId) return false;
       if (this.addForm.type === "verse" && (!this.addForm.verseBookId || !this.addForm.verseChapter)) return false;
-      if (this.addForm.type === "media" && !this.addForm.filePath) return false;
       if (this.addForm.type === "presentation" && !this.addForm.filePath) return false;
       if (this.addForm.type === "link" && !this.addForm.url.trim()) return false;
       return true;
@@ -1042,7 +1212,7 @@ export default {
   },
   methods: {
     supportsAutomationTrigger(type) {
-      return ["music", "media", "link"].includes(type);
+      return ["music", "media", "link", "scheduled_item"].includes(type);
     },
 
     setupResizeObserver() {
@@ -1123,6 +1293,7 @@ export default {
         liturgies: this.cloneData(this.liturgies),
         dayNotes: this.cloneData(this.dayNotes),
         customLiturgies: this.cloneData(this.customLiturgies),
+        scheduledCategories: this.cloneData(this.scheduledCategories),
       };
     },
     normalizeImportedLiturgies(data) {
@@ -1132,6 +1303,7 @@ export default {
         liturgies: data.liturgies,
         dayNotes: data.dayNotes,
         customLiturgies: data.customLiturgies,
+        scheduledCategories: data.scheduledCategories,
       };
 
       const dayKeys = Object.keys(this.getDefaultLiturgies());
@@ -1162,7 +1334,19 @@ export default {
       const hasFixedItems = dayKeys.some(day => liturgies[day].length > 0 || dayNotes[day]);
       if (!hasFixedItems && customLiturgies.length === 0) return null;
 
-      return { liturgies, dayNotes, customLiturgies };
+      const scheduledCategories = Array.isArray(source.scheduledCategories) ? source.scheduledCategories : [];
+      const categoryIds = new Set();
+      for (const category of scheduledCategories) {
+        if (!category || typeof category.id !== "string" || categoryIds.has(category.id) || typeof category.name !== "string" || !Array.isArray(category.items)) return null;
+        categoryIds.add(category.id);
+        const dates = new Set();
+        const ids = new Set();
+        for (const entry of category.items) {
+          if (!entry || typeof entry.id !== "string" || ids.has(entry.id) || typeof entry.name !== "string" || typeof entry.filePath !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(entry.date) || dates.has(entry.date)) return null;
+          dates.add(entry.date); ids.add(entry.id);
+        }
+      }
+      return { liturgies, dayNotes, customLiturgies, scheduledCategories };
     },
     async exportLiturgy() {
       if (!window.electronAPI?.saveFileDialog || !window.electronAPI?.writeTextFile) {
@@ -1229,6 +1413,9 @@ export default {
             this.liturgies = this.cloneData(imported.liturgies);
             this.dayNotes = this.cloneData(imported.dayNotes);
             this.customLiturgies = this.cloneData(imported.customLiturgies);
+            this.scheduledCategories = this.cloneData(imported.scheduledCategories);
+            this.selectedScheduledCategoryId = this.scheduledCategories[0]?.id || null;
+            this.saveScheduledCategories();
             this.selectedItemIndex = null;
             if (this.selectedDay === "custom" && this.customLiturgies.length === 0) {
               this.setTodayAsDefault();
@@ -1245,14 +1432,15 @@ export default {
 
     // ====== ITEM TYPE HELPERS ======
     getTypeIcon(type) {
-      const map = { annotation: "mdi-text", category: "mdi-tag", music: "mdi-music-note", verse: "mdi-book-open-variant", media: "mdi-file-presentation-box", presentation: "mdi-presentation", link: "mdi-link" };
+      const map = { scheduled_item: "mdi-calendar-clock", annotation: "mdi-text", category: "mdi-tag", music: "mdi-music-note", verse: "mdi-book-open-variant", media: "mdi-file-presentation-box", presentation: "mdi-presentation", link: "mdi-link" };
       return map[type] || "mdi-help";
     },
     getTypeColor(type) {
-      const map = { annotation: "info", category: "warning", music: "success", verse: "purple", media: "orange", presentation: "indigo", link: "cyan" };
+      const map = { scheduled_item: "orange", annotation: "info", category: "warning", music: "success", verse: "purple", media: "orange", presentation: "indigo", link: "cyan" };
       return map[type] || "grey";
     },
     getTypeLabel(type) {
+      if (type === "scheduled_item") return "Item Agendado";
       return this.t(`types.${type}`);
     },
     getNamePlaceholder(type) {
@@ -1268,7 +1456,9 @@ export default {
       return map[type] || "";
     },
     isExecutable(item) {
-      return ["music", "verse", "link", "media", "presentation"].includes(item.type);
+      if (item.type === "media" && !item.filePath) return false;
+      if (item.type === "music" && !item.musicId) return false;
+      return ["music", "verse", "link", "media", "presentation", "scheduled_item"].includes(item.type);
     },
 
     musicHasPlayback(item) {
@@ -1277,7 +1467,7 @@ export default {
     },
 
     getExecuteIcon(type) {
-      if (type === "media") {
+      if (["media", "scheduled_item"].includes(type)) {
         const useInternal = this.$userdata.get("modules.config.media_use_internal_player");
         if (useInternal) return "mdi-play";
       }
@@ -1292,7 +1482,7 @@ export default {
       return map[type] || "mdi-play";
     },
     getExecuteTooltip(type) {
-      if (type === "media") {
+      if (["media", "scheduled_item"].includes(type)) {
         const useInternal = this.$userdata.get("modules.config.media_use_internal_player");
         if (useInternal) return this.t("actions.play");
       }
@@ -1308,9 +1498,42 @@ export default {
     },
 
     // ====== ADD/EDIT ITEMS ======
+    itemCategory(index) {
+      return categoryForIndex(this.currentItems, index);
+    },
+    categoryItemCount(index) {
+      return categoryEnd(this.currentItems, index) - index - 1;
+    },
+    toggleCategory(category) {
+      category.collapsed = !category.collapsed;
+      this.saveLiturgy();
+    },
+    openAddMenu(categoryId = null) {
+      this.addCategoryId = categoryId;
+      this.editingIndex = null;
+      this.addStep = 1;
+      this.showAddMenu = true;
+    },
+    startItemDrag() {
+      this.dragItemsBefore = [...this.currentItems];
+      this.dragSelectedId = this.selectedItem?.id ?? null;
+    },
+    finishItemDrag(event) {
+      const moved = this.dragItemsBefore[event.oldIndex];
+      if (moved) this.currentItems = keepCategoryTogether(this.dragItemsBefore, this.currentItems, moved.id);
+      this.restoreSelectedItem(this.dragSelectedId);
+      this.dragItemsBefore = [];
+      this.saveLiturgy();
+    },
+    restoreSelectedItem(id) {
+      const index = this.currentItems.findIndex(item => item.id === id);
+      this.selectedItemIndex = index < 0 ? null : index;
+    },
     openAddForm(type) {
       this.editingIndex = null;
       this.addForm = {
+        scheduledCategoryId: null,
+        categoryId: type === "category" ? null : this.addCategoryId,
         type,
         name: "",
         subtitle: "",
@@ -1324,6 +1547,14 @@ export default {
         automationTriggerId: null,
       };
       this.addStep = 2;
+    },
+    chooseMusicLater() {
+      if (!this.addForm.name.trim()) this.addForm.name = this.t("types.music");
+      this.saveItem();
+    },
+    chooseMediaLater() {
+      if (!this.addForm.name.trim()) this.addForm.name = this.t("types.media");
+      this.saveItem();
     },
     async saveItem() {
       if (!this.isFormValid) return;
@@ -1361,13 +1592,20 @@ export default {
         }
       }
 
-      const item: Record<string, any> = {
+      const item: Record<string, any> & { id: number; type: string } = {
+        ...(this.editingIndex !== null ? this.currentItems[this.editingIndex] : {}),
         id: Date.now() + Math.random(),
         type: this.addForm.type,
         name: this.addForm.name.trim(),
         subtitle: this.addForm.subtitle?.trim() || "",
       };
 
+      if (item.type === "scheduled_item") {
+        item.categoryId = this.addForm.scheduledCategoryId;
+        item.name = this.scheduledCategories.find(category => category.id === item.categoryId).name;
+        delete item.filePath;
+      }
+      delete item.automationTriggerId;
       if (this.supportsAutomationTrigger(this.addForm.type) && this.addForm.automationTriggerId) {
         item.automationTriggerId = this.addForm.automationTriggerId;
       }
@@ -1378,6 +1616,8 @@ export default {
         const music = this.musicList.find(m => m.id_music === this.addForm.musicId);
         if (music) {
           item.subtitle = music.album_names || "";
+        } else {
+          item.subtitle = this.t("messages.music_pending");
         }
       }
 
@@ -1396,6 +1636,8 @@ export default {
         if (item.filePath) {
           const parts = item.filePath.split(/[\\/]/);
           item.subtitle = parts[parts.length - 1];
+        } else if (item.type === "media") {
+          item.subtitle = this.t("messages.media_pending");
         }
       }
 
@@ -1406,11 +1648,27 @@ export default {
         }
       }
 
+      const selectedId = this.selectedItem?.id ?? null;
       if (this.editingIndex !== null) {
-        this.currentItems.splice(this.editingIndex, 1, item);
-      } else {
+        const original = this.currentItems[this.editingIndex];
+        item.id = original.id;
+        const originalCategory = this.itemCategory(this.editingIndex)?.id ?? null;
+        if (item.type === "category" || originalCategory === this.addForm.categoryId) {
+          this.currentItems.splice(this.editingIndex, 1, item);
+        } else {
+          this.currentItems.splice(this.editingIndex, 1);
+          this.currentItems = insertInCategory(this.currentItems, item, this.addForm.categoryId);
+        }
+      } else if (item.type === "category") {
         this.currentItems.push(item);
+      } else {
+        this.currentItems = insertInCategory(this.currentItems, item, this.addForm.categoryId);
       }
+      if (item.type !== "category") {
+        const category = this.currentItems.find(entry => entry.type === "category" && entry.id === this.addForm.categoryId);
+        if (category) category.collapsed = false;
+      }
+      this.restoreSelectedItem(selectedId);
 
       this.showAddMenu = false;
       this.addStep = 1;
@@ -1421,9 +1679,17 @@ export default {
         { text: this.t("messages.confirm_delete"), translate: false },
         (resp) => {
           if (resp === "yes") {
-            this.currentItems.splice(index, 1);
-            if (this.selectedItemIndex === index) this.selectedItemIndex = null;
-            else if (this.selectedItemIndex > index) this.selectedItemIndex--;
+            const selectedId = this.selectedItem?.id ?? null;
+            const item = this.currentItems[index];
+            if (item.type === "category") {
+              const children = this.currentItems.splice(index + 1, this.categoryItemCount(index));
+              this.currentItems.splice(index, 1);
+              const firstCategory = this.currentItems.findIndex(entry => entry.type === "category");
+              this.currentItems.splice(firstCategory < 0 ? this.currentItems.length : firstCategory, 0, ...children);
+            } else {
+              this.currentItems.splice(index, 1);
+            }
+            this.restoreSelectedItem(selectedId);
             this.saveLiturgy();
           }
         },
@@ -1433,6 +1699,8 @@ export default {
       const item = this.currentItems[index];
       this.editingIndex = index;
       this.addForm = {
+        scheduledCategoryId: item.categoryId || null,
+        categoryId: item.type === "category" ? null : (this.itemCategory(index)?.id ?? null),
         type: item.type,
         name: item.name,
         subtitle: item.subtitle,
@@ -1519,7 +1787,7 @@ export default {
     },
 
     // ====== MEDIA FILE SELECTOR ======
-    async selectMediaFile() {
+    async pickMediaFile() {
       if (window.electronAPI?.openFileDialog) {
         const filePath = await window.electronAPI.openFileDialog({
           title: "Selecionar Mídia",
@@ -1531,18 +1799,17 @@ export default {
             { name: "Todos", extensions: ["*"] },
           ],
         });
-        if (filePath) {
-          this.addForm.filePath = filePath;
-          if (!this.addForm.name) {
-            const fileName = filePath.split(/[\\/]/).pop();
-            this.addForm.name = fileName.replace(/\.[^.]+$/, "");
-          }
-        }
-      } else {
-        this.$alert.error({ text: "Seleção de arquivos disponível apenas na versão desktop.", translate: false });
+        return filePath;
       }
+      this.$alert.error({ text: "Seleção de arquivos disponível apenas na versão desktop.", translate: false });
     },
 
+    async selectMediaFile() {
+      const filePath = await this.pickMediaFile();
+      if (!filePath) return;
+      this.addForm.filePath = filePath;
+      if (!this.addForm.name) this.addForm.name = filePath.split(/[\\/]/).pop().replace(/\.[^.]+$/, "");
+    },
     // ====== PRESENTATION FILE SELECTOR ======
     async selectPresentationFile() {
       if (!window.electronAPI?.openFileDialog) {
@@ -1570,6 +1837,20 @@ export default {
 
     // ====== EXECUTE/PROJECT ITEMS ======
     async executeItem(item, musicMode = "audio") {
+      if (item.type === "scheduled_item") {
+        const category = this.scheduledCategories.find(category => category.id === item.categoryId);
+        if (!category) return this.scheduledError("A categoria deste Item Agendado foi excluída ou não está disponível.");
+        const now = new Date();
+        const today = [now.getFullYear(), String(now.getMonth() + 1).padStart(2, "0"), String(now.getDate()).padStart(2, "0")].join("-");
+        const entry = category.items.find(entry => entry.date === today);
+        if (!entry) return this.scheduledError(`Não há arquivo agendado em “${  category.name  }” para hoje (${  today  }).`);
+        try {
+          if (!await window.electronAPI?.isFileReadable?.(entry.filePath)) return this.scheduledError(`O arquivo agendado não está acessível: ${  entry.filePath}`);
+        } catch { return this.scheduledError(`O arquivo agendado não está acessível: ${  entry.filePath}`); }
+        item = { ...item, type: "media", name: category.name, subtitle: entry.name, filePath: entry.filePath };
+      }
+      if (item.type === "media" && !item.filePath) return;
+      if (item.type === "music" && !item.musicId) return;
       if (this.liturgyTransitionInProgress) return;
       this.liturgyTransitionInProgress = true;
 
@@ -1874,6 +2155,79 @@ export default {
       );
     },
 
+    itemDisplayName(item) {
+      if (item.type === "scheduled_item") return this.scheduledCategories.find(category => category.id === item.categoryId)?.name || "Categoria agendada excluída";
+      return item.name ? item.name.replace(/^undefined\s*-\s*/, "") : "";
+    },
+    scheduledError(text) { this.$alert.error({ text, translate: false }); },
+    saveScheduledCategories() {
+      this.$userdata.set(`modules.${  this.module_id  }.scheduledCategories`, JSON.parse(JSON.stringify(this.scheduledCategories)));
+    },
+    selectScheduledCategory(id) {
+      this.selectedScheduledCategoryId = id;
+      this.scheduledFilePath = "";
+      this.setScheduledDay("today");
+    },
+    setScheduledDay(shortcut) {
+      const date = new Date();
+      if (shortcut === "saturday") date.setDate(date.getDate() + ((6 - date.getDay() + 7) % 7 || 7));
+      this.scheduledDate = [date.getFullYear(), String(date.getMonth() + 1).padStart(2, "0"), String(date.getDate()).padStart(2, "0")].join("-");
+    },
+    scheduledMonth(date) {
+      return ["JAN", "FEV", "MAR", "ABR", "MAI", "JUN", "JUL", "AGO", "SET", "OUT", "NOV", "DEZ"][Number(date.slice(5, 7)) - 1];
+    },
+    createScheduledCategory() {
+      const name = this.newScheduledCategoryName.trim();
+      if (!name) return;
+      const category = { id: crypto.randomUUID(), name, items: [] };
+      this.scheduledCategories.push(category);
+      this.selectScheduledCategory(category.id);
+      this.newScheduledCategoryName = "";
+      this.saveScheduledCategories();
+    },
+    deleteScheduledCategory() {
+      const category = this.selectedScheduledCategory;
+      if (!category) return;
+      const remove = () => {
+        this.scheduledCategories = this.scheduledCategories.filter(entry => entry.id !== category.id);
+        this.selectedScheduledCategoryId = this.scheduledCategories[0]?.id || null;
+        this.saveScheduledCategories();
+      };
+      if (category.items.length) this.$alert.yesno({ text: `Excluir “${  category.name  }” e seus agendamentos? Os arquivos originais serão mantidos.`, translate: false }, response => { if (response === "yes") remove(); });
+      else remove();
+    },
+    async selectScheduledFile() {
+      const filePath = await this.pickMediaFile();
+      if (filePath) {
+        this.scheduledFilePath = filePath;
+        if (!this.scheduledDate) this.setScheduledDay("today");
+      }
+    },
+    validScheduledDate(date, exceptId = null) {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !Number.isFinite(Date.parse(date)) || new Date(date).toISOString().slice(0, 10) !== date) {
+        this.scheduledError("Informe uma data válida."); return false;
+      }
+      if (this.selectedScheduledCategory.items.some(entry => entry.id !== exceptId && entry.date === date)) {
+        this.scheduledError("Já existe um arquivo nesta categoria para essa data. Escolha outra data."); return false;
+      }
+      return true;
+    },
+    addScheduledFile() {
+      if (!this.selectedScheduledCategory || !this.scheduledFilePath || !this.validScheduledDate(this.scheduledDate)) return;
+      this.selectedScheduledCategory.items.push({ id: crypto.randomUUID(), name: this.scheduledFilePath.split(/[\\/]/).pop(), filePath: this.scheduledFilePath, date: this.scheduledDate });
+      this.scheduledFilePath = "";
+      this.saveScheduledCategories();
+    },
+    changeScheduledDate(entry, event) {
+      const date = event.target.value;
+      if (!this.validScheduledDate(date, entry.id)) { event.target.value = entry.date; return; }
+      entry.date = date;
+      this.saveScheduledCategories();
+    },
+    removeScheduledFile(id) {
+      this.selectedScheduledCategory.items = this.selectedScheduledCategory.items.filter(entry => entry.id !== id);
+      this.saveScheduledCategories();
+    },
     // ====== PERSISTENCE ======
     saveLiturgy() {
       this.$userdata.set(`modules.${this.module_id}.liturgies`, JSON.parse(JSON.stringify(this.liturgies)));
@@ -1881,6 +2235,8 @@ export default {
       this.$userdata.set(`modules.${this.module_id}.customLiturgies`, JSON.parse(JSON.stringify(this.customLiturgies)));
     },
     loadSavedLiturgies() {
+      this.scheduledCategories = JSON.parse(JSON.stringify(this.$userdata.get(`modules.${  this.module_id  }.scheduledCategories`) || []));
+      this.selectedScheduledCategoryId = this.scheduledCategories[0]?.id || null;
       const shouldClearChecks = !this.$appdata.get("liturgy_checks_cleared");
 
       const saved = this.$userdata.get(`modules.${this.module_id}.liturgies`);
@@ -2032,6 +2388,11 @@ export default {
   }
 }
 
+.liturgy-item.liturgy-subitem {
+  margin-left: 40px;
+  border-left: 3px solid rgba(255, 193, 7, 0.3);
+}
+
 .liturgy-item-number {
   font-size: 13px;
   font-weight: 700;
@@ -2057,5 +2418,70 @@ export default {
   background: var(--card-bg) !important;
   border: 1px solid var(--glass-border) !important;
   box-shadow: var(--shadow-hover) !important;
+}
+
+.scheduled-manager { color: var(--sidebar-text); }
+.scheduled-header { display: flex; align-items: center; gap: 16px; padding: 24px 28px; border-bottom: 1px solid var(--glass-border); }
+.scheduled-header h2 { font-size: 21px; font-weight: 700; letter-spacing: -0.4px; }
+.scheduled-header p { margin-top: 4px; font-size: 13px; color: var(--sidebar-text-secondary); }
+.scheduled-icon { display: flex; align-items: center; justify-content: center; width: 48px; height: 48px; border-radius: 14px; background: rgba(var(--v-theme-primary), 0.1); color: rgb(var(--v-theme-primary)); flex-shrink: 0; }
+.scheduled-body { display: flex; min-height: 0; overflow-y: auto; }
+.scheduled-sidebar { width: 250px; flex-shrink: 0; padding: 24px 16px; background: rgba(var(--v-theme-primary), 0.025); border-right: 1px solid var(--glass-border); }
+.scheduled-section-label { display: flex; align-items: center; gap: 8px; font-size: 10px; font-weight: 700; letter-spacing: 1.2px; color: var(--sidebar-text-secondary); }
+.scheduled-section-label span { padding: 2px 7px; border-radius: 6px; background: rgba(var(--v-theme-primary), 0.08); color: rgb(var(--v-theme-primary)); letter-spacing: 0; }
+.scheduled-category-list { display: grid; gap: 6px; margin: 16px 0 20px; }
+.scheduled-category { display: flex; align-items: center; gap: 10px; text-align: left; padding: 12px; width: 100%; border: 1px solid transparent; border-radius: 12px; color: var(--sidebar-text-secondary); transition: background 0.15s; }
+.scheduled-category:hover { background: rgba(var(--v-theme-primary), 0.05); }
+.scheduled-category.is-selected { color: rgb(var(--v-theme-primary)); background: rgba(var(--v-theme-primary), 0.09); border-color: rgba(var(--v-theme-primary), 0.15); }
+.scheduled-category-name { min-width: 0; flex: 1; overflow-wrap: anywhere; font-size: 13px; font-weight: 600; }
+.scheduled-category-name small { display: block; margin-top: 3px; font-size: 11px; font-weight: 400; color: var(--sidebar-text-secondary); }
+.scheduled-create { display: grid; gap: 10px; }
+.scheduled-sidebar-tip { display: flex; gap: 8px; margin-top: 20px; font-size: 11px; line-height: 1.6; color: var(--sidebar-text-secondary); }
+.scheduled-content { flex: 1; min-width: 0; padding: 24px; container-type: inline-size; }
+.scheduled-category-heading { font-size: 18px; overflow-wrap: anywhere; margin-bottom: 4px; }
+.scheduled-muted { color: var(--sidebar-text-secondary); }
+.scheduled-composer { padding: 18px; border: 1px solid var(--glass-border); border-radius: 16px; background: var(--card-bg); }
+.scheduled-file-picker { display: flex; align-items: center; gap: 14px; width: 100%; text-align: left; padding: 18px; border: 1px dashed rgba(var(--v-theme-primary), 0.35); border-radius: 12px; background: rgba(var(--v-theme-primary), 0.035); color: rgb(var(--v-theme-primary)); transition: background 0.15s; }
+.scheduled-file-picker:hover { background: rgba(var(--v-theme-primary), 0.09); }
+.scheduled-file-picker.has-file { border-style: solid; }
+.scheduled-file-copy { flex: 1; min-width: 0; }
+.scheduled-file-copy strong { display: block; font-size: 14px; overflow-wrap: anywhere; }
+.scheduled-file-copy small { display: block; margin-top: 5px; font-size: 11px; color: var(--sidebar-text-secondary); overflow-wrap: anywhere; }
+.scheduled-date-row { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin-top: 18px; }
+.scheduled-date-input { min-width: 170px; }
+.scheduled-shortcuts { display: flex; flex-wrap: wrap; }
+.scheduled-empty { display: flex; flex-direction: column; align-items: center; text-align: center; padding: 32px 20px; border: 1px dashed var(--glass-border); border-radius: 14px; color: var(--sidebar-text-secondary); }
+.scheduled-empty strong { font-size: 14px; color: var(--sidebar-text); }
+.scheduled-empty p { margin-top: 8px; font-size: 12px; line-height: 1.7; max-width: 370px; }
+.scheduled-welcome { min-height: 390px; justify-content: center; border: 0; }
+.scheduled-welcome h3 { font-size: 20px; color: var(--sidebar-text); }
+.scheduled-entries { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; min-width: 0; }
+.scheduled-entry { display: grid; grid-template-columns: 46px minmax(0, 1fr) 158px 28px; min-width: 0; align-items: center; gap: 12px; padding: 12px; border: 1px solid var(--glass-border); border-radius: 12px; background: var(--card-bg); }
+.scheduled-date-badge { width: 46px; flex-shrink: 0; text-align: center; padding: 6px 0; border-radius: 10px; background: rgba(var(--v-theme-primary), 0.08); color: rgb(var(--v-theme-primary)); }
+.scheduled-date-badge strong { display: block; font-size: 20px; line-height: 1.2; }
+.scheduled-date-badge span { font-size: 9px; font-weight: 700; letter-spacing: 1px; }
+.scheduled-entry-copy { flex: 1; min-width: 0; }
+.scheduled-entry-copy strong { display: block; font-size: 13px; overflow-wrap: anywhere; }
+.scheduled-entry-copy span { display: block; font-size: 11px; color: var(--sidebar-text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-top: 4px; }
+.scheduled-entry-date { width: 100%; min-width: 0; }
+.scheduled-entry-date :deep(.v-field__input) { min-width: 0; }
+.scheduled-header, .scheduled-footer { flex-shrink: 0; }
+@container (max-width: 540px) {
+  .scheduled-entry { grid-template-columns: 46px minmax(0, 1fr) 28px; }
+  .scheduled-entry-date { grid-column: 2; grid-row: 2; max-width: 190px; }
+  .scheduled-entry > .v-btn { grid-column: 3; grid-row: 1; }
+  .scheduled-entry-copy span { white-space: normal; overflow-wrap: anywhere; }
+}
+.scheduled-footer { display: flex; align-items: center; justify-content: flex-end; gap: 6px; padding: 12px 24px; border-top: 1px solid var(--glass-border); font-size: 11px; color: var(--sidebar-text-secondary); }
+.scheduled-manager button:focus-visible { outline: 2px solid rgb(var(--v-theme-primary)); outline-offset: 3px; }
+@media (max-width: 700px) {
+  .scheduled-header { padding: 20px; }
+  .scheduled-header p { display: none; }
+  .scheduled-body { flex-direction: column; }
+  .scheduled-sidebar { width: 100%; border-right: 0; border-bottom: 1px solid var(--glass-border); }
+  .scheduled-category-list { grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); }
+  .scheduled-sidebar-tip { display: none; }
+  .scheduled-content { padding: 18px; }
+
 }
 </style>

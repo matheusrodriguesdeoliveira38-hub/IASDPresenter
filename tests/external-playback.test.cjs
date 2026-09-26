@@ -169,3 +169,20 @@ test('native projection stays paused during buffering across load and pause chan
   definition.watch.isBuffering.call(context);
   assert.deepEqual(calls, ['pause', 'pause', 'play']);
 });
+
+
+test('network stalls only buffer the projection when future media data is unavailable', () => {
+  const definition = component('Index');
+  for (const readyState of [0, 1, 2, 3, 4]) {
+    const state = {};
+    const context = {
+      isClosing: false, getMediaEl: () => ({ readyState }),
+      $appdata: { set: (key, value) => { state[key] = value; } },
+    };
+    context.onWaiting = definition.methods.onWaiting.bind(context);
+    definition.methods.onStalled.call(context);
+    assert.equal(state['modules.external_media.config.is_buffering'], readyState < 3 ? true : undefined);
+    definition.methods.onWaiting.call(context);
+    assert.equal(state['modules.external_media.config.is_buffering'], true);
+  }
+});

@@ -4,7 +4,9 @@ let sequence = 0;
 export function transitionProjection(appdata, active: boolean, durationMs: number): Promise<void> {
   const requestId = `projection-${Date.now()}-${++sequence}`;
   const popups = [...(appdata.get("popups") || []), appdata.get("popup")];
-  const pending = new Set<Window>(popups.filter(popup => popup && !popup.closed));
+  const pending = new Set<Window>(popups
+    .filter(popup => popup && !popup.closed && popup.popupRole !== "clock")
+    .map(popup => popup.nativeWindow || popup));
   return new Promise(resolve => {
     const finish = () => {
       window.clearTimeout(timeout);

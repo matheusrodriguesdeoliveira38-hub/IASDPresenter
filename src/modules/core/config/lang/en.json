@@ -16,7 +16,7 @@
   "language": "Language",
   "language_desc": "Application interface and content language",
   "primary_hymnal": "Primary Hymnal",
-  "primary_hymnal_desc": "Prioritizes this edition in number searches",
+  "primary_hymnal_desc": "Search results only include the selected hymnal edition",
   "primary_hymnal_current": "Adventist Hymnal",
   "primary_hymnal_1996": "Adventist Hymnal 1996",
   "home_layout": "Home Layout",

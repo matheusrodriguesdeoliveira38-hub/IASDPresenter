@@ -37,6 +37,8 @@
     "link": "Agregue una URL para abrir en el navegador"
   },
   "fields": {
+    "category": "Categoría",
+    "no_category": "Sin categoría",
     "name": "Nombre",
     "description": "Descripción",
     "url": "URL",
@@ -49,6 +51,10 @@
     "search_music": "Buscar música..."
   },
   "actions": {
+    "add_subitem": "Agregar subelemento",
+    "expand_category": "Expandir categoría",
+    "collapse_category": "Contraer categoría",
+    "choose_later": "Elegir después",
     "save": "Guardar",
     "cancel": "Cancelar",
     "edit": "Editar",
@@ -67,6 +73,8 @@
     "export_liturgy": "Exportar Liturgia"
   },
   "messages": {
+    "media_pending": "Archivo por elegir",
+    "music_pending": "Música por elegir",
     "confirm_delete": "¿Desea eliminar este elemento de la liturgia?",
     "confirm_clear": "¿Desea limpiar todos los elementos de esta liturgia?",
     "item_added": "¡Elemento agregado con éxito!",

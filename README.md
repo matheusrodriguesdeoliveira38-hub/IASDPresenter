@@ -18,6 +18,18 @@ O IASDPresenter e construido com Electron, Vue 3 e Vuetify, com foco em uso loca
 - Logo e identidade visual IASDPresenter.
 - Autoatualizacao com `electron-updater` a partir do repositorio oficial.
 
+## Monitor virtual pela rede
+
+Em **Configurações → Projeção e telas → Monitores**, ative **Monitor virtual**.
+Ele aparece na lista de monitores do IASDPresenter e pode ser selecionado para projeção ou retorno.
+Copie o endereço exibido (por exemplo, `http://192.168.1.10:1975/virtual-monitor`)
+e abra no navegador de outro dispositivo da mesma rede. Use **Tela cheia** no dispositivo receptor.
+
+A imagem é transmitida em 1920 × 1080, até aproximadamente 15 quadros por segundo, sem áudio.
+O monitor usa o IP do computador e a porta definida em Controle remoto; não cria um monitor no Windows.
+O endereço permite visualizar a imagem sem senha. Ao desativar o monitor, a tela virtual fecha
+e o endereço deixa de transmitir. A saída web existente em `/output` continua disponível separadamente.
+
 ## Tecnologias
 
 - **Vue.js 3** - Interface principal.

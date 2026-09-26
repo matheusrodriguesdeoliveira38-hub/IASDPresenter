@@ -31,13 +31,15 @@ export default {
   computed: {
     module() {
       const routeModule = this.$route.query.module;
-      if (routeModule === "return_monitor") return routeModule;
+      if (routeModule === "return_monitor" || routeModule === "clock") return routeModule;
       return this.$appdata.get("popup_module") || routeModule;
     },
     projectionTransition() {
+      if (this.module === "clock") return { active: false, durationMs: 0 };
       return this.$appdata.get("projection_transition") || { active: false, durationMs: 300 };
     },
     projectionOverride() {
+      if (this.module === "clock") return "none";
       return this.$appdata.get("projection_override") || "none";
     },
   },
@@ -76,6 +78,7 @@ export default {
       if (event.origin === window.location.origin || event.origin === "file://" || event.origin === "null") {
         this.message = event.data;
         if (event.data.param === "projection_override") {
+          if (this.module === "clock") return;
           const wasFrozen = this.frozen;
           this.frozen = event.data.value === "freeze";
           if (wasFrozen && !this.frozen) {

@@ -415,3 +415,26 @@
     border-color: var(--border-color) !important;
   }
 }
+
+@media (min-width: 1025px) {
+  .dashboard-sidebar.auto-collapse:not(:hover) {
+    .sidebar-footer {
+      margin-left: 12px;
+      margin-right: 12px;
+
+      .nav-item {
+        margin-left: 0;
+        margin-right: 0;
+      }
+    }
+
+    .nav-item.active,
+    .nav-item.group-active {
+      background: transparent;
+
+      &::before {
+        display: none;
+      }
+    }
+  }
+}

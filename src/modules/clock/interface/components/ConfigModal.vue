@@ -176,48 +176,16 @@
                   </v-icon>
                   <div>
                     <h3 class="font-weight-bold" style="color: var(--sidebar-text); font-size: 1.1rem; line-height: 1.2;">
-                      Tela de projecao
+                      Monitor de retorno
                     </h3>
                     <div class="text-caption" style="color: var(--sidebar-text-secondary);">
-                      Escolha onde o relogio sera exibido
+                      Tela de exibição do relógio
                     </div>
                   </div>
                 </div>
-                <v-btn
-                  variant="tonal"
-                  size="small"
-                  class="text-none"
-                  @click="identifyMonitors"
-                >
-                  Identificar
-                </v-btn>
               </div>
-
-              <div v-if="clockMonitorList.length" class="d-flex flex-column" style="gap: 8px;">
-                <div
-                  v-for="monitor in clockMonitorList"
-                  :key="monitor.value"
-                  class="pa-3 rounded-lg cursor-pointer d-flex align-center justify-space-between"
-                  :style="selectedClockMonitors.includes(monitor.value) ? 'background: rgba(0,151,215,0.08); border: 2px solid var(--accent-blue);' : 'background: var(--main-bg); border: 2px solid transparent; box-shadow: inset 0 0 0 1px var(--border-color);'"
-                  @click="toggleClockMonitor(monitor.value)"
-                >
-                  <div class="d-flex align-center">
-                    <v-icon class="mr-3" :color="selectedClockMonitors.includes(monitor.value) ? 'primary' : 'grey'">
-                      mdi-monitor
-                    </v-icon>
-                    <span class="text-body-2 font-weight-medium" style="color: var(--sidebar-text);">{{ monitor.title }}</span>
-                  </div>
-                  <v-checkbox
-                    :model-value="selectedClockMonitors.includes(monitor.value)"
-                    color="primary"
-                    hide-details
-                    density="compact"
-                    @click.stop="toggleClockMonitor(monitor.value)"
-                  />
-                </div>
-              </div>
-              <div v-else class="text-caption" style="color: var(--sidebar-text-secondary);">
-                Nenhuma tela estendida detectada. O relogio abrira na tela atual.
+              <div class="text-body-2" style="color: var(--sidebar-text-secondary);">
+                O relógio é projetado sempre no monitor de retorno selecionado em Configurações → Projeção.
               </div>
             </v-card-text>
           </v-card>
@@ -323,21 +291,7 @@ export default {
       bgColor: "#000000",
       textColor: "#FFFFFF",
     },
-    selectedClockMonitors: [],
   }),
-  computed: {
-    rawDisplays() {
-      return this.$appdata.get("system_displays") || [];
-    },
-    clockMonitorList() {
-      return this.rawDisplays
-        .filter((display) => !display.isPrimary)
-        .map((display, index) => ({
-          title: `Monitor ${index + 2} (Estendido)`,
-          value: display.id,
-        }));
-    },
-  },
   watch: {
     visible(val) {
       if (val) this.loadConfig();
@@ -360,12 +314,6 @@ export default {
         this.localConfig = JSON.parse(JSON.stringify(this.defaultConfig));
       }
 
-      const savedMonitors = this.$userdata.get("modules.config.clock_monitor");
-      this.selectedClockMonitors = Array.isArray(savedMonitors)
-        ? savedMonitors
-        : savedMonitors
-          ? [savedMonitors]
-          : [];
     },
     resetToDefault() {
       this.localConfig = JSON.parse(JSON.stringify(this.defaultConfig));
@@ -373,24 +321,7 @@ export default {
     t(key) {
       return this.$t(`modules.clock.${key}`);
     },
-    toggleClockMonitor(monitorId) {
-      if (this.selectedClockMonitors.includes(monitorId)) {
-        this.selectedClockMonitors = this.selectedClockMonitors.filter((id) => id !== monitorId);
-      } else {
-        this.selectedClockMonitors = [...this.selectedClockMonitors, monitorId];
-      }
-      this.$userdata.set("modules.config.clock_monitor", this.selectedClockMonitors);
-    },
-    identifyMonitors() {
-      if (window.electronAPI?.identifyDisplays) {
-        window.electronAPI.identifyDisplays();
-      }
-    },
-    async open() {
-      if (window.electronAPI?.getDisplays) {
-        const displays = await window.electronAPI.getDisplays();
-        this.$appdata.set("system_displays", displays);
-      }
+    open() {
       this.visible = true;
     },
     close() {

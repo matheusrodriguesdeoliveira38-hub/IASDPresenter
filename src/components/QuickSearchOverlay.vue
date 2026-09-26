@@ -99,7 +99,7 @@ import {
   parseBibleSearch,
   parseBibleVerseNumbers,
 } from "@/helpers/BibleSearch";
-import { getHymnalSearchPriority, getPreferredHymnalAlbum } from "@/helpers/HymnalPreference";
+import { matchesPrimaryHymnal, getHymnalSearchPriority, getPreferredHymnalAlbum } from "@/helpers/HymnalPreference";
 
 export default {
   name: "QuickSearchOverlay",
@@ -147,10 +147,9 @@ export default {
       if (!query) return [];
       const number = /^\d+$/.test(query) ? Number(query) : null;
       return this.musics
+        .filter(music => matchesPrimaryHymnal(music))
         .filter((music) => normalizeBibleSearchText(music.name).includes(query) || (
-          number !== null && music.albums?.some((album) => (
-            album.type === "hymnal" && Number(album.pivot?.track) === number
-          ))
+          number !== null && getHymnalSearchPriority(music, number) === 2
         ))
         .sort((a, b) => this.musicScore(b, query, number) - this.musicScore(a, query, number))
         .slice(0, 12);

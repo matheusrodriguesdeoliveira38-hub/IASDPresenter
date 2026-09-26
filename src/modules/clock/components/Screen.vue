@@ -197,7 +197,8 @@ export default {
     config() {
       // Allow receiving config from appdata directly
       const appConfig = this.$appdata ? this.$appdata.get("clock_config") : null;
-      return appConfig || this.defaultConfig;
+      const savedConfig = this.$appdata?.get("user_data.clock_config");
+      return { ...this.defaultConfig, ...savedConfig, ...appConfig };
     },
     timer() {
       const state = this.$appdata ? this.$appdata.get("clock_timer") : null;

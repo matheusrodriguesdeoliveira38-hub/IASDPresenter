@@ -43,7 +43,6 @@
             <LScreenBtn
               class="clock-project-btn"
               module="clock"
-              monitor-config-key="modules.config.clock_monitor"
             />
           </div>
           <Screen :preview="true" />
@@ -585,10 +584,6 @@ export default {
     radial-gradient(circle at 10% 10%, rgba(55, 115, 225, 0.38), transparent 38%),
     linear-gradient(135deg, #102b61 0%, #071b3d 52%, #0a214a 100%);
   box-shadow: 0 18px 50px rgba(15, 35, 75, 0.11);
-}
-
-.clock-widget-container :deep(.clock-screen--preview) {
-  background: transparent !important;
 }
 
 .clock-widget-container :deep(.config-palette-btn) {

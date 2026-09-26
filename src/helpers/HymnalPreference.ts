@@ -12,6 +12,11 @@ export function getPrimaryHymnal() {
   return saved === "hymnal_1996" ? "hymnal_1996" : DEFAULT_PRIMARY_HYMNAL;
 }
 
+export function matchesPrimaryHymnal(item) {
+  const hymnals = (item?.albums || []).filter(album => album.type === "hymnal");
+  return !hymnals.length || hymnals.some(album => isHymnalAlbum(album));
+}
+
 export function isHymnalAlbum(album, hymnal = getPrimaryHymnal()) {
   if (!album) return false;
 

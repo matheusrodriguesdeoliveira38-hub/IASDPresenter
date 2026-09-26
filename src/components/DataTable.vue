@@ -25,7 +25,7 @@
 </template>
 
 <script lang="ts">
-import { getHymnalSearchPriority } from "@/helpers/HymnalPreference";
+import { getPrimaryHymnal, matchesPrimaryHymnal, getHymnalSearchPriority } from "@/helpers/HymnalPreference";
 
 export default {
   name: "DataTableComponent",
@@ -49,7 +49,15 @@ export default {
     last_filter: {},
     loading: true,
   }),
+  computed: {
+    primaryHymnal() {
+      return getPrimaryHymnal();
+    },
+  },
   watch: {
+    primaryHymnal() {
+      this.filterData();
+    },
     async file() {
       await this.loadData();
     },
@@ -120,6 +128,7 @@ export default {
       
       this.filter_data = this.all_data
         .filter((item) => {
+          if (value && this.file?.endsWith("_musics") && !matchesPrimaryHymnal(item)) return false;
           const isPureNumber = !isNaN(value) && value !== "";
           let searchableCondition = false;
           
@@ -131,7 +140,7 @@ export default {
                 return Number(item[key]) === Number(value);
               }
               return false;
-            }) || (item.albums && item.albums.some(al => al.type === "hymnal" && Number(al.pivot?.track) === Number(value)));
+            }) || (item.albums && item.albums.some(al => al.type === "hymnal" && Number(al.pivot?.track) === Number(value) && (!this.file?.endsWith("_musics") || getHymnalSearchPriority(item, value) === 2)));
           } else {
             searchableCondition = searchable.some((key) => {
               if (isNaN(item[key]) || item[key] === null) {

@@ -947,7 +947,9 @@ export default {
     },
 
     onStalled() {
-      this.onWaiting();
+      const media = this.getMediaEl();
+      // A network stall does not stop playback while future frames are buffered.
+      if (media && media.readyState < 3) this.onWaiting();
     },
 
     onMediaError(event) {
