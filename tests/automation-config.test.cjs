@@ -9,6 +9,7 @@ const { default: config } = loadTs('src/modules/core/config/interface/Index.vue'
   './ConfigMiniPreview.vue': {},
   './CollapsiblePanel.vue': {},
   '@/helpers/Media': {},
+  '@/helpers/Pwa': { pwa: { libraryBundled: false } },
   '../../../../../electron/MixerProfiles': profiles,
 });
 const plain = value => JSON.parse(JSON.stringify(value));

@@ -7,6 +7,7 @@ function configRuntime(electronAPI) {
     '../manifest.json': {}, '@/components/MenuToggleButton.vue': {},
     '@/components/inputs/ModernColorPicker.vue': {}, './ConfigMiniPreview.vue': {},
     './CollapsiblePanel.vue': {}, '@/helpers/Media': {},
+    '@/helpers/Pwa': { pwa: { libraryBundled: false } },
     '../../../../../electron/MixerProfiles': loadTs('electron/MixerProfiles.ts'),
   }, { window: { electronAPI } }).default;
   const state = {};
