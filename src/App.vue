@@ -1,6 +1,7 @@
 <template>
   <v-app id="app-container">
     <AppTitlebar />
+    <PwaControls />
     <FirstBootLoader />
     <AppLoading />
     <QuickSearchOverlay />
@@ -51,6 +52,7 @@
 
 <script lang="ts">
 import AppLoading from "@/layout/Loading.vue";
+import PwaControls from "@/components/PwaControls.vue";
 import FirstBootLoader from "@/layout/FirstBootLoader.vue";
 import AppTitlebar from "@/layout/Titlebar.vue";
 import BackgroundSync from "@/helpers/BackgroundSync";
@@ -59,6 +61,7 @@ import QuickSearchOverlay from "@/components/QuickSearchOverlay.vue";
 export default {
   name: "App",
   components: {
+    PwaControls,
     AppLoading,
     FirstBootLoader,
     AppTitlebar,

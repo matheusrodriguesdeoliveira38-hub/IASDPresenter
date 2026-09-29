@@ -3,6 +3,7 @@
 </template>
 
 <script lang="ts">
+import files from "@/helpers/BrowserFiles";
 import manifest from "../manifest.json";
 
 const CUSTOM_ALBUM_ID = 900001;
@@ -32,8 +33,8 @@ export default {
     async openPersonalizedAlbum() {
       let album = null;
 
-      if (window.electronAPI?.getLocalDb) {
-        album = await window.electronAPI.getLocalDb(`album_${CUSTOM_ALBUM_ID}`);
+      if (files?.getLocalDb) {
+        album = await files.getLocalDb(`album_${CUSTOM_ALBUM_ID}`);
       }
 
       if (!album) {
@@ -46,8 +47,8 @@ export default {
           musics: [],
         };
 
-        if (window.electronAPI?.saveLocalDb) {
-          await window.electronAPI.saveLocalDb(`album_${CUSTOM_ALBUM_ID}`, album);
+        if (files?.saveLocalDb) {
+          await files.saveLocalDb(`album_${CUSTOM_ALBUM_ID}`, album);
           sessionStorage.removeItem(`db:album_${CUSTOM_ALBUM_ID}`);
         }
       }

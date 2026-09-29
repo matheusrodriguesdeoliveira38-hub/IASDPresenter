@@ -1,9 +1,6 @@
-const Database = require('better-sqlite3');
 const path = require('path');
 const fs = require('fs-extra');
-const { app } = require('electron');
 const crypto = require('crypto');
-const { writeRecoverableFile } = require('./FileRecovery');
 
 const ENCRYPTION_KEY = Buffer.from('v389s8dkj238910s8a7d3h2j1k9s8d7f', 'utf8');
 const IV_LENGTH = 16;
@@ -22,11 +19,13 @@ function encryptData(text) {
 }
 
 class DbExtractor {
-  constructor(dbPath, language = 'pt', sourceLanguage = language) {
+  constructor(dbPath, language = 'pt', sourceLanguage = language, options = {}) {
     this.dbPath = dbPath;
     this.language = ['pt', 'en', 'es'].includes(language) ? language : 'pt';
     this.sourceLanguage = ['pt', 'en', 'es'].includes(sourceLanguage) ? sourceLanguage : this.language;
-    this.sysdataDir = path.join(app.getPath('userData'), '.sysdata');
+    this.sysdataDir = options.directory || path.join(require('electron').app.getPath('userData'), '.sysdata');
+    this.openDatabase = options.openDatabase || (file => new (require('better-sqlite3'))(file, { readonly: true }));
+    this.writeJson = options.writeJson;
   }
 
   async extract(progressCallback = () => {}) {
@@ -35,7 +34,7 @@ class DbExtractor {
     }
 
     fs.ensureDirSync(this.sysdataDir);
-    const db = new Database(this.dbPath, { readonly: true });
+    const db = this.openDatabase(this.dbPath);
 
     try {
       this.validateLanguage(db);
@@ -72,6 +71,8 @@ class DbExtractor {
   }
 
   saveJson(filename, data) {
+    if (this.writeJson) return this.writeJson(filename, data);
+    const { writeRecoverableFile } = require('./FileRecovery');
     const filePath = path.join(this.sysdataDir, `${filename}.bin`);
     const jsonString = JSON.stringify(data);
     const encryptedContent = encryptData(jsonString);

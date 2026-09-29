@@ -145,6 +145,7 @@ function presentationComponent(globals = {}) {
     async render(page) { return `page:${page}`; }
   }
   const component = loadTs('src/modules/presentation/interface/Index.vue', {
+    '@/helpers/BrowserFiles': globals.window?.electronAPI || {},
     '@/helpers/PresentationPdf': { PresentationPdf: Pdf },
     vue: { markRaw: value => value },
     '@/layout/ModuleContainer.vue': {},

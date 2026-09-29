@@ -404,6 +404,7 @@ A Ele a gloria"
 </template>
 
 <script lang="ts">
+import files from "@/helpers/BrowserFiles";
 import LSlide from "@/components/Slide.vue";
 import MenuToggleButton from "@/components/MenuToggleButton.vue";
 import {
@@ -617,31 +618,31 @@ export default {
       return String(slide.lyric || "").replace(/<br\s*\/?>/gi, " ") || "Slide vazio";
     },
     async chooseAudio() {
-      if (!window.electronAPI?.openFileDialog) {
+      if (!files?.openFileDialog) {
         this.$alert.error({ text: "Selecao de arquivo disponivel apenas no aplicativo desktop.", translate: false });
         return;
       }
 
-      const filePath = await window.electronAPI.openFileDialog({
+      const filePath = await files.openFileDialog({
         title: "Selecionar MP3",
         filters: [{ name: "Audio MP3", extensions: ["mp3"] }],
       });
       if (filePath) this.form.audioPath = filePath;
     },
     async importLyricsTxt() {
-      if (!window.electronAPI?.openFileDialog || !window.electronAPI?.readTextFile) {
+      if (!files?.openFileDialog || !files?.readTextFile) {
         this.$alert.error({ text: "Importacao de TXT disponivel apenas no aplicativo desktop.", translate: false });
         return;
       }
 
       try {
-        const filePath = await window.electronAPI.openFileDialog({
+        const filePath = await files.openFileDialog({
           title: "Importar letra de musica",
           filters: [{ name: "Arquivo de texto", extensions: ["txt"] }],
         });
         if (!filePath) return;
 
-        const file = await window.electronAPI.readTextFile(filePath);
+        const file = await files.readTextFile(filePath);
         if (!file?.ok) throw new Error(file?.error || "Nao foi possivel ler o arquivo selecionado.");
 
         const importedSlides = String(file.content || "")
@@ -737,10 +738,10 @@ export default {
           : "";
 
         if (this.form.audioPath && !urlMusic) {
-          if (!window.electronAPI?.saveCustomMusic) {
+          if (!files?.saveCustomMusic) {
             throw new Error("Nao foi possivel copiar o arquivo MP3.");
           }
-          urlMusic = await window.electronAPI.saveCustomMusic(this.form.audioPath);
+          urlMusic = await files.saveCustomMusic(this.form.audioPath);
           if (!urlMusic) throw new Error("Nao foi possivel salvar o MP3 selecionado.");
         }
 
@@ -769,11 +770,11 @@ export default {
         const musicData = this.createMusicData(musicSummary, categoryId);
         const musicIndex = await this.mergeMusicIndex(locale, musicSummary, album.musics);
 
-        await window.electronAPI.saveLocalDb(`${locale}_categories`, this.toPlainObject(categories));
-        await window.electronAPI.saveLocalDb(`${locale}_musics`, this.toPlainObject(musicIndex));
-        await window.electronAPI.saveLocalDb(`album_${CUSTOM_ALBUM_ID}`, this.toPlainObject(album));
+        await files.saveLocalDb(`${locale}_categories`, this.toPlainObject(categories));
+        await files.saveLocalDb(`${locale}_musics`, this.toPlainObject(musicIndex));
+        await files.saveLocalDb(`album_${CUSTOM_ALBUM_ID}`, this.toPlainObject(album));
         await this.syncStoredCustomSongTracks(album.musics, nextMusicId);
-        await window.electronAPI.saveLocalDb(`music_${nextMusicId}`, this.toPlainObject(musicData));
+        await files.saveLocalDb(`music_${nextMusicId}`, this.toPlainObject(musicData));
 
         sessionStorage.removeItem(`db:${locale}_categories`);
         sessionStorage.removeItem(`db:${locale}_musics`);
@@ -809,8 +810,8 @@ export default {
     async loadCustomSongs() {
       this.loadingSongs = true;
       try {
-        const album = window.electronAPI?.getLocalDb
-          ? await window.electronAPI.getLocalDb(`album_${CUSTOM_ALBUM_ID}`)
+        const album = files?.getLocalDb
+          ? await files.getLocalDb(`album_${CUSTOM_ALBUM_ID}`)
           : null;
         this.customSongs = (album?.musics || []).slice().sort((a, b) => (a.track || 0) - (b.track || 0));
       } finally {
@@ -818,12 +819,12 @@ export default {
       }
     },
     async editSong(idMusic) {
-      if (!window.electronAPI?.getLocalDb) {
+      if (!files?.getLocalDb) {
         this.$alert.error({ text: "Edicao disponivel apenas no aplicativo desktop.", translate: false });
         return;
       }
 
-      const music = await window.electronAPI.getLocalDb(`music_${idMusic}`);
+      const music = await files.getLocalDb(`music_${idMusic}`);
       if (!music) {
         this.$alert.error({ text: "Nao foi possivel carregar a musica selecionada.", translate: false });
         return;
@@ -861,7 +862,7 @@ export default {
       });
     },
     async deleteSong(song) {
-      if (!song || !window.electronAPI?.saveLocalDb) {
+      if (!song || !files?.saveLocalDb) {
         this.$alert.error({ text: "Exclusao disponivel apenas no aplicativo desktop.", translate: false });
         return;
       }
@@ -872,8 +873,8 @@ export default {
       try {
         const locale = this.$i18n.locale || "pt";
         const album = await this.ensureAlbum(locale);
-        const musicData = window.electronAPI?.getLocalDb
-          ? await window.electronAPI.getLocalDb(`music_${idMusic}`)
+        const musicData = files?.getLocalDb
+          ? await files.getLocalDb(`music_${idMusic}`)
           : null;
         const musicIndex = await this.loadLocalDb(`${locale}_musics`, []);
         const nextMusics = normalizeCustomSongTracks(
@@ -892,8 +893,8 @@ export default {
               : music)
           : [];
 
-        await window.electronAPI.saveLocalDb(`${locale}_musics`, this.toPlainObject(nextMusicIndex));
-        await window.electronAPI.saveLocalDb(`album_${CUSTOM_ALBUM_ID}`, this.toPlainObject(nextAlbum));
+        await files.saveLocalDb(`${locale}_musics`, this.toPlainObject(nextMusicIndex));
+        await files.saveLocalDb(`album_${CUSTOM_ALBUM_ID}`, this.toPlainObject(nextAlbum));
         await this.syncStoredCustomSongTracks(nextMusics);
         const customState = this.$userdata.get("custom_songs_state") || {};
         this.$userdata.set("custom_songs_state", {
@@ -969,8 +970,8 @@ export default {
       return { categories, categoryId: category.id_category };
     },
     async ensureAlbum(locale) {
-      const localAlbum = window.electronAPI?.getLocalDb
-        ? await window.electronAPI.getLocalDb(`album_${CUSTOM_ALBUM_ID}`)
+      const localAlbum = files?.getLocalDb
+        ? await files.getLocalDb(`album_${CUSTOM_ALBUM_ID}`)
         : null;
 
       return localAlbum || {
@@ -1005,13 +1006,13 @@ export default {
         : music);
     },
     async syncStoredCustomSongTracks(musics, skipMusicId = null) {
-      if (!window.electronAPI?.getLocalDb || !window.electronAPI?.saveLocalDb) return;
+      if (!files?.getLocalDb || !files?.saveLocalDb) return;
 
       for (const summary of musics) {
         if (summary.id_music === skipMusicId) continue;
-        const storedMusic = await window.electronAPI.getLocalDb(`music_${summary.id_music}`);
+        const storedMusic = await files.getLocalDb(`music_${summary.id_music}`);
         if (!storedMusic) continue;
-        await window.electronAPI.saveLocalDb(
+        await files.saveLocalDb(
           `music_${summary.id_music}`,
           this.toPlainObject(applyCustomSongTrack(storedMusic, summary.track)),
         );
@@ -1022,8 +1023,8 @@ export default {
       const cached = sessionStorage.getItem(`db:${file}`);
       if (cached) return JSON.parse(cached);
 
-      if (window.electronAPI?.getLocalDb) {
-        const local = await window.electronAPI.getLocalDb(file);
+      if (files?.getLocalDb) {
+        const local = await files.getLocalDb(file);
         if (local) return local;
       }
 

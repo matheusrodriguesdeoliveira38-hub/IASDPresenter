@@ -165,6 +165,11 @@ Limpar busca
                   <div v-if="topic.warning" class="topic-callout warning">
 <v-icon icon="mdi-alert-outline" size="21" /><div><strong>Atenção</strong><span>{{ topic.warning }}</span></div>
 </div>
+                  <div v-if="topic.links?.length" class="d-flex flex-wrap ga-2 mt-4">
+                    <v-btn v-for="link in topic.links" :key="link.url" color="primary" variant="tonal" prepend-icon="mdi-open-in-new" class="text-none" @click="openLink(link.url)">
+                      {{ link.label }}
+                    </v-btn>
+                  </div>
                   <div v-if="topic.moduleId" class="topic-footer">
                     <v-btn color="primary" variant="flat" rounded="lg" class="text-none font-weight-bold" prepend-icon="mdi-open-in-app" @click="$emit('open-module', topic.moduleId)">
 {{ topic.actionLabel || 'Abrir no aplicativo' }}
@@ -236,6 +241,13 @@ export default {
   mounted() { window.addEventListener("keydown", this.handleShortcut); },
   beforeUnmount() { window.removeEventListener("keydown", this.handleShortcut); },
   methods: {
+    async openLink(url: string) {
+      if (window.electronAPI?.openExternal) {
+        await window.electronAPI.openExternal(url);
+      } else {
+        window.open(url, "_blank", "noopener,noreferrer");
+      }
+    },
     handleShortcut(event: KeyboardEvent) {
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") {
         event.preventDefault();

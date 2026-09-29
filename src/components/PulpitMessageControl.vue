@@ -6,8 +6,9 @@
     <v-card title="Mensagem ao púlpito">
       <v-card-text>
         <p class="mb-4">
-          Exibida somente no monitor de retorno. Configure uma tela exclusiva para o púlpito em Configurações → Projeção.
+          Escolha o monitor em que a mensagem será exibida.
         </p>
+        <v-select v-model="monitorId" label="Monitor de destino" :items="monitors" :disabled="sending" class="mb-2" />
         <div class="d-flex flex-wrap ga-2 mb-4">
           <v-chip v-for="preset in presets" :key="preset" @click="draft = preset">
             {{ preset }}
@@ -16,9 +17,9 @@
         <v-textarea v-model="draft" label="Mensagem" maxlength="200" counter rows="3" />
         <v-select v-model="duration" label="Desaparecer automaticamente" :items="durations" />
         <figure class="pulpit-preview mb-4">
-          <figcaption class="text-caption mb-2">Prévia do recado · tela de retorno (16:9)</figcaption>
+          <figcaption class="text-caption mb-2">Prévia do recado · {{ monitorLabel }} (16:9)</figcaption>
           <div class="pulpit-preview-screen" :style="{ background: $userdata.get('modules.config.return_monitor_bg_color') || '#000000' }">
-            <span class="pulpit-preview-hint">{{ draft.trim() ? 'Monitor de retorno' : 'Digite uma mensagem para visualizar' }}</span>
+            <span class="pulpit-preview-hint">{{ draft.trim() ? monitorLabel : 'Digite uma mensagem para visualizar' }}</span>
             <PulpitMessageBanner v-if="draft.trim()" :text="draft.trim().slice(0, 200)" />
           </div>
           <p class="text-caption mt-2">{{ duration ? `O recado desaparecerá ${duration} segundos após o envio.` : 'O recado ficará visível até ser removido.' }}</p>
@@ -27,7 +28,7 @@
           {{ error }}
         </v-alert>
         <v-alert v-if="active" type="info" aria-live="polite">
-          Em exibição: {{ active.text }}
+          Em exibição em {{ activeMonitorLabel }}: {{ active.text }}
           <div>{{ active.expiresAt ? `Desaparece em ${Math.ceil((active.expiresAt - now) / 1000)} s` : 'Até remover manualmente' }}</div>
         </v-alert>
       </v-card-text>
@@ -39,7 +40,7 @@
         <v-btn @click="open = false">
           Fechar
         </v-btn>
-        <v-btn color="primary" variant="flat" :disabled="!draft.trim() || sending" :loading="sending" @click="send">
+        <v-btn color="primary" variant="flat" :disabled="!draft.trim() || monitorId == null || sending" :loading="sending" @click="send">
           Enviar
         </v-btn>
       </v-card-actions>
@@ -55,6 +56,8 @@ export default {
   components: { PulpitMessageBanner },
   data: () => ({
     open: false, draft: "", duration: 10, error: "", sending: false,
+    monitors: [], monitorId: null as string | number | null,
+    activeMonitorId: null as string | number | null, activeMonitorLabel: "",
     message: null as PulpitMessage | null,
     now: Date.now(), timer: null as ReturnType<typeof setInterval> | null,
     presets: ["Faltam 5 minutos", "Microfone desligado", "Aguardar o próximo hino"],
@@ -62,6 +65,11 @@ export default {
   }),
   computed: {
     active() { return activePulpitMessage(this.message, this.now); },
+    monitorLabel() { return this.monitors.find(m => m.value === this.monitorId)?.title || "Selecione um monitor"; },
+  },
+  watch: {
+    open(value) { if (value) this.refreshMonitors(); },
+    active(value) { if (!value) this.$popup.closePulpitMonitors(); },
   },
   mounted() {
     this.timer = setInterval(() => { this.now = Date.now(); }, 250);
@@ -72,39 +80,59 @@ export default {
     window.removeEventListener("message", this.onReady);
   },
   methods: {
+    async refreshMonitors() {
+      this.error = "";
+      try {
+        const displays = await window.electronAPI?.getDisplays?.() || [];
+        this.monitors = displays.map((display, index) => ({
+          value: display.id,
+          title: `${display.label || `Monitor ${index + 1}`}${display.isPrimary ? " (principal)" : ""}`,
+        }));
+        const preferred = this.monitorId ?? this.$userdata.get("modules.config.pulpit_message_monitor")
+          ?? this.$userdata.get("modules.config.return_monitor");
+        this.monitorId = this.monitors.find(m => String(m.value) === String(preferred))?.value ?? null;
+        if (!this.monitors.length) this.error = "Nenhum monitor disponível.";
+      } catch { this.error = "Não foi possível listar os monitores."; }
+    },
     onReady(event: MessageEvent) {
       if (event.data?.action !== "pulpit-ready") return;
-      const targets = (this.$appdata.get("popups") || []).filter(popup => popup === event.source);
-      sendPulpitMessage(targets, activePulpitMessage(this.message));
+      if (this.activeMonitorId == null) return;
+      const targets = (this.$appdata.get("popups") || []).filter(popup => (popup.nativeWindow || popup) === event.source);
+      sendPulpitMessage(targets, activePulpitMessage(this.message), this.activeMonitorId);
     },
     clear() {
       this.message = null;
-      sendPulpitMessage(this.$appdata.get("popups") || [], null);
+      if (this.activeMonitorId != null) sendPulpitMessage(this.$appdata.get("popups") || [], null, this.activeMonitorId);
+      this.$popup.closePulpitMonitors();
+      this.activeMonitorId = null;
     },
     async send() {
       this.error = "";
       this.sending = true;
       try {
-        const monitor = this.$userdata.get("modules.config.return_monitor");
-        const selected = this.$userdata.get("modules.config.slide_monitor") || [];
-        const projections = Array.isArray(selected) ? selected : [selected];
-        const sharedScreen = (this.$appdata.get("popups") || []).some(popup =>
-          !popup.closed && popup.popupRole !== "return_monitor" && popup.popupRole !== "web_output" && popup.monitorId === monitor);
-        if (projections.includes(monitor) || sharedScreen) {
-          this.error = "Escolha um monitor de retorno diferente da projeção para enviar mensagens privadas.";
+        const monitor = this.monitorId;
+        const displays = await window.electronAPI?.getDisplays?.() || [];
+        if (monitor == null || !displays.some(d => String(d.id) === String(monitor))) {
+          this.error = "Selecione um monitor conectado.";
           return;
         }
-        await this.$media.syncReturnMonitor(true);
         const message = { text: this.draft.trim().slice(0, 200), expiresAt: this.duration ? Date.now() + this.duration * 1000 : null };
         if (!message.text) return;
-        if (!sendPulpitMessage(this.$appdata.get("popups") || [], message)) {
-          this.error = "Monitor de retorno indisponível. Ative e selecione o monitor em Configurações → Projeção; verifique também o modo de desempenho.";
+        this.clear();
+        this.activeMonitorId = monitor;
+        this.activeMonitorLabel = this.monitorLabel;
+        this.message = message;
+        this.now = Date.now();
+        this.$popup.openPulpitMonitor(monitor);
+        if (!sendPulpitMessage(this.$appdata.get("popups") || [], message, monitor)) {
+          this.clear();
+          this.error = "Não foi possível abrir a mensagem no monitor selecionado.";
           return;
         }
-        this.now = Date.now();
-        this.message = message;
+        this.$userdata.set("modules.config.pulpit_message_monitor", monitor);
       } catch {
-        this.error = "Não foi possível enviar. Verifique a conexão do monitor de retorno.";
+        this.clear();
+        this.error = "Não foi possível enviar. Verifique a conexão do monitor selecionado.";
       } finally { this.sending = false; }
     },
   },

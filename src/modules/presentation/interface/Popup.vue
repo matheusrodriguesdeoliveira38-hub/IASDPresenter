@@ -8,6 +8,7 @@
 </template>
 
 <script lang="ts">
+import files from "@/helpers/BrowserFiles";
 import { PresentationPdf } from "@/helpers/PresentationPdf";
 import { markRaw } from "vue";
 import $performance from "@/helpers/Performance";
@@ -63,10 +64,10 @@ export default {
       this.currentImage = "";
       this.pdfDoc = null;
       const filePath = this.preparedPath;
-      if (!filePath || !window.electronAPI?.readPresentationFile) return;
+      if (!filePath || !files?.readPresentationFile) return;
       try {
         const pdfDocument = await this.pdf.load(async () => {
-          const result = await window.electronAPI.readPresentationFile(filePath);
+          const result = await files.readPresentationFile(filePath);
           if (!result?.ok || !result.data) throw new Error(result?.error || "Nao foi possivel ler o PDF.");
           return result.data;
         }, revision);

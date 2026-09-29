@@ -136,6 +136,7 @@
 </template>
 
 <script lang="ts">
+import files from "@/helpers/BrowserFiles";
 import manifest from "../manifest.json";
 
 import MusicMenuTable from "@/components/MusicMenuTable.vue";
@@ -208,7 +209,7 @@ export default {
       });
     },
     async deleteCustomMusic(item) {
-      if (!this.isCustomAlbum || !window.electronAPI?.saveLocalDb) return;
+      if (!this.isCustomAlbum || !files?.saveLocalDb) return;
 
       this.$appdata.set("modules.album.loading", true);
 
@@ -223,8 +224,8 @@ export default {
           musics: nextMusics,
         });
 
-        const musicData = window.electronAPI?.getLocalDb
-          ? await window.electronAPI.getLocalDb(`music_${idMusic}`)
+        const musicData = files?.getLocalDb
+          ? await files.getLocalDb(`music_${idMusic}`)
           : null;
 
         const musicIndex = await this.loadLocalDb(`${locale}_musics`, []);
@@ -237,15 +238,15 @@ export default {
               : music)
           : [];
 
-        await window.electronAPI.saveLocalDb(`${locale}_musics`, this.toPlainObject(nextMusicIndex));
-        await window.electronAPI.saveLocalDb(`album_${CUSTOM_ALBUM_ID}`, album);
+        await files.saveLocalDb(`${locale}_musics`, this.toPlainObject(nextMusicIndex));
+        await files.saveLocalDb(`album_${CUSTOM_ALBUM_ID}`, album);
 
         for (const summary of nextMusics) {
-          const storedMusic = window.electronAPI?.getLocalDb
-            ? await window.electronAPI.getLocalDb(`music_${summary.id_music}`)
+          const storedMusic = files?.getLocalDb
+            ? await files.getLocalDb(`music_${summary.id_music}`)
             : null;
           if (!storedMusic) continue;
-          await window.electronAPI.saveLocalDb(
+          await files.saveLocalDb(
             `music_${summary.id_music}`,
             this.toPlainObject(applyCustomSongTrack(storedMusic, summary.track)),
           );
@@ -287,8 +288,8 @@ export default {
       const cached = sessionStorage.getItem(`db:${file}`);
       if (cached) return JSON.parse(cached);
 
-      if (window.electronAPI?.getLocalDb) {
-        const local = await window.electronAPI.getLocalDb(file);
+      if (files?.getLocalDb) {
+        const local = await files.getLocalDb(file);
         if (local) return local;
       }
 

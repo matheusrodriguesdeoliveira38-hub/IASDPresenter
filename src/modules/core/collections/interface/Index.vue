@@ -176,6 +176,7 @@
 </template>
 
 <script lang="ts">
+import files from "@/helpers/BrowserFiles";
 import manifest from "../manifest.json";
 import MenuToggleButton from "@/components/MenuToggleButton.vue";
 
@@ -334,9 +335,9 @@ export default {
       this.loading = false;
     },
     async attachCustomAlbum() {
-      if (!window.electronAPI?.getLocalDb) return;
+      if (!files?.getLocalDb) return;
 
-      const customAlbum = await window.electronAPI.getLocalDb(`album_${CUSTOM_ALBUM_ID}`);
+      const customAlbum = await files.getLocalDb(`album_${CUSTOM_ALBUM_ID}`);
       if (!customAlbum?.musics?.length) return;
 
       const albumCard = {
@@ -374,8 +375,8 @@ export default {
       targetCategory.albums.unshift(albumCard);
     },
     async openAlbum(id_album) {
-      if (id_album === CUSTOM_ALBUM_ID && window.electronAPI?.getLocalDb) {
-        const customAlbum = await window.electronAPI.getLocalDb(`album_${CUSTOM_ALBUM_ID}`);
+      if (id_album === CUSTOM_ALBUM_ID && files?.getLocalDb) {
+        const customAlbum = await files.getLocalDb(`album_${CUSTOM_ALBUM_ID}`);
         if (customAlbum) {
           this.$appdata.set("modules.album.loading", true);
           this.$appdata.set("modules.album.data", customAlbum);

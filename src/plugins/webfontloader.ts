@@ -5,6 +5,10 @@
  */
 
 export async function loadFonts() {
+  if (__PWA_ENABLED__) {
+    await import("roboto-fontface/css/roboto/roboto-fontface.css");
+    return;
+  }
   const webFontLoader = await import(/* webpackChunkName: "webfontloader" */"webfontloader");
 
   webFontLoader.load({

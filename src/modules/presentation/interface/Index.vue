@@ -313,6 +313,7 @@
 </template>
 
 <script lang="ts">
+import files from "@/helpers/BrowserFiles";
 import { PresentationPdf } from "@/helpers/PresentationPdf";
 import { markRaw } from "vue";
 import ModuleContainer from "@/layout/ModuleContainer.vue";
@@ -423,12 +424,12 @@ export default {
       this.$userdata.set("modules.presentation.projection_target", this.selectedProjectionTarget);
     },
     async selectFile() {
-      if (!window.electronAPI?.openFileDialog) {
+      if (!files?.openFileDialog) {
         this.$alert.error({ text: "Selecao de arquivos disponivel apenas na versao desktop.", translate: false });
         return;
       }
 
-      const filePath = await window.electronAPI.openFileDialog({
+      const filePath = await files.openFileDialog({
         title: "Selecionar apresentacao",
         filters: [
           { name: "Apresentacoes", extensions: ["pdf", "ppt", "pptx"] },
@@ -465,7 +466,7 @@ export default {
       }
 
       try {
-        const prepared = await window.electronAPI.preparePresentationFile(filePath);
+        const prepared = await files.preparePresentationFile(filePath);
         if (token !== this.loadToken) return;
         if (!prepared?.ok) {
           this.error = prepared?.error || this.t("status.unsupported");
@@ -499,7 +500,7 @@ export default {
     },
     async loadPdf(filePath, revision = this.pdf.revision) {
       const pdfDocument = await this.pdf.load(async () => {
-        const result = await window.electronAPI.readPresentationFile(filePath);
+        const result = await files.readPresentationFile(filePath);
         if (!result?.ok || !result.data) throw new Error(result?.error || "Nao foi possivel ler o PDF preparado.");
         return result.data;
       }, revision);

@@ -18,7 +18,7 @@ const loadLocaleMessages = async () => {
 
 export const createI18nInstance = async () => {
   const messages = await loadLocaleMessages();
-  const savedLocale = normalizeLocale(UserData.get("language") || navigator.language);
+  const savedLocale = __BUNDLED_LIBRARY_VERSION__ ? "pt" : normalizeLocale(UserData.get("language") || navigator.language);
   return createI18n({
     legacy: false,
     locale: savedLocale,

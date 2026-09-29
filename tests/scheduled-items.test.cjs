@@ -12,6 +12,7 @@ class LocalDate extends Date {
   getDate() { return 25; }
 }
 const { default: component } = loadTs('src/modules/liturgy/interface/Index.vue', {
+  '@/helpers/BrowserFiles': api,
   '@/helpers/LiturgyGroups': loadTs('src/helpers/LiturgyGroups.ts'),
   '@/helpers/HymnalPreference': {}, '../manifest.json': {},
   '@/components/MenuToggleButton.vue': {}, vuedraggable: {}, './RichTextEditor.vue': {},
@@ -20,6 +21,8 @@ const { default: component } = loadTs('src/modules/liturgy/interface/Index.vue',
 }, { crypto: { randomUUID }, window: { electronAPI: api }, Date: LocalDate });
 function context(saved = {}) {
   const ctx = { ...component.data(), module_id: 'liturgy', errors: [],
+    returnModules: [],
+    $media: { async syncReturnMonitor(force, current, module) { ctx.returnModules.push(module); } },
     $userdata: { get: key => saved[key], set: (key, value) => { saved[key] = JSON.parse(JSON.stringify(value)); } },
     $appdata: { get: () => true, set() {} },
     $alert: { error: ({text}) => ctx.errors.push(text), yesno: (_, callback) => callback('yes') },
@@ -29,7 +32,6 @@ function context(saved = {}) {
   for (const key of ['selectedScheduledCategory', 'sortedScheduledItems', 'isFormValid', 'selectedItem']) Object.defineProperty(ctx, key, { get: () => component.computed[key].call(ctx) });
   ctx.currentItems = [];
   ctx.getLiturgyTransitionDurationMs = () => 0;
-  ctx.getLiturgyExternalVolume = () => 70;
   ctx.hasActiveLiturgyItem = () => false;
   ctx.stopActiveLiturgyPlayback = async () => {};
   ctx.runAutomationForItem = async () => {};
@@ -39,6 +41,89 @@ function populate(ctx) {
   ctx.newScheduledCategoryName = 'Provai e Vede'; ctx.createScheduledCategory();
   ctx.scheduledDate = '2026-09-25'; ctx.scheduledFilePath = 'C:\\media\\today.mp4'; ctx.addScheduledFile();
 }
+
+test('export reports success only after writing and handles cancellation and failure', async () => {
+  const ctx = context();
+  const notices = [], writes = [];
+  ctx.$alert.info = notice => notices.push(notice);
+  api.saveFileDialog = async () => 'liturgy.json';
+  api.writeTextFile = async (path, content) => { writes.push({ path, content }); return { ok: true }; };
+  await ctx.exportLiturgy();
+  assert.equal(writes.length, 1);
+  assert.deepEqual(JSON.parse(writes[0].content), JSON.parse(JSON.stringify(ctx.createExportPayload())));
+  assert.equal(notices.length, 1);
+  assert.equal(ctx.errors.length, 0);
+  api.saveFileDialog = async () => null;
+  await ctx.exportLiturgy();
+  assert.equal(writes.length, 1);
+  assert.equal(notices.length, 1);
+  api.saveFileDialog = async () => 'liturgy.json';
+  api.writeTextFile = async () => ({ ok: false, error: 'write failed' });
+  await ctx.exportLiturgy();
+  assert.deepEqual(ctx.errors, ['write failed']);
+  assert.equal(notices.length, 1);
+});
+
+test('import confirms success through the supported alert API after saving', async () => {
+  const ctx = context();
+  ctx.liturgies.saturday = [{ id: 'note', type: 'annotation', name: 'Abertura' }];
+  const notices = [];
+  let saved = false;
+  ctx.$alert.info = notice => { assert.equal(saved, true); notices.push(notice); };
+  api.openFileDialog = async () => 'liturgy.json';
+  api.readTextFile = async () => ({ ok: true, content: JSON.stringify(ctx.createExportPayload()) });
+  ctx.saveLiturgy = () => { saved = true; };
+  await ctx.importLiturgy();
+  assert.equal(notices.length, 1);
+  assert.equal(ctx.errors.length, 0);
+});
+
+test('clicks received during a load execute once each in order without another click', async () => {
+  const ctx = context();
+  let release;
+  const loading = new Promise(resolve => { release = resolve; });
+  const calls = [];
+  ctx.executeItemNow = async (item, mode) => {
+    calls.push([item.id, mode]);
+    if (item.id === 1) await loading;
+  };
+  const first = ctx.executeItem({ id: 1 });
+  const second = ctx.executeItem({ id: 2 }, 'instrumental');
+  await new Promise(resolve => setImmediate(resolve));
+  assert.deepEqual(calls, [[1, 'audio']]);
+  assert.equal(ctx.liturgyTransitionInProgress, true);
+  release();
+  await Promise.all([first, second]);
+  assert.deepEqual(calls, [[1, 'audio'], [2, 'instrumental']]);
+  assert.equal(ctx.liturgyTransitionInProgress, false);
+});
+
+test('failed item cannot leave subsequent clicks locked', async () => {
+  const ctx = context();
+  const calls = [];
+  ctx.executeItemNow = async item => {
+    calls.push(item.id);
+    if (item.id === 1) throw new Error('unavailable');
+  };
+  const first = ctx.executeItem({ id: 1 });
+  const rejected = assert.rejects(first, /unavailable/);
+  const second = ctx.executeItem({ id: 2 });
+  await Promise.all([rejected, second]);
+  assert.deepEqual(calls, [1, 2]);
+  assert.equal(ctx.liturgyTransitionInProgress, false);
+});
+
+test('a clock alone cannot make the first verse click skip opening projection', async () => {
+  const ctx = context();
+  const calls = [];
+  const state = { popups: [{ popupRole: 'clock', closed: false }], popup_module: 'bible' };
+  ctx.$appdata = { get: key => state[key], set: (key, value) => { state[key] = value; } };
+  ctx.$nextTick = callback => Promise.resolve(callback?.());
+  ctx.$popup = { async open(params) { calls.push(params.module); } };
+  await ctx.executeItem({ type: 'verse', verseBookId: 1, verseChapter: 1, verseNumbers: '1' });
+  assert.deepEqual(calls, ['bible']);
+  assert.deepEqual(ctx.returnModules, ['bible']);
+});
 test('create, persist and reload category and scheduled file with stable IDs', () => {
   const saved = {}; const ctx = context(saved); populate(ctx);
   const reloaded = context(saved); reloaded.loadSavedLiturgies();
@@ -71,7 +156,8 @@ test('execution resolves exact LOCAL day through normal player with volume optio
   const ctx = context(); populate(ctx); ctx.$userdata.get = () => true;
   opened.length = 0; api.isFileReadable = async () => true;
   await ctx.executeItem({ type: 'scheduled_item', categoryId: ctx.selectedScheduledCategoryId });
-  assert.equal(opened.length, 1); assert.equal(opened[0].filePath, 'C:\\media\\today.mp4'); assert.equal(opened[0].volume, 70);
+  assert.equal(opened.length, 1); assert.equal(opened[0].filePath, 'C:\\media\\today.mp4'); assert.equal(opened[0].volume, 100);
+  assert.deepEqual(ctx.returnModules, ['external_media']);
 });
 test('missing exact date, deleted category and inaccessible file never stop or open media', async () => {
   const ctx = context(); populate(ctx); let stopped = 0;

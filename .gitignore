@@ -10,6 +10,8 @@
 ._*
 node_modules
 /dist
+/dist-chromeos
+/dist-chromeos-pages
 /dist-electron
 /dist-electron-*
 update.md

@@ -106,7 +106,7 @@ test('closing media during display lookup prevents late fullscreen and projectio
 });
 
 test('a reused projection window adopts the new module metadata', async () => {
-  const popup = { monitorId: 2, popupRole: 'projection', popupModule: 'media', popupFullscreen: true, closed: false };
+  const popup = { monitorId: 2, popupRole: 'projection', popupModule: 'media', popupFullscreen: true, closed: false, focus() {} };
   const state = { popups: [popup], popup_module: 'media' };
   const helper = loadTs('src/helpers/Popup.ts', {
     '@/helpers/AppData': { get: key => state[key], set: (key, value) => { state[key] = value; } },

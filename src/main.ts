@@ -1,4 +1,5 @@
 import { createApp } from "vue";
+import { startPwa } from "./helpers/Pwa";
 import App from "./App.vue";
 import router from "./router";
 import vuetify from "./plugins/vuetify";
@@ -13,6 +14,7 @@ import "./assets/styles/main.css";
 import "./assets/styles/fonts.css";
 import "./assets/styles/layout.scss";
 
+startPwa();
 loadFonts();
 UserData.load();
 

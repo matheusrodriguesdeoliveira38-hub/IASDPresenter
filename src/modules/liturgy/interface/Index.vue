@@ -959,6 +959,7 @@ Itens Agendados
 </template>
 
 <script lang="ts">
+import files from "@/helpers/BrowserFiles";
 import { matchesPrimaryHymnal, getHymnalSearchPriority, getPreferredHymnalAlbum } from "@/helpers/HymnalPreference";
 import manifest from "../manifest.json";
 import MenuToggleButton from "@/components/MenuToggleButton.vue";
@@ -987,6 +988,7 @@ export default {
     selectedDay: null,
     selectedItemIndex: null,
     liturgyTransitionInProgress: false,
+    liturgyExecution: null,
     liturgyExternalTargetVolume: 100,
     selectedCustomIndex: 0,
 
@@ -1349,13 +1351,13 @@ export default {
       return { liturgies, dayNotes, customLiturgies, scheduledCategories };
     },
     async exportLiturgy() {
-      if (!window.electronAPI?.saveFileDialog || !window.electronAPI?.writeTextFile) {
+      if (!files?.saveFileDialog || !files?.writeTextFile) {
         this.$alert.error({ text: this.t("messages.desktop_only"), translate: false });
         return;
       }
 
       try {
-        const filePath = await window.electronAPI.saveFileDialog({
+        const filePath = await files.saveFileDialog({
           title: this.t("actions.export_liturgy"),
           defaultPath: "liturgia-iasdpresenter.json",
           filters: [
@@ -1364,7 +1366,7 @@ export default {
         });
         if (!filePath) return;
 
-        const result = await window.electronAPI.writeTextFile(
+        const result = await files.writeTextFile(
           filePath,
           `${JSON.stringify(this.createExportPayload(), null, 2)}\n`,
         );
@@ -1373,19 +1375,19 @@ export default {
           return;
         }
 
-        this.$alert.success({ text: this.t("messages.export_success"), translate: false });
+        this.$alert.info({ text: this.t("messages.export_success"), translate: false });
       } catch (error) {
         this.$alert.error({ text: this.t("messages.export_error"), error, translate: false });
       }
     },
     async importLiturgy() {
-      if (!window.electronAPI?.openFileDialog || !window.electronAPI?.readTextFile) {
+      if (!files?.openFileDialog || !files?.readTextFile) {
         this.$alert.error({ text: this.t("messages.desktop_only"), translate: false });
         return;
       }
 
       try {
-        const filePath = await window.electronAPI.openFileDialog({
+        const filePath = await files.openFileDialog({
           title: this.t("actions.import_liturgy"),
           filters: [
             { name: "Liturgia IASDPresenter", extensions: ["json"] },
@@ -1394,7 +1396,7 @@ export default {
         });
         if (!filePath) return;
 
-        const file = await window.electronAPI.readTextFile(filePath);
+        const file = await files.readTextFile(filePath);
         if (!file?.ok) {
           this.$alert.error({ text: file?.error || this.t("messages.import_error"), translate: false });
           return;
@@ -1422,7 +1424,7 @@ export default {
             }
             this.selectedCustomIndex = Math.min(this.selectedCustomIndex, Math.max(this.customLiturgies.length - 1, 0));
             this.saveLiturgy();
-            this.$alert.success({ text: this.t("messages.import_success"), translate: false });
+            this.$alert.info({ text: this.t("messages.import_success"), translate: false });
           },
         );
       } catch (error) {
@@ -1788,8 +1790,8 @@ export default {
 
     // ====== MEDIA FILE SELECTOR ======
     async pickMediaFile() {
-      if (window.electronAPI?.openFileDialog) {
-        const filePath = await window.electronAPI.openFileDialog({
+      if (files?.openFileDialog) {
+        const filePath = await files.openFileDialog({
           title: "Selecionar Mídia",
           filters: [
             { name: "Mídia e documentos", extensions: ["mp4", "mkv", "avi", "mov", "wmv", "webm", "mp3", "wav", "flac", "aac", "ogg", "wma", "m4a", "pdf", "ppt", "pptx"] },
@@ -1812,12 +1814,12 @@ export default {
     },
     // ====== PRESENTATION FILE SELECTOR ======
     async selectPresentationFile() {
-      if (!window.electronAPI?.openFileDialog) {
+      if (!files?.openFileDialog) {
         this.$alert.error({ text: "Selecao de arquivos disponivel apenas na versao desktop.", translate: false });
         return;
       }
 
-      const filePath = await window.electronAPI.openFileDialog({
+      const filePath = await files.openFileDialog({
         title: "Selecionar apresentacao",
         filters: [
           { name: "Apresentacoes", extensions: ["pdf", "ppt", "pptx"] },
@@ -1836,7 +1838,22 @@ export default {
     },
 
     // ====== EXECUTE/PROJECT ITEMS ======
-    async executeItem(item, musicMode = "audio") {
+    executeItem(item, musicMode = "audio") {
+      // Serialize clicks, including file validation and conversion. A click made
+      // while the preceding item loads must not disappear.
+      const previous = this.liturgyExecution || Promise.resolve();
+      const execution = previous.catch(() => {}).then(async () => {
+        this.liturgyTransitionInProgress = true;
+        try {
+          await this.executeItemNow(item, musicMode);
+        } finally {
+          this.liturgyTransitionInProgress = false;
+        }
+      });
+      this.liturgyExecution = execution;
+      return execution;
+    },
+    async executeItemNow(item, musicMode = "audio") {
       if (item.type === "scheduled_item") {
         const category = this.scheduledCategories.find(category => category.id === item.categoryId);
         if (!category) return this.scheduledError("A categoria deste Item Agendado foi excluída ou não está disponível.");
@@ -1845,17 +1862,15 @@ export default {
         const entry = category.items.find(entry => entry.date === today);
         if (!entry) return this.scheduledError(`Não há arquivo agendado em “${  category.name  }” para hoje (${  today  }).`);
         try {
-          if (!await window.electronAPI?.isFileReadable?.(entry.filePath)) return this.scheduledError(`O arquivo agendado não está acessível: ${  entry.filePath}`);
+          if (!await files?.isFileReadable?.(entry.filePath)) return this.scheduledError(`O arquivo agendado não está acessível: ${  entry.filePath}`);
         } catch { return this.scheduledError(`O arquivo agendado não está acessível: ${  entry.filePath}`); }
         item = { ...item, type: "media", name: category.name, subtitle: entry.name, filePath: entry.filePath };
       }
       if (item.type === "media" && !item.filePath) return;
       if (item.type === "music" && !item.musicId) return;
-      if (this.liturgyTransitionInProgress) return;
-      this.liturgyTransitionInProgress = true;
 
       const durationMs = this.getLiturgyTransitionDurationMs();
-      this.liturgyExternalTargetVolume = this.getLiturgyExternalVolume();
+      this.liturgyExternalTargetVolume = 100;
       const hasActiveItem = this.hasActiveLiturgyItem();
       const shouldTransition = hasActiveItem && durationMs > 0;
       const phaseDurationMs = Math.round(durationMs / 2);
@@ -1922,8 +1937,8 @@ export default {
           }
           break;
         case "presentation":
-          if (item.filePath && window.electronAPI?.preparePresentationFile) {
-            const prepared = await window.electronAPI.preparePresentationFile(item.filePath);
+          if (item.filePath && files?.preparePresentationFile) {
+            const prepared = await files.preparePresentationFile(item.filePath);
             if (!prepared?.ok) {
               const details = prepared?.details ? `\n\nDetalhes: ${prepared.details}` : "";
               this.$alert.error({
@@ -1965,7 +1980,8 @@ export default {
           : this.$userdata.get("modules.config.slide_fullscreen") !== false;
         const showExternalMediaOnlyInOperator = targetModule === "external_media" && fullscreen;
         const popups = this.$appdata.get("popups") || [];
-        const isPopupOpened = popups.some(p => !p.closed);
+        const isPopupOpened = popups.some(p => p && !p.closed
+          && (p.popupRole || "projection") === "projection" && p.popupModule === targetModule);
         const currentModule = this.$appdata.get("popup_module");
 
         if (!showExternalMediaOnlyInOperator && (!isPopupOpened || currentModule !== targetModule)) {
@@ -1989,13 +2005,21 @@ export default {
           if (selectedMonitors.length > 0) {
             await this.$popup.syncMonitors(selectedMonitors, targetModule, true, fullscreen);
           } else if (targetModule !== "external_media") {
-            this.$popup.open({ module: targetModule, fullscreen });
+            await this.$popup.open({ module: targetModule, fullscreen });
           }
         }
         if (targetModule === "presentation" && window.electronAPI?.setPresentationShortcutsEnabled) {
           window.electronAPI.setPresentationShortcutsEnabled(true);
         }
       }
+
+        const returnModule = targetModule || (
+          item.type === "media" && this.$userdata.get("modules.config.media_use_internal_player")
+            ? "external_media" : null
+        );
+        if (returnModule && returnModule !== "media") {
+          await this.$media.syncReturnMonitor(true, () => true, returnModule);
+        }
 
         await this.runAutomationForItem(item);
 
@@ -2008,7 +2032,6 @@ export default {
         if (shouldTransition && this.$appdata.get("projection_transition")?.active) {
           await transitionProjection(this.$appdata, false, durationMs - phaseDurationMs);
         }
-        this.liturgyTransitionInProgress = false;
       }
     },
 
@@ -2031,11 +2054,6 @@ export default {
         this.$appdata.get("popup_module") ||
         popups.some(popup => popup && !popup.closed),
       );
-    },
-
-    getLiturgyExternalVolume() {
-      const volume = Number(this.$appdata.get("modules.external_media.config.volume"));
-      return Number.isFinite(volume) ? Math.min(100, Math.max(0, volume)) : 100;
     },
 
     fadeCurrentLiturgyAudioOut(durationMs) {

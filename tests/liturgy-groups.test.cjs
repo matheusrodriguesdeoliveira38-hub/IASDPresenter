@@ -6,6 +6,7 @@ const item = id => ({ id, type: 'music' });
 const category = id => ({ id, type: 'category', collapsed: true });
 const ids = items => Array.from(items, entry => entry.id);
 const { default: component } = loadTs('src/modules/liturgy/interface/Index.vue', {
+  '@/helpers/BrowserFiles': {},
   '@/helpers/LiturgyGroups': groups,
   '@/helpers/HymnalPreference': {},
   '../manifest.json': {},

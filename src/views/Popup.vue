@@ -10,7 +10,7 @@
     <div v-else-if="projectionOverride === 'logo'" class="projection-override projection-logo">
       <img src="/ico/logo-horizontal.png" alt="IASDPresenter" />
     </div>
-    <PulpitMessageOverlay v-if="module === 'return_monitor'" />
+    <PulpitMessageOverlay v-if="$route.query.webOutput !== '1'" />
   </div>
 </template>
 
@@ -31,7 +31,12 @@ export default {
   computed: {
     module() {
       const routeModule = this.$route.query.module;
-      if (routeModule === "return_monitor" || routeModule === "clock") return routeModule;
+      if (routeModule === "pulpit_message") return "";
+      if (routeModule === "clock") return routeModule;
+      if (routeModule === "return_monitor") {
+        const source = this.$appdata.get("return_monitor_module");
+        return ["bible", "external_media", "presentation"].includes(source) ? source : routeModule;
+      }
       return this.$appdata.get("popup_module") || routeModule;
     },
     projectionTransition() {

@@ -69,7 +69,7 @@ test('virtual projection opens, reuses its window, and stops after deselection',
   assert.match(windows[0].features, /monitor=virtual-monitor/);
   await popup.syncMonitors(['virtual-monitor', 2], 'presentation', true);
   assert.equal(windows.length, 2);
-  assert.equal(windows[0].popupModule, 'presentation');
+  assert.equal(state.popups[0].popupModule, 'presentation');
   await popup.syncMonitors([2], 'presentation', true);
   assert.equal(windows[0].closed, true);
   assert.equal(windows[1].closed, false);

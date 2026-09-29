@@ -1,6 +1,6 @@
 {
   "name": "iasdpresenter",
-  "version": "1.9.3",
+  "version": "1.9.4",
   "private": true,
   "main": ".electron/main.js",
   "scripts": {
@@ -12,6 +12,8 @@
     "version:bug": "npm version patch",
     "serve": "vite preview",
     "build": "npm run typecheck && vite build",
+    "build:chromeos": "node scripts/export-web-library.cjs && npm run typecheck && vite build --mode chromeos --outDir dist-chromeos",
+    "preview:chromeos": "vite preview --outDir dist-chromeos",
     "lint": "eslint src electron node --ext .vue,.ts",
     "lint:fix": "eslint src electron node --ext .vue,.ts --fix",
     "dev": "vite",

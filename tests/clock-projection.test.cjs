@@ -16,6 +16,34 @@ function runtime() {
   return { state, popup, appdata };
 }
 
+test('projection metadata survives document load and the window is reused after clock focus', async () => {
+  const { popup, state } = runtime();
+  await popup.openClock(2);
+  await popup.syncMonitors([2], 'bible', true);
+  const output = state.popups.find(p => p.popupRole === 'projection');
+  let focused = 0;
+  output.nativeWindow.focus = () => focused++;
+  for (const key of ['popupRole', 'monitorId', 'popupModule', 'popupFullscreen']) delete output.nativeWindow[key];
+  await popup.syncMonitors([2], 'presentation', true);
+  assert.equal(state.popups.length, 2);
+  assert.equal(state.popups.find(p => p.popupRole === 'projection'), output);
+  assert.equal(output.popupModule, 'presentation');
+  assert.equal(focused, 1);
+  popup.closeProjection('presentation');
+  assert.equal(output.closed, true);
+  assert.equal(state.popups[0].popupRole, 'clock');
+});
+
+test('window fallback does not reuse or close an independent return window', async () => {
+  const { popup, state } = runtime();
+  await popup.syncReturnMonitor(2, true);
+  const output = state.popups[0];
+  await popup.open({ module: 'bible', fullscreen: true });
+  assert.equal(output.closed, false);
+  assert.equal(state.popups.length, 2);
+  assert.equal(state.popups.find(p => p.popupRole === 'projection').popupModule, 'bible');
+});
+
 test('clock keeps its window and monitor through music projection and exit', async () => {
   const { popup, state } = runtime();
   await popup.openClock(2);
@@ -197,4 +225,29 @@ test('direct projections reuse the overlay and track the module without closing 
   popup.closeProjection('external_media');
   assert.equal(overlay.closed, true);
   assert.equal(clock.closed, false);
+});
+
+test('all liturgy outputs cover the return clock and closing reveals the running timer', async () => {
+  const { popup, state, appdata } = runtime();
+  const page = loadTs('src/views/Popup.vue', {
+    vue: {}, '@/components/PulpitMessageOverlay.vue': {},
+  }).default;
+  const timer = { running: true, endsAt: Date.now() + 600000 };
+  state.clock_timer = timer;
+  await popup.openClock(2);
+  const clock = state.popups[0];
+  for (const module of ['bible', 'external_media', 'presentation', 'media']) {
+    await popup.syncReturnMonitor(2, true, module);
+    const output = state.popups.find(p => p.popupRole === 'return_monitor');
+    assert.equal(output.monitorId, clock.monitorId);
+    assert.equal(page.computed.module.call({
+      $route: { query: { module: 'return_monitor' } }, $appdata: appdata,
+    }), module === 'media' ? 'return_monitor' : module);
+    assert.equal(clock.closed, false);
+    popup.closeProjection(module);
+    assert.equal(output.closed, true);
+    assert.equal(state.popups.length, 1);
+    assert.equal(state.popups[0], clock);
+    assert.equal(state.clock_timer, timer);
+  }
 });

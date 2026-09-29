@@ -77,15 +77,15 @@
     "music_pending": "Música a escolher",
     "confirm_delete": "Deseja remover este item da liturgia?",
     "confirm_clear": "Deseja limpar todos os itens desta liturgia?",
-    "confirm_import": "Importar este arquivo substituirÃ¡ todas as liturgias salvas. Deseja continuar?",
+    "confirm_import": "Importar este arquivo substituirá todas as liturgias salvas. Deseja continuar?",
     "item_added": "Item adicionado com sucesso!",
     "liturgy_saved": "Liturgia salva com sucesso!",
     "import_success": "Liturgia importada com sucesso!",
     "export_success": "Liturgia exportada com sucesso!",
-    "import_error": "NÃ£o foi possÃ­vel importar a liturgia.",
-    "export_error": "NÃ£o foi possÃ­vel exportar a liturgia.",
-    "import_invalid": "O arquivo selecionado nÃ£o possui uma liturgia vÃ¡lida.",
-    "desktop_only": "ImportaÃ§Ã£o e exportaÃ§Ã£o estÃ£o disponÃ­veis apenas na versÃ£o desktop."
+    "import_error": "Não foi possível importar a liturgia.",
+    "export_error": "Não foi possível exportar a liturgia.",
+    "import_invalid": "O arquivo selecionado não possui uma liturgia válida.",
+    "desktop_only": "Importação e exportação estão disponíveis apenas na versão desktop."
   },
   "custom_liturgy": {
     "title": "Liturgias Avulsas",

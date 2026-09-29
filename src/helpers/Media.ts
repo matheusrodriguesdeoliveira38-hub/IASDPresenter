@@ -60,6 +60,10 @@ const helper: Record<string, any> = {
     }
 
     const mode = params.mode ? params.mode : "no_audio";
+    if (!window.electronAPI && (mode === "audio" || mode === "instrumental") && !$path.file("/")) {
+      $alert.error({ text: "Áudio não incluído nesta versão web. Use a opção de apresentar somente a letra.", translate: false });
+      return;
+    }
     const currentMode = $appdata.get("modules.media.config.mode");
     const isSameSong = params.id_music === $appdata.get("modules.media.id_music");
 
@@ -284,7 +288,7 @@ const helper: Record<string, any> = {
     await this.syncReturnMonitor(false, current);
   },
 
-  async syncReturnMonitor(forceOpen = false, current = () => true) {
+  async syncReturnMonitor(forceOpen = false, current = () => true, moduleName = "media") {
     if ($performance.limitProjectionWindows()) {
       $popup.closeReturnMonitor();
       return;
@@ -323,7 +327,7 @@ const helper: Record<string, any> = {
       return;
     }
 
-    await $popup.syncReturnMonitor(returnMonitor, forceOpen);
+    await $popup.syncReturnMonitor(returnMonitor, forceOpen, moduleName);
   },
 
   async close(force = false, options: { preserveProjection?: boolean } = {}) {

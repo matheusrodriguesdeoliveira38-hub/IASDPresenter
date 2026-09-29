@@ -58,6 +58,14 @@ matheusrodriguesdeoliveira38-hub/IASDPresenter
 
 ## Instalacao
 
+### ChromeOS Flex
+
+Para gerar a versão instalável pelo Chrome, consulte [ChromeOS Flex — PWA](docs/chromeos.md).
+O comando `npm run build:chromeos` converte o banco local e gera `dist-chromeos`
+com letras, hinários e Bíblia em português, sem servidor externo de dados.
+Áudio e playback usam o servidor de mídias; o painel Mídias e downloads permite
+baixar coletâneas e importar áudio/vídeo para uso offline. Use Node.js 24 para gerar o build.
+
 ```bash
 npm install
 ```

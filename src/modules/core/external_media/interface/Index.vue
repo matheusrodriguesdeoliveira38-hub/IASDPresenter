@@ -1134,6 +1134,8 @@ export default {
       // Close projection if open
       if (this.$appdata.get("popup_module") === "external_media") {
         this.$popup.exit();
+      } else {
+        this.$popup.closeProjection("external_media");
       }
     },
 

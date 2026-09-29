@@ -4,7 +4,9 @@ const helper: Record<string, any> = {
     let minutes = 0;
     let seconds = 0;
     if (isNaN(time)) {
-      const [h, m, s] = time.split(":").map(Number);
+      const parts = String(time).split(":").map(Number);
+      if (parts.length === 2) parts.unshift(0);
+      const [h, m, s] = parts;
       hours = h;
       minutes = m;
       seconds = s;
@@ -14,6 +16,7 @@ const helper: Record<string, any> = {
       seconds = time % 60;
     }
 
+    if (![hours, minutes, seconds].every(Number.isFinite)) return "0:00";
     minutes += hours * 60;
     return `${minutes}:${String(Math.floor(seconds)).padStart(2, "0")}`;
   },

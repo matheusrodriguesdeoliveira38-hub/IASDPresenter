@@ -2,6 +2,7 @@ const { app, BrowserWindow, Menu, ipcMain, protocol, net, dialog, shell, globalS
 const path = require('path');
 const fs = require('fs');
 const { streamStaticFile } = require('./StaticFile');
+const { syncClockWindowOrder } = require('./ProjectionWindows');
 const { VIRTUAL_MONITOR_ID, virtualMonitorDisplay, createVirtualMonitorHandler } = require('./VirtualMonitor');
 const fsExtra = require('fs-extra');
 const crypto = require('crypto');
@@ -3556,6 +3557,9 @@ async function createWindow() {
   });
 
   mainWindow.webContents.on('did-create-window', (childWindow, details) => {
+    const syncClockOrder = () => syncClockWindowOrder(BrowserWindow.getAllWindows());
+    childWindow.on('closed', syncClockOrder);
+    childWindow.on('focus', syncClockOrder);
     if (details?.url?.includes('virtualMonitor=1')) {
       childWindow.webContents.setAudioMuted(true);
       childWindow.once('ready-to-show', () => {
@@ -3580,24 +3584,14 @@ async function createWindow() {
 
           childWindow.setFullScreen(false);
           childWindow.setBounds(display.bounds);
-          childWindow.setAlwaysOnTop(true, 'screen-saver');
+          childWindow.setAlwaysOnTop(true, details?.url?.includes('module=clock') ? 'floating' : 'screen-saver');
         } else {
           childWindow.setFullScreen(true);
         }
       }
-      childWindow.show();
-      // If the clock is enabled during a projection, keep the existing output
-      // above it. Closing that output reveals the still-running clock.
-      if (details?.url?.includes('module=clock')) {
-        const bounds = childWindow.getBounds();
-        for (const output of BrowserWindow.getAllWindows()) {
-          if (output === childWindow || output.isDestroyed() || !output.isVisible()) continue;
-          const outputUrl = output.webContents.getURL();
-          if (!outputUrl.includes('#/popup?') || outputUrl.includes('module=clock')) continue;
-          const outputBounds = output.getBounds();
-          if (outputBounds.x === bounds.x && outputBounds.y === bounds.y) output.moveTop();
-        }
-      }
+      if (!childWindow.isResizable()) childWindow.showInactive();
+      else childWindow.show();
+      syncClockOrder();
     });
   });
 

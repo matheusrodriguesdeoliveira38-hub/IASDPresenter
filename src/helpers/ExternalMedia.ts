@@ -5,7 +5,11 @@ export const VIDEO_EXTENSIONS = ["mp4", "mkv", "avi", "mov", "wmv", "webm"];
 
 export function getFileExtension(value) {
   if (!value) return "";
-  const cleanValue = String(value).split(/[?#]/)[0];
+  const raw = String(value);
+  // Local web imports use an object URL with the original name in its fragment.
+  const cleanValue = raw.startsWith("blob:") && raw.includes("#")
+    ? decodeURIComponent(raw.slice(raw.indexOf("#") + 1))
+    : raw.split(/[?#]/)[0];
   const fileName = cleanValue.split(/[\\/]/).pop() || "";
   const parts = fileName.split(".");
   return parts.length > 1 ? parts.pop().toLowerCase() : "";
@@ -22,6 +26,7 @@ export function isVideoFile(value) {
 export function isWebUrl(value) {
   try {
     const url = new URL(String(value || ""));
+    if (typeof location !== "undefined" && url.origin === location.origin && url.pathname.includes("/user-files/")) return false;
     return url.protocol === "http:" || url.protocol === "https:";
   } catch (_error) {
     return false;
@@ -29,8 +34,6 @@ export function isWebUrl(value) {
 }
 
 export function openExternalMedia(appdata, { filePath, title = "", subtitle = "", volume = null }) {
-  const currentVolume = appdata.get("modules.external_media.config.volume");
-
   appdata.set("modules.external_media.filePath", filePath);
   appdata.set("modules.external_media.title", title);
   appdata.set("modules.external_media.subtitle", subtitle);
@@ -43,7 +46,7 @@ export function openExternalMedia(appdata, { filePath, title = "", subtitle = ""
     playback_updated_at: Date.now(),
     progress: 0,
     duration: 0,
-    volume: volume ?? currentVolume ?? 100,
+    volume: volume ?? 100,
     document_page: 1,
     request_action: null,
   });

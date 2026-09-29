@@ -2137,6 +2137,7 @@ import ModernColorPicker from "@/components/inputs/ModernColorPicker.vue";
 import ConfigMiniPreview from "./ConfigMiniPreview.vue";
 import CollapsiblePanel from "./CollapsiblePanel.vue";
 import $media from "@/helpers/Media";
+import { pwa } from "@/helpers/Pwa";
 import { mixerProfiles, getMixerProfile, mixerTargetOptions, normalizeMixerDevice, validateMixerConfig } from "../../../../../electron/MixerProfiles";
 
 export default {
@@ -2340,6 +2341,7 @@ export default {
         .sort((a, b) => a.localeCompare(b, "pt-BR", { sensitivity: "base" }));
     },
     languagesList() {
+      if (pwa.libraryBundled) return [{ code: "pt", name: "Português" }];
       return [
         { code: "pt", name: "Português" },
         { code: "en", name: "English" },
@@ -2364,6 +2366,7 @@ export default {
   watch: {
     language(val) {
       if (!val) return;
+      if (pwa.libraryBundled && val !== "pt") { this.language = "pt"; return; }
       const currentLanguage = this.$userdata.get("language");
       this.$userdata.set("language", val);
       this.$i18n.locale = val;

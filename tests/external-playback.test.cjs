@@ -9,6 +9,19 @@ function component(name, globals = {}) {
   }, globals).default;
 }
 
+test('new playback starts at maximum volume even after a muted or quieter item', () => {
+  const { openExternalMedia } = loadTs('src/helpers/ExternalMedia.ts');
+  for (const previousVolume of [0, 25, 73]) {
+    const state = { 'modules.external_media.config.volume': previousVolume };
+    const store = { get: key => state[key], set: (key, value) => { state[key] = value; } };
+    openExternalMedia(store, { filePath: 'video.mp4' });
+    assert.equal(state['modules.external_media.config'].volume, 100);
+    // Liturgy fade-in can still start silently and then rise to its 100% target.
+    openExternalMedia(store, { filePath: 'video.mp4', volume: 0 });
+    assert.equal(state['modules.external_media.config'].volume, 0);
+  }
+});
+
 test('reopening the same media creates a fresh session starting at zero', () => {
   const { openExternalMedia } = loadTs('src/helpers/ExternalMedia.ts');
   const state = {};

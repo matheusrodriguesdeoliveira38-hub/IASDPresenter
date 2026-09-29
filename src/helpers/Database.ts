@@ -2,6 +2,9 @@ import $alert from "@/helpers/Alert";
 import $path from "@/helpers/Path";
 import $dev from "@/helpers/Dev";
 import $storage from "@/helpers/Storage";
+import { readWebDatabase, saveWebDatabase } from "@/helpers/WebDatabase";
+import { readBundledLibrary } from "@/helpers/BundledLibrary";
+import { readUserRecord } from "@/helpers/BrowserFiles";
 
 const isDesktop = !!(window.electronAPI && window.electronAPI.isElectron);
 
@@ -50,6 +53,17 @@ async function parseJsonResponse(response, file) {
 
 const helper: Record<string, any> = {
   async get(file, options: { silent?: boolean } = {}) {
+    if (!isDesktop && __BUNDLED_LIBRARY_VERSION__) {
+      try {
+        const edited = await readUserRecord(file);
+        if (edited !== null) return edited;
+        return await readBundledLibrary(file);
+      } catch (error) {
+        if (!options.silent) $alert.error({ text: "messages.file_database_not_found", error });
+        return null;
+      }
+    }
+    const webUrl = !isDesktop ? $path.db(`/${file}`) : null;
     try {
       const cache_name = `db:${file}`;
       let cache = null;
@@ -62,6 +76,15 @@ const helper: Record<string, any> = {
       if (cache) {
         $dev.write("Lendo BD do cache", file);
         return cache;
+      }
+
+      if (webUrl && navigator.onLine === false) {
+        const saved = await readWebDatabase(webUrl);
+        if (saved !== null) {
+          cacheDatabase(cache_name, saved);
+          return saved;
+        }
+        throw new Error(`Abra este conteúdo com internet antes de usá-lo offline: ${file}`);
       }
 
       if (isDesktop) {
@@ -89,9 +112,9 @@ const helper: Record<string, any> = {
       while (retries > 0) {
         try {
           const response = await fetch(url, {
-            headers: {
+            headers: import.meta.env.VITE_API_TOKEN ? {
               "Api-Token": import.meta.env.VITE_API_TOKEN,
-            },
+            } : undefined,
           });
 
           if (response.status === 429) {
@@ -134,9 +157,17 @@ const helper: Record<string, any> = {
         await window.electronAPI.saveLocalDb(file, data);
         $dev.write("BD salvo no disco local para acesso offline:", file);
       }
+      if (webUrl) await saveWebDatabase(webUrl, data);
 
       return data;
     } catch (error) {
+      if (webUrl) {
+        const saved = await readWebDatabase(webUrl);
+        if (saved !== null) {
+          cacheDatabase(`db:${file}`, saved);
+          return saved;
+        }
+      }
       if (!options.silent) {
         $alert.error({ text: "messages.file_database_not_found", error });
       }
