@@ -14,11 +14,20 @@
     />
     <webview
       :key="'webview:' + playbackSession"
-      v-else-if="isWebLink"
+      v-else-if="isWebLink && isElectron"
       class="external-web-frame"
 
       :src="rawFilePath"
       webpreferences="contextIsolation=yes, sandbox=yes"
+    />
+    <iframe
+      v-else-if="isWebLink"
+      :key="'web:' + playbackSession"
+      class="external-web-frame"
+      :src="rawFilePath"
+      :title="mediaTitle"
+      allow="autoplay; fullscreen"
+      referrerpolicy="strict-origin-when-cross-origin"
     />
     <video
       :key="'video:' + playbackSession"
@@ -108,11 +117,14 @@ export default {
     isYouTube() {
       return isYouTubeUrl(this.rawFilePath);
     },
+    isElectron() {
+      return window.electronAPI?.isElectron === true;
+    },
     isWebLink() {
       return isWebUrl(this.rawFilePath) && !this.isYouTube;
     },
     youtubeEmbedUrl() {
-      return getYouTubeEmbedUrl(this.rawFilePath, { startSeconds: 0, autoplay: false, muted: true });
+      return getYouTubeEmbedUrl(this.rawFilePath, { startSeconds: 0, autoplay: true, muted: true });
     },
     isVideo() {
       return isVideoFile(this.rawFilePath);
@@ -201,7 +213,7 @@ export default {
       if (!this.isYouTube || !frame?.contentWindow) return;
       let attempts = 0;
       const listen = () => {
-        if (this.youtubeReady || ++attempts > 20) {
+        if (this.youtubeReady || ++attempts > 60) {
           clearInterval(this.youtubeHandshakeTimer);
           return;
         }
@@ -239,6 +251,9 @@ export default {
         }
       }
       if (payload?.event === "onReady") { this.initializeYouTubePlayer(); return; }
+      if (["initialDelivery", "infoDelivery"].includes(payload?.event) && payload.info) {
+        this.initializeYouTubePlayer();
+      }
       if (payload?.event === "infoDelivery" && typeof payload.info?.currentTime === "number") {
         this.popupYouTubeCurrentTime = payload.info.currentTime;
         this.youtubeSampleAt = Date.now();
@@ -320,6 +335,7 @@ export default {
 }
 
 .external-web-frame {
+  display: flex;
   width: 100%;
   height: 100%;
   border: 0;

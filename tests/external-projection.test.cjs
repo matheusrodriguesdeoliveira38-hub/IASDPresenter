@@ -45,6 +45,7 @@ function operator(settings, file = 'video.mp4') {
     $userdata: { get: key => settings[key] },
     $appdata: { set: (key, value) => { state[key] = value; } },
     $nextTick: async () => {},
+    $media: { async syncReturnMonitor(...args) { calls.push(['return', args[0], args[2]]); } },
     $popup: { async syncMonitors(...args) { calls.push(args); }, closeProjection() {} },
   };
   return { context, calls, state };
@@ -59,7 +60,7 @@ test('operator layout follows the music rules for every fullscreen/disable/minim
     const expected = fullscreen && !disable;
     assert.equal(context.isFullscreen, expected);
     assert.equal(state['modules.external_media.minimized'] === true, minimize && !expected);
-    assert.deepEqual(JSON.parse(JSON.stringify(calls)), [[[2], 'external_media', true, fullscreen]]);
+    assert.deepEqual(JSON.parse(JSON.stringify(calls)), [[[2], 'external_media', true, fullscreen], ['return', true, 'external_media']]);
   }
 });
 

@@ -1,8 +1,11 @@
 <template>
-  <div class="presentation-popup w-100 h-100 d-flex align-center justify-center">
+  <div class="presentation-popup w-100 h-100 d-flex align-center justify-center" :class="{ 'presentation-popup--return': isReturnMonitor }">
     <img v-if="currentImage" :src="currentImage" :alt="title" />
     <div v-else class="presentation-popup-empty">
       {{ title || "Apresentacao" }}
+    </div>
+    <div v-if="isReturnMonitor" class="presentation-return-clock">
+      <ClockScreen preview />
     </div>
   </div>
 </template>
@@ -13,11 +16,13 @@ import { PresentationPdf } from "@/helpers/PresentationPdf";
 import { markRaw } from "vue";
 import $performance from "@/helpers/Performance";
 import manifest from "../manifest.json";
+import ClockScreen from "@/modules/clock/components/Screen.vue";
 
 
 
 export default {
   name: "PopupPresentationPage",
+  components: { ClockScreen },
   data() {
     return {
       pdfDoc: null,
@@ -26,6 +31,9 @@ export default {
     };
   },
   computed: {
+    isReturnMonitor() {
+      return this.$route.query.module === "return_monitor";
+    },
     module_id() {
       return manifest.id;
     },
@@ -112,5 +120,20 @@ export default {
   color: rgba(255, 255, 255, 0.72);
   font-size: 24px;
   font-weight: 700;
+}
+
+.presentation-popup--return {
+  position: relative;
+  padding-bottom: 112px;
+  box-sizing: border-box;
+}
+
+.presentation-return-clock {
+  position: absolute;
+  right: 16px;
+  bottom: 8px;
+  width: min(280px, calc(100% - 32px));
+  height: 96px;
+  overflow: hidden;
 }
 </style>

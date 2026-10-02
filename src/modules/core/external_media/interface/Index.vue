@@ -110,11 +110,20 @@
 
               <webview
       :key="'webview:' + playbackSession"
-                v-else-if="isWebLink"
+                v-else-if="isWebLink && isElectron"
                 class="external-web-frame"
 
                 :src="rawFilePath"
                 webpreferences="contextIsolation=yes, sandbox=yes"
+              />
+              <iframe
+                v-else-if="isWebLink"
+                :key="'web:' + playbackSession"
+                class="external-web-frame"
+                :src="rawFilePath"
+                :title="mediaTitle"
+                allow="autoplay; fullscreen"
+                referrerpolicy="strict-origin-when-cross-origin"
               />
 
               <video
@@ -543,6 +552,9 @@ export default {
     isYouTube() {
       return isYouTubeUrl(this.rawFilePath);
     },
+    isElectron() {
+      return window.electronAPI?.isElectron === true;
+    },
     isWebLink() {
       return isWebUrl(this.rawFilePath) && !this.isYouTube;
     },
@@ -767,6 +779,8 @@ export default {
           this.$popup.closeProjection("external_media");
         } else if (this.autoProject) {
           await this.$popup.syncMonitors(preferences.monitors, "external_media", true, preferences.fullscreen);
+          if (!current()) return;
+          await this.$media.syncReturnMonitor(true, current, "external_media");
           if (!current()) return;
         }
         const fullscreen = this.isVisualMedia && preferences.operatorFullscreen;

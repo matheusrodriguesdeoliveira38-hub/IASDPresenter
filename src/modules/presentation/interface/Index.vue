@@ -630,6 +630,8 @@ export default {
         this.$popup.open({ module: "presentation", popupModule: "presentation", fullscreen });
       }
 
+      await this.$media.syncReturnMonitor(true, () => token === this.loadToken, "presentation");
+
       if (window.electronAPI?.setPresentationShortcutsEnabled) {
         if (token !== this.loadToken) return;
         window.electronAPI.setPresentationShortcutsEnabled(true);

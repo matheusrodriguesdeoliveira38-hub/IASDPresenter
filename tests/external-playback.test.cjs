@@ -118,6 +118,27 @@ for (const name of ['Index', 'Popup']) {
   });
 }
 
+test('YouTube projection accepts initial player delivery when onReady was missed', () => {
+  for (const event of ['initialDelivery', 'infoDelivery']) {
+    const definition = component('Popup');
+    const frame = {};
+    const commands = [];
+    const context = {
+      ...definition.data(), isYouTube: true, isPaused: false, isBuffering: false,
+      $refs: { popupYouTube: { contentWindow: frame } },
+      getSynchronizedTargetTime: () => 12,
+      sendYouTubeCommand: (command, args) => commands.push([command, args]),
+    };
+    context.initializeYouTubePlayer = definition.methods.initializeYouTubePlayer.bind(context);
+    const message = { origin: 'https://www.youtube.com', source: frame, data: { event, info: { currentTime: 12 } } };
+    definition.methods.handleYouTubeMessage.call(context, message);
+    definition.methods.handleYouTubeMessage.call(context, message);
+    assert.equal(context.youtubeReady, true);
+    assert.equal(commands.filter(([command]) => command === 'playVideo').length, 1);
+    assert.equal(commands.filter(([command]) => command === 'mute').length, 1);
+  }
+});
+
 test('projection cannot start or seek before its YouTube player is ready', () => {
   component('Popup').methods.syncPlaybackPosition.call({
     isYouTube: true, youtubeReady: false, getSynchronizedTargetTime: () => 0,

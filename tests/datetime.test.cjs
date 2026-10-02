@@ -1,7 +1,7 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const loadTs = require('./load-ts.cjs');
-const datetime = loadTs('src/helpers/Datetime.ts').default;
+const datetime = loadTs('src/helpers/DateTime.ts').default;
 
 test('song durations accept minutes, hours and seconds without NaN', () => {
   assert.equal(datetime.shortTime('00:00'), '0:00');

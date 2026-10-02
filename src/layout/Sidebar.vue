@@ -60,7 +60,11 @@
               mdi-chevron-right
             </v-icon>
           </a>
-          <div class="nav-submenu" :class="{ expanded: submenuOpen[groupKey] }">
+          <div
+            class="nav-submenu"
+            :class="{ expanded: submenuOpen[groupKey] }"
+            :style="{ maxHeight: submenuOpen[groupKey] ? `${group.modules.length * 80}px` : '0px' }"
+          >
             <div
               v-for="moduleId in group.modules"
               :key="moduleId"

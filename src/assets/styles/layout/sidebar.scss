@@ -260,10 +260,6 @@
     overflow: hidden;
     transition: max-height 0.3s ease;
     
-    &.expanded {
-      max-height: 200px;
-    }
-    
     .nav-item {
       margin: 1px 0;
       
