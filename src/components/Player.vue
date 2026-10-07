@@ -148,6 +148,22 @@
     </div>
 
     <div class="d-flex align-center">
+      <v-btn
+        v-if="media.config.audio"
+        icon
+        variant="text"
+        :color="media.config.audio_only ? repeatActiveColor : defaultTextColor"
+        size="small"
+        class="mx-1"
+        aria-label="Somente áudio"
+        :aria-pressed="Boolean(media.config.audio_only)"
+        @click="$media.open({ id_music: media.id_music, id_album: media.id_album, mode: media.config.mode, audio_only: !media.config.audio_only, preserve_queue: true })"
+      >
+        <v-icon>mdi-headphones</v-icon>
+        <v-tooltip activator="parent" location="top" open-delay="300" content-class="modern-glass-menu elevation-0 font-weight-medium text-white">
+          Somente áudio
+        </v-tooltip>
+      </v-btn>
       <v-menu v-if="location !== 'fullscreen' && playerWidth >= 880" :close-on-content-click="true">
         <template #activator="{ props }">
           <v-btn
@@ -508,8 +524,9 @@ export default {
     openLyric() {
       this.$media.openLyric();
     },
-    maximize() {
+    async maximize() {
       this.$media.maximize();
+      await this.$media.syncMonitors();
     },
     close() {
       this.$media.close();

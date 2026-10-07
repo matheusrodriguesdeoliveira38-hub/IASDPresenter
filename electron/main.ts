@@ -247,7 +247,7 @@ function sanitizeRemoteControlConfig(config = {}) {
 }
 
 function shouldRunNetworkServer() {
-  return remoteControlConfig.enabled !== false || remoteControlConfig.webOutputEnabled !== false || remoteControlConfig.virtualMonitorEnabled;
+  return remoteControlConfig.enabled !== false;
 }
 
 function loadRemoteControlConfig() {
@@ -1427,6 +1427,41 @@ function getProjectionCaptureWindow() {
     || null;
 }
 
+async function sendRemoteControlPreview(response) {
+  const projection = remoteControlState.projection || {};
+  const media = projection.module === 'external_media' ? getOutputExternalMediaState() : null;
+  if (!projection.active || projection.module === 'media' || ['video', 'youtube'].includes(media?.kind)) {
+    response.writeHead(204, { 'Cache-Control': 'no-store' });
+    response.end();
+    return;
+  }
+
+  // Capture the actual projection, independently of the selected web output.
+  const projectionWindow = BrowserWindow.getAllWindows().find((win) => {
+    if (!win || win.isDestroyed() || win === mainAppWindow || win.webContents?.isDestroyed()) return false;
+    const url = win.webContents.getURL();
+    const params = new URLSearchParams(url.split('#/popup?')[1] || '');
+    return url.includes('#/popup?')
+      && !/[?&](?:webOutput=1|module=return_monitor)(?:&|$)/.test(url)
+      && !['clock', 'pulpit_message'].includes(params.get('module'));
+  });
+  if (!projectionWindow) {
+    response.writeHead(204, { 'Cache-Control': 'no-store' });
+    response.end();
+    return;
+  }
+  try {
+    const image = await projectionWindow.webContents.capturePage();
+    if (image.isEmpty()) throw new Error('Empty projection');
+    const frame = image.resize({ width: 960, quality: 'good' }).toJPEG(80);
+    response.writeHead(200, { 'Content-Type': 'image/jpeg', 'Cache-Control': 'no-store', 'Content-Length': frame.length });
+    response.end(frame);
+  } catch (error) {
+    response.writeHead(503, { 'Cache-Control': 'no-store' });
+    response.end();
+  }
+}
+
 function hasWebOutputFrameConsumers() {
   if (webOutputFrameWaiters.size > 0) return true;
   for (const client of webOutputClients) {
@@ -1636,7 +1671,7 @@ function getRemoteControlHtml() {
     html{background:var(--bg)}body{background:radial-gradient(circle at 8% -10%,rgba(49,181,232,.2),transparent 30%),radial-gradient(circle at 100% 15%,rgba(101,88,232,.1),transparent 28%),linear-gradient(180deg,#f8fbfd 0%,var(--bg) 58%);color:var(--text)}body:before{opacity:.35;background-image:linear-gradient(rgba(44,68,94,.035) 1px,transparent 1px),linear-gradient(90deg,rgba(44,68,94,.035) 1px,transparent 1px)}
     .top{background:linear-gradient(180deg,rgba(248,251,253,.97) 66%,rgba(248,251,253,0))}.brand-mark{border-color:rgba(8,127,180,.12);background:linear-gradient(145deg,rgba(49,181,232,.2),rgba(101,88,232,.1));box-shadow:inset 0 1px rgba(255,255,255,.9)}.status-pill,.role{border-color:var(--line);background:rgba(255,255,255,.88);color:var(--text);box-shadow:0 7px 20px rgba(44,68,94,.07)}
     .eyebrow{color:#087fac}.page-heading h1,.search-hero h1,.liturgy-hero h1{color:var(--text)}.card{border-color:rgba(45,67,91,.12);background:linear-gradient(145deg,rgba(255,255,255,.98),rgba(247,250,252,.98));box-shadow:var(--shadow)}.now-card:before{background:rgba(49,181,232,.12)}.live-chip{border-color:var(--line);background:#f4f8fb;color:var(--muted)}.onair{color:#718096}.onair.live{color:var(--ok)}
-    .projection-preview{position:relative;margin:18px auto 16px;aspect-ratio:16/9;max-width:520px;overflow:hidden;border:5px solid #dfe7ee;border-radius:17px;background:#111827;box-shadow:0 16px 35px rgba(23,32,51,.2),inset 0 0 0 1px rgba(255,255,255,.08)}.projection-preview:after{content:"PRÉVIA";position:absolute;right:9px;top:8px;padding:4px 7px;border:1px solid rgba(255,255,255,.14);border-radius:999px;background:rgba(3,7,18,.5);color:rgba(255,255,255,.7);font-size:8px;font-weight:850;letter-spacing:.12em}.preview-stage{position:absolute;inset:0;display:grid;place-items:center;padding:12% 8%;text-align:center;background:radial-gradient(circle at 50% 10%,#243b59,#080d17 72%);transition:.2s}.preview-copy{max-width:100%;color:#fff;text-shadow:0 2px 12px rgba(0,0,0,.55)}.preview-title{margin-bottom:8px;color:#71d2f5;font-size:clamp(8px,2.3vw,13px);font-weight:800;letter-spacing:.06em;text-transform:uppercase}.preview-text{display:-webkit-box;overflow:hidden;font-size:clamp(12px,4vw,24px);font-weight:800;line-height:1.25;-webkit-box-orient:vertical;-webkit-line-clamp:3}.preview-logo{display:none;width:23%;max-width:80px;filter:drop-shadow(0 8px 18px rgba(0,0,0,.35))}.projection-preview.blackout .preview-stage{background:#000}.projection-preview.blackout .preview-copy,.projection-preview.blackout .preview-logo{display:none}.projection-preview.logo .preview-copy{display:none}.projection-preview.logo .preview-logo{display:block}.projection-preview.freeze:before{content:"CONGELADO";position:absolute;z-index:2;left:9px;top:8px;padding:4px 7px;border-radius:999px;background:#fff;color:#314158;font-size:8px;font-weight:900;letter-spacing:.1em}
+    .projection-preview{position:relative;margin:16px -10px 18px;aspect-ratio:16/9;overflow:hidden;border:1px solid rgba(148,163,184,.22);border-radius:16px;background:#080d17;box-shadow:0 12px 32px rgba(0,0,0,.3)}.projection-preview:after{content:"PROJEÇÃO ATUAL";position:absolute;z-index:2;left:12px;top:12px;padding:5px 8px;border:1px solid rgba(255,255,255,.12);border-radius:6px;background:rgba(3,7,18,.65);color:rgba(255,255,255,.8);font-size:8px;font-weight:800;letter-spacing:.12em;pointer-events:none}.preview-image{display:block;width:100%;height:100%;object-fit:contain;background:#000}.preview-image[hidden],.preview-stage[hidden]{display:none!important}.preview-stage{position:absolute;inset:0;display:grid;place-items:center;padding:36px 7% 24px;text-align:center;background:#080d17}.preview-copy{width:100%;max-height:100%;min-height:0;overflow:auto;color:#fff}.preview-title{margin-bottom:10px;color:#71d2f5;font-size:clamp(10px,2.5vw,14px);font-weight:800;letter-spacing:.04em;text-transform:uppercase}.preview-text{white-space:pre-line;font-size:clamp(16px,4.6vw,30px);font-weight:750;line-height:1.4;text-wrap:balance}.preview-logo{display:none;width:35%;max-width:180px;object-fit:contain}.projection-preview.blackout{background:#000}.projection-preview.blackout .preview-stage{background:#000}.projection-preview.blackout .preview-image{visibility:hidden}.projection-preview.blackout .preview-copy,.projection-preview.blackout .preview-logo{display:none}.projection-preview.logo .preview-copy{display:none}.projection-preview.logo .preview-logo{display:block}.projection-preview.freeze:before{content:"CONGELADO";position:absolute;z-index:3;right:12px;top:12px;padding:5px 8px;border-radius:6px;background:#ffc857;color:#111827;font-size:8px;font-weight:850;letter-spacing:.1em}@media(max-width:520px){.now-card{padding:16px}.projection-preview{margin-left:-8px;margin-right:-8px;border-radius:12px}.preview-stage{padding:32px 6% 18px}}
     .title{color:var(--text)}.slide{color:#53657b}.next{border-color:var(--line);background:#f6f9fb;color:#77879a}.next strong{color:#26364b}.bar{background:#dfe7ee}.meta{color:#718096}
     .btn{border-color:var(--line);background:linear-gradient(145deg,#fff,#f3f7fa);color:#2e4056;box-shadow:0 8px 22px rgba(44,68,94,.08)}.btn:hover{border-color:rgba(8,127,180,.3);background:#fff}.btn.primary,.searchbox .btn{border-color:#0b8fc6;background:linear-gradient(145deg,#27b8ee,#087fb4);color:#fff;box-shadow:0 13px 28px rgba(8,127,180,.23)}.transport .btn:not(.primary){color:#314158}.repeat-btn.active{border-color:rgba(8,127,180,.3);background:#e9f7fc;color:#087fac}.operator-panel{border-color:var(--line);background:rgba(255,255,255,.64);box-shadow:0 12px 35px rgba(44,68,94,.06)}.section-label{color:#304258}.emergency .btn{color:#53657b}.emergency .btn.active{border-color:rgba(214,154,18,.35);background:#fff8e5;color:#9a6a00}.emergency .danger{border-color:rgba(216,58,75,.2);background:#fff5f6;color:#c72f40}
     .searchbox input,.login input{border-color:var(--line);background:#f7fafc;color:var(--text)}.searchbox input:focus,.login input:focus{background:#fff}.result{border-color:var(--line);background:linear-gradient(145deg,#fff,#f6f9fb);color:var(--text);box-shadow:0 8px 24px rgba(44,68,94,.06)}.result small{color:var(--muted)}.empty{background:rgba(255,255,255,.55)}
@@ -1650,7 +1685,7 @@ function getRemoteControlHtml() {
 
     <section id="home" class="view active">
       <div class="page-heading"><div><div class="eyebrow">Painel ao vivo</div><h1>Controle da projeção</h1></div><p>Acompanhe o conteúdo e controle a apresentação em tempo real.</p></div>
-      <article class="card now-card"><div class="now-top"><div class="onair" id="onair">SEM PROJEÇÃO</div><span class="live-chip">Sincronizado</span></div><div id="projectionPreview" class="projection-preview"><div class="preview-stage"><img class="preview-logo" src="/ico/favicon.png" alt=""><div class="preview-copy"><div id="previewTitle" class="preview-title">Aguardando projeção</div><div id="previewText" class="preview-text">A prévia aparecerá aqui.</div></div></div></div><div class="title" id="currentTitle">Aguardando conteúdo</div><div class="slide" id="currentText">O estado da projeção aparecerá aqui.</div><div class="next">A SEGUIR<strong id="nextText">—</strong></div><div class="bar"><i id="progress"></i></div><div class="meta"><span id="counter">—</span><span id="time">00:00 / 00:00</span></div></article>
+      <article class="card now-card"><div class="now-top"><div class="onair" id="onair">SEM PROJEÇÃO</div><span class="live-chip">Sincronizado</span></div><div id="projectionPreview" class="projection-preview"><img id="previewImage" class="preview-image" alt="Slide projetado" hidden><div id="previewStage" class="preview-stage"><img class="preview-logo" src="/ico/favicon.png" alt=""><div class="preview-copy"><div id="previewTitle" class="preview-title">Aguardando projeção</div><div id="previewText" class="preview-text">A prévia aparecerá aqui.</div></div></div></div><div class="bar"><i id="progress"></i></div><div class="meta"><span id="counter">—</span><span id="time">00:00 / 00:00</span></div></article>
       <div class="controls transport"><button class="btn" data-control="prev" aria-label="Voltar"><span class="button-icon">←</span>Voltar</button><button class="btn primary" id="play" data-control="play_pause" aria-label="Reproduzir ou pausar"><span id="playIcon">▶</span></button><button class="btn" data-control="next" aria-label="Avançar"><span class="button-icon">→</span>Avançar</button></div>
       <div class="playback-options"><button class="btn repeat-btn" id="repeat" data-control="repeat" aria-label="Repetição desativada" aria-pressed="false"><span class="button-icon" id="repeatIcon">↻</span><span id="repeatLabel">Repetição desativada</span></button></div>
       <div id="operatorTools" class="operator-panel"><div class="section-label"><span>Ferramentas do operador</span><small>Comandos rápidos</small></div><div class="emergency"><button class="btn" data-emergency="blackout"><span class="button-icon">⬛</span>Tela preta</button><button class="btn" data-emergency="freeze"><span class="button-icon">❄</span>Congelar</button><button class="btn" data-emergency="logo"><span class="button-icon">◇</span>Logo</button><button class="btn" data-emergency="clear"><span class="button-icon">✓</span>Normal</button><button class="btn danger" data-control="close"><span class="button-icon">×</span>Encerrar</button><button class="btn" data-control="maximize"><span class="button-icon">⛶</span>Projetar</button></div></div>
@@ -1676,7 +1711,35 @@ function getRemoteControlHtml() {
   function setConnected(ok){var el=document.getElementById('connection');el.classList.toggle('online',ok);document.getElementById('connectionText').textContent=ok?'Conectado • atualização automática':'Reconectando...'}
   function text(value){return String(value||'').replace(/<[^>]*>/g,' ').replace(/\\s+/g,' ').trim()}
   function clock(value){var n=Math.max(0,Number(value)||0),m=Math.floor(n/60),s=Math.floor(n%60);return String(m).padStart(2,'0')+':'+String(s).padStart(2,'0')}
-  function renderState(state){failures=0;setConnected(true);var p=state.projection||{},playback=state.playback||{},current=state.current||{},next=state.next||{},onair=document.getElementById('onair'),play=document.getElementById('play'),repeat=document.getElementById('repeat'),repeatMode=['one','all'].includes(playback.repeatMode)?playback.repeatMode:'off',preview=document.getElementById('projectionPreview');currentOverride=p.override||'none';onair.textContent=p.active?'NO AR • '+String(p.module||'').toUpperCase():'SEM PROJEÇÃO';onair.classList.toggle('live',Boolean(p.active));preview.classList.toggle('blackout',currentOverride==='blackout');preview.classList.toggle('freeze',currentOverride==='freeze');preview.classList.toggle('logo',currentOverride==='logo');document.getElementById('previewTitle').textContent=p.active?(current.title||String(p.module||'Projeção')):'Sem projeção';document.getElementById('previewText').textContent=p.active?(text(current.text)||'Conteúdo em exibição'):'A prévia aparecerá quando uma projeção for iniciada.';document.getElementById('currentTitle').textContent=current.title||'Aguardando conteúdo';document.getElementById('currentText').textContent=text(current.text)||'O estado da projeção aparecerá aqui.';document.getElementById('nextText').textContent=text(next.text)||next.title||'—';document.getElementById('progress').style.width=Math.max(0,Math.min(100,Number(playback.progress)||0))+'%';document.getElementById('time').textContent=clock(playback.currentTime)+' / '+clock(playback.duration);document.getElementById('counter').textContent=current.number&&current.total?current.number+' de '+current.total:'—';document.getElementById('playIcon').textContent=playback.paused?'▶':'Ⅱ';play.setAttribute('aria-label',playback.paused?'Reproduzir':'Pausar');repeat.classList.toggle('active',repeatMode!=='off');repeat.disabled=playback.repeatAvailable!==true;repeat.setAttribute('aria-pressed',repeatMode!=='off'?'true':'false');repeat.setAttribute('aria-label',repeatMode==='one'?'Repetir música atual':repeatMode==='all'?'Repetir lista de reprodução':'Repetição desativada');document.getElementById('repeatIcon').textContent=repeatMode==='one'?'↻¹':'↻';document.getElementById('repeatLabel').textContent=repeatMode==='one'?'Repetir música':repeatMode==='all'?'Repetir lista':'Repetição desativada';document.querySelectorAll('[data-emergency]').forEach(function(btn){var action=btn.dataset.emergency;btn.classList.toggle('active',(action==='clear'&&currentOverride==='none')||action===currentOverride)});document.getElementById('operatorTools').style.display=role==='operator'?'block':'none'}
+  function renderState(state){failures=0;setConnected(true);var p=state.projection||{},playback=state.playback||{},current=state.current||{},next=state.next||{},onair=document.getElementById('onair'),play=document.getElementById('play'),repeat=document.getElementById('repeat'),repeatMode=['one','all'].includes(playback.repeatMode)?playback.repeatMode:'off',preview=document.getElementById('projectionPreview');currentOverride=p.override||'none';onair.textContent=p.active?'NO AR • '+String(p.module||'').toUpperCase():'SEM PROJEÇÃO';onair.classList.toggle('live',Boolean(p.active));preview.classList.toggle('blackout',currentOverride==='blackout');preview.classList.toggle('freeze',currentOverride==='freeze');preview.classList.toggle('logo',currentOverride==='logo');updatePreview(state);document.getElementById('progress').style.width=Math.max(0,Math.min(100,Number(playback.progress)||0))+'%';document.getElementById('time').textContent=clock(playback.currentTime)+' / '+clock(playback.duration);document.getElementById('counter').textContent=current.number&&current.total?current.number+' de '+current.total:'—';document.getElementById('playIcon').textContent=playback.paused?'▶':'Ⅱ';play.setAttribute('aria-label',playback.paused?'Reproduzir':'Pausar');repeat.classList.toggle('active',repeatMode!=='off');repeat.disabled=playback.repeatAvailable!==true;repeat.setAttribute('aria-pressed',repeatMode!=='off'?'true':'false');repeat.setAttribute('aria-label',repeatMode==='one'?'Repetir música atual':repeatMode==='all'?'Repetir lista de reprodução':'Repetição desativada');document.getElementById('repeatIcon').textContent=repeatMode==='one'?'↻¹':'↻';document.getElementById('repeatLabel').textContent=repeatMode==='one'?'Repetir música':repeatMode==='all'?'Repetir lista':'Repetição desativada';document.querySelectorAll('[data-emergency]').forEach(function(btn){var action=btn.dataset.emergency;btn.classList.toggle('active',(action==='clear'&&currentOverride==='none')||action===currentOverride)});document.getElementById('operatorTools').style.display=role==='operator'?'block':'none'}
+  var previewKey='',previewUrl='',previewBusy=false,previewState=null;
+  function lyricText(value){return String(value||'').replace(/<br\\s*\\/?\\s*>/gi,'\\n').replace(/<[^>]*>/g,'').trim()}
+  function updatePreview(state){
+    var p=state.projection||{},current=state.current||{},video=p.module==='external_media'&&state.externalMedia&&state.externalMedia.video===true;
+    if(p.active&&p.override==='freeze'&&previewState){previewState.freeze=true;return}
+    var key=p.active?p.module+':'+String((state.externalMedia||{}).sessionId||'')+':'+String(current.number||'')+':'+String(p.override||'none'):'inactive',changed=key!==previewKey;
+    if(changed){previewKey=key;document.getElementById('previewImage').hidden=true;document.getElementById('previewStage').hidden=false}
+    previewState={key:key,capture:p.active&&p.module!=='media'&&!video,freeze:p.override==='freeze'};
+    document.getElementById('previewTitle').textContent=p.active?(current.title||'Projeção'):'Sem projeção';
+    document.getElementById('previewText').textContent=!p.active?'A prévia aparecerá quando uma projeção for iniciada.':video?'Vídeo em exibição':p.module==='media'?(lyricText(current.text)||'Sem letra neste trecho'):'Carregando slide projetado…';
+    if(!previewState.capture){document.getElementById('previewImage').hidden=true;document.getElementById('previewStage').hidden=false}
+  }
+  async function refreshPreview(){
+    if(previewBusy||!previewState||!previewState.capture||document.hidden)return;
+    if(previewState.freeze&&!document.getElementById('previewImage').hidden)return;
+    previewBusy=true;var key=previewKey;
+    try{
+      var response=await fetch('/api/preview',{headers:headers(false),cache:'no-store'});
+      if(response.status!==200)throw new Error('preview');
+      var blob=await response.blob();if(key!==previewKey)return;
+      var url=URL.createObjectURL(blob),img=document.getElementById('previewImage');
+      await new Promise(function(resolve,reject){img.onload=resolve;img.onerror=reject;img.src=url});
+      if(key!==previewKey){URL.revokeObjectURL(url);return}
+      if(previewUrl)URL.revokeObjectURL(previewUrl);previewUrl=url;img.hidden=false;document.getElementById('previewStage').hidden=true;
+    }catch(error){if(key===previewKey){document.getElementById('previewImage').hidden=true;document.getElementById('previewStage').hidden=false;document.getElementById('previewText').textContent='Prévia do slide indisponível.'}}
+    finally{previewBusy=false}
+  }
+  setInterval(refreshPreview,700);
   async function poll(){try{var data=await api('/api/state');renderState(data.state||{})}catch(e){failures++;if(failures>1)setConnected(false)}finally{pollTimer=setTimeout(poll,1500)}}
   async function command(endpoint,body){body.requestId=requestId();if(navigator.vibrate)navigator.vibrate(18);try{await api(endpoint,{method:'POST',body:JSON.stringify(body)});toast('Comando enviado');clearTimeout(pollTimer);pollTimer=setTimeout(poll,120)}catch(e){toast(e.message)}}
   document.querySelectorAll('[data-control]').forEach(function(btn){btn.addEventListener('click',function(){command('/api/control',{action:btn.dataset.control})})});
@@ -1842,6 +1905,11 @@ async function handleRemoteControlRequest(request, response) {
   }
 
   const remoteRole = getRemoteControlRole(request);
+
+  if (request.method === 'GET' && url.pathname === '/api/preview') {
+    await sendRemoteControlPreview(response);
+    return;
+  }
 
   if (request.method === 'GET' && url.pathname === '/api/state') {
     sendJson(response, 200, { ok: true, role: remoteRole, state: remoteControlState });

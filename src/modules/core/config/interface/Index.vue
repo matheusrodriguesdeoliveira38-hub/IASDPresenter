@@ -1583,6 +1583,7 @@
                         </div>
                         <v-switch
                           v-model="remote_control_config.enabled"
+                          @update:model-value="saveRemoteControlConfig({ silent: true })"
                           color="primary"
                           inset
                           hide-details

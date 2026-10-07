@@ -30,6 +30,41 @@ function loadHelper(name, globals = {}, dependencies = {}) {
   return exports.default;
 }
 
+test('audio-only playback closes song outputs without looking up displays', async () => {
+  const closed = [];
+  const media = loadHelper('Media', {}, {
+    '@/helpers/AppData': { get: key => key === 'modules.media.config.audio_only' },
+    '@/helpers/Popup': {
+      closeProjection: module => closed.push(module),
+      closeReturnMonitor: () => closed.push('return'),
+    },
+  });
+  await media.syncProjectionMonitors(true);
+  await media.syncReturnMonitor(true);
+  assert.deepEqual(closed, ['media', 'return']);
+});
+
+test('opening the same song as audio-only keeps playback and minimizes the player', async () => {
+  const state = { 'modules.media.id_music': 1, 'modules.media.config.mode': 'audio' };
+  const calls = [];
+  const media = loadHelper('Media', { window: { electronAPI: {} } }, {
+    '@/helpers/AppData': { get: key => state[key], set: (key, value) => { state[key] = value; } },
+    '@/helpers/Dev': { write() {} },
+  });
+  media.clearQueue = () => {};
+  media.fullscreen = value => calls.push(['fullscreen', value]);
+  media.syncMonitors = async () => calls.push(['sync']);
+  await media.openRequest({ id_music: 1, mode: 'audio', audio_only: true }, () => true);
+  assert.equal(state['modules.media.config.audio_only'], true);
+  assert.equal(state['modules.media.show'], false);
+  assert.equal(state['modules.media.minimized'], true);
+  assert.deepEqual(calls, [['fullscreen', false], ['sync']]);
+
+  await media.openRequest({ id_music: 1, mode: 'audio' }, () => true);
+  assert.equal(state['modules.media.config.audio_only'], false);
+  assert.equal(state['modules.media.show'], true);
+});
+
 test('session cleanup preserves local data and unrelated session keys', () => {
   const localStorage = storage();
   const sessionStorage = storage();

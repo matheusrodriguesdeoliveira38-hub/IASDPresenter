@@ -443,7 +443,7 @@ export default {
       let current = null;
       let next = null;
 
-      if (popupModule === "media" || this.$appdata.get("modules.media.id_music")) {
+      if (popupModule === "media" || (!popupModule && this.$appdata.get("modules.media.id_music"))) {
         current = {
           title: mediaConfig.title || this.$appdata.get("modules.media.data.name") || "Música",
           text: currentSlide?.lyric || currentSlide?.text || currentSlide?.source_text || "",
@@ -477,6 +477,7 @@ export default {
         returnMonitorActive: this.$appdata.get("modules.media.id_music") != null,
         externalMedia: externalFilePath ? {
           filePath: externalFilePath,
+          video: isVideoFile(externalFilePath) || isYouTubeUrl(externalFilePath),
           title: this.$appdata.get("modules.external_media.title") || "",
           sessionId: this.$appdata.get("modules.external_media.config.session_id") || externalFilePath,
           currentTime: Number(this.$appdata.get("modules.external_media.config.current_time") || 0),

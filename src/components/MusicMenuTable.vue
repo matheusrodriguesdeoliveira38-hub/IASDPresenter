@@ -9,6 +9,7 @@
       density="compact"
       class="mx-1"
       icon
+      :aria-label="btn.tooltip"
       @click.stop="btn.click"
     >
       <v-icon>{{ btn.icon }}</v-icon>
@@ -56,6 +57,17 @@ export default {
           icon: "mdi-play-circle-outline",
           click: () =>
             this.$media.open({ id_music: this.id_music, id_album: this.id_album, mode: "instrumental" }),
+        },
+        {
+          tooltip: "Somente áudio",
+          disabled: !this.has_music && !this.has_instrumental_music,
+          icon: "mdi-headphones",
+          click: () => this.$media.open({
+            id_music: this.id_music,
+            id_album: this.id_album,
+            mode: this.has_music ? "audio" : "instrumental",
+            audio_only: true,
+          }),
         },
         {
           tooltip: "Sem Áudio",

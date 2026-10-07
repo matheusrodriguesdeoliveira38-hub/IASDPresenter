@@ -65,10 +65,19 @@ const helper: Record<string, any> = {
       return;
     }
     const currentMode = $appdata.get("modules.media.config.mode");
+    const audioOnly = mode !== "no_audio" && (params.audio_only ?? (
+      (params.from_queue || params.preserve_queue) && $appdata.get("modules.media.config.audio_only")
+    )) === true;
     const isSameSong = params.id_music === $appdata.get("modules.media.id_music");
 
     if (isSameSong && mode === currentMode && !$appdata.get("modules.media.loading")) {
-      this.maximize();
+      $appdata.set("modules.media.config.audio_only", audioOnly);
+      if (audioOnly) {
+        this.fullscreen(false);
+        this.minimize();
+      } else {
+        this.maximize();
+      }
       await this.syncMonitors(current);
       return;
     }
@@ -124,6 +133,8 @@ const helper: Record<string, any> = {
 
 
     const minimizePlayer = $userdata.get("modules.config.slide_minimize_player") === true;
+    $appdata.set("modules.media.config.audio_only", audioOnly);
+    if (audioOnly) this.fullscreen(false);
     const slideFullscreen = $userdata.get("modules.config.slide_fullscreen") !== false;
     const slideMonitors = $userdata.get("modules.config.slide_monitor") || [];
     const disableIfExtended = $userdata.get("modules.config.slide_disable_main_if_extended") !== false;
@@ -143,7 +154,7 @@ const helper: Record<string, any> = {
     
     let shouldMaximize = true;
     
-    if (minimized) {
+    if (minimized || audioOnly) {
       shouldMaximize = false;
     } else if (minimizePlayer && !willGoFullscreen) {
       shouldMaximize = false;
@@ -263,6 +274,10 @@ const helper: Record<string, any> = {
   },
 
   async syncProjectionMonitors(forceOpen = false, current = () => true) {
+    if ($appdata.get("modules.media.config.audio_only")) {
+      $popup.closeProjection("media");
+      return;
+    }
     if (!window.electronAPI?.getDisplays) return;
 
     const displays = await window.electronAPI.getDisplays();
@@ -289,6 +304,10 @@ const helper: Record<string, any> = {
   },
 
   async syncReturnMonitor(forceOpen = false, current = () => true, moduleName = "media") {
+    if (moduleName === "media" && $appdata.get("modules.media.config.audio_only")) {
+      $popup.closeReturnMonitor();
+      return;
+    }
     if ($performance.limitProjectionWindows()) {
       $popup.closeReturnMonitor();
       return;
@@ -602,6 +621,7 @@ const helper: Record<string, any> = {
   },
 
   clearVariables() {
+    $appdata.set("modules.media.config.audio_only", false);
     $appdata.set("modules.media.data", {});
     $appdata.set("modules.media.id_music", null);
     $appdata.set("modules.media.config.title", "");
@@ -628,6 +648,7 @@ const helper: Record<string, any> = {
   },
 
   maximize() {
+    $appdata.set("modules.media.config.audio_only", false);
     $appdata.set("modules.media.show", true);
     $appdata.set("modules.media.minimized", false);
     // O componente pode ainda estar carregando. Este token preserva o pedido
