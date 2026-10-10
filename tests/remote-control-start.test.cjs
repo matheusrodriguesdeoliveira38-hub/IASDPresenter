@@ -39,6 +39,31 @@ test('stale saved IP recovers and status waits for a listening server with a QR 
     if (app.remoteControlServer) await new Promise(resolve => app.remoteControlServer.close(resolve));
   }
 });
+test('virtual monitor accepts Ethernet with a saved mixer Wi-Fi IP', async () => {
+  const app = runtime();
+  app.os.networkInterfaces = () => ({
+    WiFi: [{ family: 'IPv4', internal: false, address: '127.0.0.2' }],
+    Ethernet: [{ family: 'IPv4', internal: false, address: '127.0.0.1' }],
+  });
+  Object.assign(app.remoteControlConfig, { host: '127.0.0.2', virtualMonitorEnabled: true });
+  try {
+    await app.startRemoteControlServer();
+    const status = await app.getRemoteControlStatus();
+    assert.equal(status.effectiveHost, '0.0.0.0');
+    assert.equal(status.virtualMonitorAddresses.length, 2);
+    assert.ok(status.virtualMonitorAddresses.includes('http://127.0.0.1:0/virtual-monitor'));
+    assert.equal(status.networkOptions[2].title, 'Ethernet — 127.0.0.1');
+    assert.equal(app.remoteControlConfig.host, '127.0.0.2');
+    for (const host of ['127.0.0.1', '127.0.0.2']) {
+      const response = await fetch(`http://${host}:${app.remoteControlServer.address().port}/virtual-monitor`);
+      assert.equal(await response.text(), 'remote ready');
+    }
+  } finally {
+    app.remoteControlServer?.closeAllConnections();
+    if (app.remoteControlServer) await new Promise(resolve => app.remoteControlServer.close(resolve));
+  }
+});
+
 test('occupied port reports failure without advertising a dead URL or QR code', async () => {
   const occupied = http.createServer();
   await new Promise(resolve => occupied.listen(0, '0.0.0.0', resolve));

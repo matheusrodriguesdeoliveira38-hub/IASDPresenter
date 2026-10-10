@@ -117,7 +117,7 @@ test('PDF replacement cancels rendering, destroys worker and clears canvas', asy
 test('newest music wins when database replies arrive in reverse order', async () => {
   const reads = new Map(), state = new Map();
   const dependencies = {};
-  for (const name of ['Dev','AppData','UserData','DateTime','Path','Alert','Modules','Database','History','Performance','Automation','Popup','AudioFade']) dependencies[`@/helpers/${name}`] = {};
+  for (const name of ['Dev','AppData','UserData','DateTime','Path','Alert','Modules','Database','History','Performance','Automation','Popup','AudioFade','HymnalPreference']) dependencies[`@/helpers/${name}`] = {};
   dependencies['@/helpers/Dev'] = { write() {} };
   dependencies['@/helpers/AppData'] = { get: key => state.get(key), set: (key, value) => state.set(key, value) };
   dependencies['@/helpers/UserData'] = { get() {} };

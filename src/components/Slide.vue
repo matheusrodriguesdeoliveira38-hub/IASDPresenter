@@ -29,9 +29,17 @@
         <div
           class="position-absolute top-0 left-0 w-100 h-100 d-flex justify-center"
           :class="slideAlignClass"
-          :style="{ padding: `${Math.max(16, fontSizePc(4))}px` }"
+          :style="{ padding: animatedCover ? 0 : `${Math.max(16, fontSizePc(4))}px` }"
         >
-          <div class="d-flex flex-column align-center justify-center w-100">
+          <SongOpening
+            v-if="animatedCover"
+            :title="currentSlide.text"
+            :number="song_number"
+            :album="album_name"
+            :hymnal="is_hymnal"
+            :paused="opening_paused"
+          />
+          <div v-else class="d-flex flex-column align-center justify-center w-100">
             <div
               v-if="currentSlide.aux_text"
               :style="style_aux_text(currentSlide)"
@@ -51,10 +59,16 @@
 
 <script lang="ts">
 import type { CSSProperties } from "vue";
+import SongOpening from "@/components/SongOpening.vue";
 export default {
   name: "SlideComponent",
+  components: { SongOpening },
   props: {
     slide_number: Number,
+    song_number: [Number, String],
+    album_name: String,
+    is_hymnal: Boolean,
+    opening_paused: Boolean,
     cover: Boolean,
     text: String,
     aux_text: String,
@@ -88,6 +102,10 @@ export default {
     resizeObserver: null,
   }),
   computed: {
+    animatedCover() {
+      return this.currentSlide?.cover && this.currentSlide?.text &&
+        (this.settings?.light_mode ?? this.$userdata.get("modules.config.light_mode")) !== true;
+    },
     props_slide() {
       return {
         slide_number: this.slide_number,
@@ -333,4 +351,5 @@ export default {
 .slide-content-leave-to {
   opacity: 0;
 }
+
 </style>

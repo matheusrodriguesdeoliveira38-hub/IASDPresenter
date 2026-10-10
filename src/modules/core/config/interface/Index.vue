@@ -650,7 +650,7 @@
                       <v-btn variant="text" size="small" :loading="remote_control_loading" class="mb-4" @click="loadRemoteControlStatus">
                         Atualizar endereços
                       </v-btn>
-                      <p class="text-caption mb-4">O endereço usa o IP e a porta do computador, configurados em Controle remoto. Qualquer dispositivo da rede com esse endereço pode visualizar a imagem.</p>
+                      <p class="text-caption mb-4">O monitor virtual aceita conexões em todas as interfaces de rede do computador, usando a porta configurada em Controle remoto. Com cabo e Wi-Fi conectados, use o endereço IP da rede do dispositivo que exibirá a imagem. Qualquer dispositivo dessa rede com esse endereço pode visualizar a imagem.</p>
                     </template>
                     <div class="monitor-showcase">
                       <div

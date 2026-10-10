@@ -10,6 +10,7 @@ import $history from "@/helpers/History";
 import $performance from "@/helpers/Performance";
 import $automation from "@/helpers/Automation";
 import $popup from "@/helpers/Popup";
+import { isHymnalAlbum } from "@/helpers/HymnalPreference";
 
 import { cancelFade, fadeVolume } from "@/helpers/AudioFade";
 
@@ -831,6 +832,7 @@ ${data.name}` : data.name)
 
   setAlbumInfo(id_album, module = "media") {
     const data = $appdata.get(`modules.${module}.data`);
+    $appdata.set(`modules.${module}.config.is_hymnal`, false);
     if (data.albums.length <= 0) {
       $appdata.set(`modules.${module}.config.subtitle`, "");
       $appdata.set(`modules.${module}.config.track`, 0);
@@ -855,7 +857,8 @@ ${data.name}` : data.name)
     }
 
     $appdata.set(`modules.${module}.config.subtitle`, album.name);
-    $appdata.set(`modules.${module}.config.track`, album.track);
+    $appdata.set(`modules.${module}.config.track`, album.track ?? album.pivot?.track);
+    $appdata.set(`modules.${module}.config.is_hymnal`, album.type === "hymnal" || isHymnalAlbum(album, "hymnal") || isHymnalAlbum(album, "hymnal_1996"));
     $appdata.set(`modules.${module}.config.image`, album.url_image);
   },
 

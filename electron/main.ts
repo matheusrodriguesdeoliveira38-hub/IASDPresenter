@@ -485,10 +485,10 @@ function getRemoteControlNetworkOptions() {
   ];
   const interfaces = os.networkInterfaces();
 
-  Object.values(interfaces).forEach((items = []) => {
+  Object.entries(interfaces).forEach(([name, items = []]) => {
     items.forEach((item) => {
       if (item.family === 'IPv4' && !item.internal) {
-        options.push({ title: item.address, value: item.address });
+        options.push({ title: `${name} — ${item.address}`, value: item.address });
       }
     });
   });
@@ -2103,7 +2103,10 @@ function startRemoteControlServer() {
   if (remoteControlServer?.listening || !shouldRunNetworkServer()) return Promise.resolve();
   remoteControlError = '';
   const availableHosts = getRemoteControlNetworkOptions().map(option => option.value);
-  remoteControlHost = availableHosts.includes(remoteControlConfig.host) ? remoteControlConfig.host : '0.0.0.0';
+  // The virtual monitor must remain reachable through Ethernet while Wi-Fi is
+  // connected to a mixer, even when remote control has a saved Wi-Fi address.
+  remoteControlHost = !remoteControlConfig.virtualMonitorEnabled && availableHosts.includes(remoteControlConfig.host)
+    ? remoteControlConfig.host : '0.0.0.0';
 
   remoteControlServer = http.createServer((request, response) => {
     handleRemoteControlRequest(request, response).catch((error) => {
