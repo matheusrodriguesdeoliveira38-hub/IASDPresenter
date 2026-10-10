@@ -355,6 +355,48 @@ Itens Agendados
                         size="x-small"
                         variant="text"
                         color="primary"
+                        :disabled="!musicHasAudio(element) && !musicHasPlayback(element)"
+                        :aria-label="t('actions.audio_only')"
+                        @click.stop="executeItem(element, 'audio_only')"
+                      >
+                        <v-icon size="16">
+                          mdi-headphones
+                        </v-icon>
+                        <v-tooltip
+                          activator="parent"
+                          location="top"
+                          open-delay="300"
+                          content-class="modern-glass-menu elevation-0 font-weight-medium text-white"
+                        >
+                          {{ t('actions.audio_only') }}
+                        </v-tooltip>
+                      </v-btn>
+                      <v-btn
+                        icon
+                        size="x-small"
+                        variant="text"
+                        color="primary"
+                        :disabled="!musicHasPlayback(element)"
+                        :aria-label="t('actions.audio_only_playback')"
+                        @click.stop="executeItem(element, 'audio_only_playback')"
+                      >
+                        <v-icon size="16">
+                          mdi-headphones-settings
+                        </v-icon>
+                        <v-tooltip
+                          activator="parent"
+                          location="top"
+                          open-delay="300"
+                          content-class="modern-glass-menu elevation-0 font-weight-medium text-white"
+                        >
+                          {{ t('actions.audio_only_playback') }}
+                        </v-tooltip>
+                      </v-btn>
+                      <v-btn
+                        icon
+                        size="x-small"
+                        variant="text"
+                        color="primary"
                         @click.stop="executeItem(element, 'no_audio')"
                       >
                         <v-icon size="16">
@@ -1463,6 +1505,11 @@ export default {
       return ["music", "verse", "link", "media", "presentation", "scheduled_item"].includes(item.type);
     },
 
+    musicHasAudio(item) {
+      const music = this.musicList.find(m => m.id_music === item.musicId);
+      return Boolean(music?.has_music || music?.url_music);
+    },
+
     musicHasPlayback(item) {
       const music = this.musicList.find(m => m.id_music === item.musicId);
       return Boolean(music?.has_instrumental_music || music?.url_instrumental_music);
@@ -1854,6 +1901,10 @@ export default {
       return execution;
     },
     async executeItemNow(item, musicMode = "audio") {
+      const playbackOnly = item.type === "music" && musicMode === "audio_only_playback";
+      if (playbackOnly && !this.musicHasPlayback(item)) return;
+      const audioOnly = item.type === "music" && (musicMode === "audio_only" || playbackOnly);
+      if (audioOnly) musicMode = playbackOnly ? "instrumental" : (this.musicHasAudio(item) ? "audio" : "instrumental");
       if (item.type === "scheduled_item") {
         const category = this.scheduledCategories.find(category => category.id === item.categoryId);
         if (!category) return this.scheduledError("A categoria deste Item Agendado foi excluída ou não está disponível.");
@@ -1888,7 +1939,7 @@ export default {
       switch (item.type) {
         case "music":
           if (item.musicId) {
-            await this.$media.open({ id_music: item.musicId, mode: musicMode });
+            await this.$media.open({ id_music: item.musicId, mode: musicMode, audio_only: audioOnly });
             targetModule = "media";
           }
           break;
@@ -1972,7 +2023,7 @@ export default {
           break;
       }
 
-      if (targetModule) {
+      if (targetModule && !audioOnly) {
         const usesIndependentMediaSettings = targetModule === "external_media"
           && this.$userdata.get("modules.config.media_sync_projection_settings") === false;
         const fullscreen = usesIndependentMediaSettings
@@ -2311,6 +2362,8 @@ export default {
               name: m.name,
               album_names: m.albums ? m.albums.map(a => a.name).join(", ") : "",
               albums: m.albums,
+              has_music: m.has_music,
+              url_music: m.url_music,
               has_instrumental_music: m.has_instrumental_music,
               url_instrumental_music: m.url_instrumental_music,
             };

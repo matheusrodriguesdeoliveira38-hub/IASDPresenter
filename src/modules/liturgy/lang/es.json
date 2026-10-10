@@ -51,6 +51,8 @@
     "search_music": "Buscar música..."
   },
   "actions": {
+    "audio_only": "Solo audio",
+    "audio_only_playback": "Solo audio instrumental",
     "add_subitem": "Agregar subelemento",
     "expand_category": "Expandir categoría",
     "collapse_category": "Contraer categoría",

@@ -70,6 +70,17 @@ export default {
           }),
         },
         {
+          tooltip: "Somente Áudio Playback",
+          disabled: !this.has_instrumental_music,
+          icon: "mdi-headphones-settings",
+          click: () => this.$media.open({
+            id_music: this.id_music,
+            id_album: this.id_album,
+            mode: "instrumental",
+            audio_only: true,
+          }),
+        },
+        {
           tooltip: "Sem Áudio",
           disabled: false,
           icon: "mdi-monitor",

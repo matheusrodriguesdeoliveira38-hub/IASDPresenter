@@ -23,7 +23,7 @@
       <AppTrayArea />
 
       <transition name="fade-slide">
-        <div v-if="isMinimized && showMiniPlayer" class="mini-player-popup elevation-12">
+        <div v-if="isMinimized && showMiniPlayer && !$appdata.get('modules.media.config.audio_only')" class="mini-player-popup elevation-12">
           <v-card
             theme="dark"
             rounded="lg"
