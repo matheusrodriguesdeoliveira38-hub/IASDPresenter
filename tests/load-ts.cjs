@@ -13,6 +13,7 @@ module.exports = function loadTs(file, dependencies = {}, globals = {}) {
     exports, console, Uint8Array, ArrayBuffer, setInterval, clearInterval,
     require: (id) => {
       if (id in dependencies) return dependencies[id];
+      if (id === '../../electron/YouTube') return module.exports('electron/YouTube.ts', {}, globals);
       throw new Error(`Missing test dependency: ${id}`);
     },
     ...globals,

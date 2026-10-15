@@ -163,6 +163,8 @@ Itens Agendados
             </div>
           </div>
 
+          <LiturgyTimingPanel v-if="currentItems.length || $appdata.get('liturgy_stage_timer')" :items="currentItems" />
+
           <!-- Drag & Drop List -->
           <div class="flex-grow-1 px-2 py-2" style="overflow-y: auto; min-height: 0;">
             <div v-if="currentItems.length === 0" class="d-flex flex-column align-center justify-center h-100 opacity-50 py-8">
@@ -308,6 +310,12 @@ Itens Agendados
                       {{ element.subtitle }}
                     </div>
                   </div>
+                  <v-chip v-if="element.timingMode === 'deadline' && element.endTime" size="small" variant="tonal" class="mr-2" prepend-icon="mdi-clock-end">
+                    {{ t('timing.until') }} {{ element.endTime }}
+                  </v-chip>
+                  <v-chip v-else-if="element.plannedMinutes > 0" size="small" variant="tonal" class="mr-2" prepend-icon="mdi-timer-outline">
+                    {{ element.plannedMinutes }} min
+                  </v-chip>
                   <div class="d-flex align-center" style="gap: 2px; flex-shrink: 0;">
                     <v-btn
                       v-if="isExecutable(element)"
@@ -603,6 +611,28 @@ Itens Agendados
                     Gerenciar Itens Agendados
                   </v-btn>
                 </div>
+                <v-select
+                  v-if="addForm.type !== 'category'"
+                  v-model="addForm.timingMode"
+                  :items="[{ title: t('timing.by_duration'), value: 'duration' }, { title: t('timing.by_deadline'), value: 'deadline' }]"
+                  :label="t('timing.mode')" variant="outlined" rounded="lg" density="comfortable" hide-details class="mb-4"
+                />
+                <v-text-field
+                  v-if="addForm.type !== 'category' && addForm.timingMode === 'deadline'"
+                  v-model="addForm.endTime" type="time"
+                  :label="t('timing.end_time')" :hint="t('timing.end_time_hint')" persistent-hint
+                  :rules="[value => validEndTime(value) || t('timing.invalid_end_time')]"
+                  variant="outlined" rounded="lg" density="comfortable" class="mb-4"
+                />
+                <v-text-field
+                  v-if="addForm.type !== 'category' && addForm.timingMode !== 'deadline'"
+                  v-model="addForm.plannedMinutes"
+                  type="number" min="0" max="1440" step="0.5"
+                  :label="t('timing.duration')"
+                  :hint="t('timing.duration_hint')" persistent-hint
+                  :rules="[value => validStageMinutes(value) || t('timing.invalid_duration')]"
+                  variant="outlined" rounded="lg" density="comfortable" class="mb-4"
+                />
                 <!-- Description (annotation only) -->
                 <v-textarea
                   v-if="addForm.type === 'annotation'"
@@ -875,7 +905,11 @@ Itens Agendados
       <v-dialog v-model="showScheduledManager" :theme="$theme.primary()" max-width="1060" :z-index="10010" content-class="scheduled-dialog-wrapper" scrollable>
         <v-card class="modern-alert-card rounded-xl scheduled-manager">
           <div class="scheduled-header">
-            <div class="scheduled-icon"><v-icon size="26">mdi-calendar-clock</v-icon></div>
+            <div class="scheduled-icon">
+<v-icon size="26">
+mdi-calendar-clock
+</v-icon>
+</div>
             <div class="flex-grow-1">
               <h2>Itens Agendados</h2>
               <p>Um lugar na programação. O arquivo certo a cada dia.</p>
@@ -884,68 +918,128 @@ Itens Agendados
           </div>
           <v-card-text class="pa-0 scheduled-body">
             <aside class="scheduled-sidebar">
-              <div class="scheduled-section-label">CATEGORIAS <span>{{ scheduledCategories.length }}</span></div>
+              <div class="scheduled-section-label">
+CATEGORIAS <span>{{ scheduledCategories.length }}</span>
+</div>
               <div class="scheduled-category-list">
                 <button v-for="category in scheduledCategories" :key="category.id" type="button" class="scheduled-category" :class="{ 'is-selected': selectedScheduledCategoryId === category.id }" :aria-pressed="selectedScheduledCategoryId === category.id" @click="selectScheduledCategory(category.id)">
-                  <v-icon size="20">mdi-folder-outline</v-icon>
+                  <v-icon size="20">
+mdi-folder-outline
+</v-icon>
                   <span class="scheduled-category-name">{{ category.name }}<small>{{ category.items.length }} {{ category.items.length === 1 ? 'arquivo' : 'arquivos' }}</small></span>
-                  <v-icon v-if="selectedScheduledCategoryId === category.id" size="16">mdi-chevron-right</v-icon>
+                  <v-icon v-if="selectedScheduledCategoryId === category.id" size="16">
+mdi-chevron-right
+</v-icon>
                 </button>
-                <p v-if="!scheduledCategories.length" class="scheduled-muted text-body-2">Crie sua primeira categoria para começar.</p>
+                <p v-if="!scheduledCategories.length" class="scheduled-muted text-body-2">
+Crie sua primeira categoria para começar.
+</p>
               </div>
               <form class="scheduled-create" @submit.prevent="createScheduledCategory">
                 <v-text-field v-model="newScheduledCategoryName" placeholder="Nome da categoria" aria-label="Nome da nova categoria" variant="outlined" rounded="lg" density="compact" hide-details class="modern-input-no-thick" />
-                <v-btn type="submit" block variant="tonal" color="primary" prepend-icon="mdi-plus" rounded="lg" :disabled="!newScheduledCategoryName.trim()">Criar categoria</v-btn>
+                <v-btn type="submit" block variant="tonal" color="primary" prepend-icon="mdi-plus" rounded="lg" :disabled="!newScheduledCategoryName.trim()">
+Criar categoria
+</v-btn>
               </form>
-              <div class="scheduled-sidebar-tip"><v-icon size="18">mdi-lightbulb-outline</v-icon><span>Use nomes como Provai e Vede ou Informativo Mundial.</span></div>
+              <div class="scheduled-sidebar-tip">
+<v-icon size="18">
+mdi-lightbulb-outline
+</v-icon><span>Use nomes como Provai e Vede ou Informativo Mundial.</span>
+</div>
             </aside>
             <main class="scheduled-content">
               <template v-if="selectedScheduledCategory">
                 <div class="d-flex align-center ga-3 mb-5">
-                  <div class="flex-grow-1" style="min-width: 0;"><h3 class="scheduled-category-heading">{{ selectedScheduledCategory.name }}</h3><p class="scheduled-muted text-body-2">Associe um arquivo a cada data de apresentação.</p></div>
+                  <div class="flex-grow-1" style="min-width: 0;">
+<h3 class="scheduled-category-heading">
+{{ selectedScheduledCategory.name }}
+</h3><p class="scheduled-muted text-body-2">
+Associe um arquivo a cada data de apresentação.
+</p>
+</div>
                   <v-menu location="bottom end">
-                    <template #activator="{ props }"><v-btn v-bind="props" icon="mdi-dots-horizontal" variant="text" size="small" aria-label="Opções da categoria" /></template>
-                    <v-list rounded="lg" density="compact"><v-list-item prepend-icon="mdi-delete-outline" title="Excluir categoria" base-color="error" @click="deleteScheduledCategory" /></v-list>
+                    <template #activator="{ props }">
+<v-btn v-bind="props" icon="mdi-dots-horizontal" variant="text" size="small" aria-label="Opções da categoria" />
+</template>
+                    <v-list rounded="lg" density="compact">
+<v-list-item prepend-icon="mdi-delete-outline" title="Excluir categoria" base-color="error" @click="deleteScheduledCategory" />
+</v-list>
                   </v-menu>
                 </div>
                 <section class="scheduled-composer">
-                  <div class="scheduled-section-label mb-3">NOVO AGENDAMENTO</div>
+                  <div class="scheduled-section-label mb-3">
+NOVO AGENDAMENTO
+</div>
                   <button type="button" class="scheduled-file-picker" :class="{ 'has-file': scheduledFilePath }" @click="selectScheduledFile">
-                    <div class="scheduled-file-icon"><v-icon size="26">{{ scheduledFilePath ? 'mdi-file-check-outline' : 'mdi-folder-open-outline' }}</v-icon></div>
+                    <div class="scheduled-file-icon">
+<v-icon size="26">
+{{ scheduledFilePath ? 'mdi-file-check-outline' : 'mdi-folder-open-outline' }}
+</v-icon>
+</div>
                     <span class="scheduled-file-copy"><strong>{{ scheduledFilePath ? scheduledFilePath.split(/[\\/]/).pop() : 'Escolher arquivo' }}</strong><small>{{ scheduledFilePath || 'Vídeo, áudio ou documento do seu computador' }}</small></span>
-                    <v-icon size="20">{{ scheduledFilePath ? 'mdi-swap-horizontal' : 'mdi-plus' }}</v-icon>
+                    <v-icon size="20">
+{{ scheduledFilePath ? 'mdi-swap-horizontal' : 'mdi-plus' }}
+</v-icon>
                   </button>
                   <div class="scheduled-date-row">
                     <v-text-field v-model="scheduledDate" type="date" label="Data da apresentação" variant="outlined" rounded="lg" density="comfortable" hide-details class="modern-input-no-thick scheduled-date-input" />
-                    <div class="scheduled-shortcuts"><v-btn variant="text" size="small" rounded="lg" @click="setScheduledDay('today')">Hoje</v-btn><v-btn variant="text" size="small" rounded="lg" @click="setScheduledDay('saturday')">Próximo sábado</v-btn></div>
-                    <v-btn color="primary" variant="flat" rounded="lg" height="44" prepend-icon="mdi-calendar-plus" :disabled="!scheduledDate || !scheduledFilePath || scheduledDateConflict" @click="addScheduledFile">Agendar</v-btn>
+                    <div class="scheduled-shortcuts">
+<v-btn variant="text" size="small" rounded="lg" @click="setScheduledDay('today')">
+Hoje
+</v-btn><v-btn variant="text" size="small" rounded="lg" @click="setScheduledDay('saturday')">
+Próximo sábado
+</v-btn>
+</div>
+                    <v-btn color="primary" variant="flat" rounded="lg" height="44" prepend-icon="mdi-calendar-plus" :disabled="!scheduledDate || !scheduledFilePath || scheduledDateConflict" @click="addScheduledFile">
+Agendar
+</v-btn>
                   </div>
-                  <p v-if="scheduledDateConflict" class="text-error text-caption mt-3" role="alert">Esta data já tem um arquivo. Escolha outra data ou remova o agendamento existente.</p>
-                  <p v-else class="scheduled-muted text-caption mt-3">A reprodução acontece quando você aciona o item na programação.</p>
+                  <p v-if="scheduledDateConflict" class="text-error text-caption mt-3" role="alert">
+Esta data já tem um arquivo. Escolha outra data ou remova o agendamento existente.
+</p>
+                  <p v-else class="scheduled-muted text-caption mt-3">
+A reprodução acontece quando você aciona o item na programação.
+</p>
                 </section>
-                <div class="scheduled-section-label mt-6 mb-3">ARQUIVOS AGENDADOS <span>{{ sortedScheduledItems.length }}</span></div>
+                <div class="scheduled-section-label mt-6 mb-3">
+ARQUIVOS AGENDADOS <span>{{ sortedScheduledItems.length }}</span>
+</div>
                 <div v-if="!sortedScheduledItems.length" class="scheduled-empty">
-                  <v-icon size="34" class="mb-3">mdi-calendar-blank-outline</v-icon>
+                  <v-icon size="34" class="mb-3">
+mdi-calendar-blank-outline
+</v-icon>
                   <strong>Seu primeiro agendamento começa aqui</strong>
                   <p>Escolha um arquivo acima, defina a data e clique em Agendar.</p>
                 </div>
                 <div v-else class="scheduled-entries">
                   <article v-for="entry in sortedScheduledItems" :key="entry.id" class="scheduled-entry">
-                    <div class="scheduled-date-badge"><strong>{{ entry.date.slice(8) }}</strong><span>{{ scheduledMonth(entry.date) }}</span></div>
-                    <div class="scheduled-entry-copy"><strong>{{ entry.name }}</strong><span :title="entry.filePath">{{ entry.filePath }}</span></div>
+                    <div class="scheduled-date-badge">
+<strong>{{ entry.date.slice(8) }}</strong><span>{{ scheduledMonth(entry.date) }}</span>
+</div>
+                    <div class="scheduled-entry-copy">
+<strong>{{ entry.name }}</strong><span :title="entry.filePath">{{ entry.filePath }}</span>
+</div>
                     <v-text-field :model-value="entry.date" type="date" aria-label="Alterar data do agendamento" variant="outlined" rounded="lg" density="compact" hide-details class="modern-input-no-thick scheduled-entry-date" @change="changeScheduledDate(entry, $event)" />
                     <v-btn icon="mdi-close" variant="text" size="x-small" aria-label="Remover agendamento" @click="removeScheduledFile(entry.id)" />
                   </article>
                 </div>
               </template>
               <div v-else class="scheduled-empty scheduled-welcome">
-                <div class="scheduled-icon mb-4"><v-icon size="30">mdi-calendar-multiple</v-icon></div>
+                <div class="scheduled-icon mb-4">
+<v-icon size="30">
+mdi-calendar-multiple
+</v-icon>
+</div>
                 <h3>Organize hoje. Apresente no dia certo.</h3>
                 <p>Crie uma categoria ao lado, agende seus arquivos e adicione essa categoria uma única vez à programação.</p>
               </div>
             </main>
           </v-card-text>
-          <div class="scheduled-footer"><v-icon size="16">mdi-check-circle-outline</v-icon> Agendamentos salvos automaticamente</div>
+          <div class="scheduled-footer">
+<v-icon size="16">
+mdi-check-circle-outline
+</v-icon> Agendamentos salvos automaticamente
+</div>
         </v-card>
       </v-dialog>
       <!-- ====== NEW CUSTOM LITURGY DIALOG ====== -->
@@ -1007,6 +1101,8 @@ import manifest from "../manifest.json";
 import MenuToggleButton from "@/components/MenuToggleButton.vue";
 import draggable from "vuedraggable";
 import RichTextEditor from "./RichTextEditor.vue";
+import LiturgyTimingPanel from "@/components/LiturgyTimingPanel.vue";
+import { validEndTime } from "@/helpers/LiturgyTiming";
 import { isAudioFile, isWebUrl, openExternalMedia } from "@/helpers/ExternalMedia";
 import { isYouTubeUrl } from "@/helpers/YouTube";
 import { transitionProjection } from "@/helpers/ProjectionTransition";
@@ -1018,6 +1114,7 @@ export default {
     MenuToggleButton,
     draggable,
     RichTextEditor,
+    LiturgyTimingPanel,
   },
   data: () => ({
     showScheduledManager: false,
@@ -1063,6 +1160,9 @@ export default {
     dragItemsBefore: [],
     dragSelectedId: null,
     addForm: {
+      plannedMinutes: 0,
+      timingMode: "duration",
+      endTime: "",
       scheduledCategoryId: null,
       categoryId: null,
       type: "annotation",
@@ -1213,6 +1313,9 @@ export default {
       ];
     },
     isFormValid() {
+      if (this.addForm.type !== "category") {
+        if (this.addForm.timingMode === "deadline" ? !validEndTime(this.addForm.endTime) : !this.validStageMinutes(this.addForm.plannedMinutes)) return false;
+      }
       if (this.addForm.type === "scheduled_item") return this.scheduledCategories.some(category => category.id === this.addForm.scheduledCategoryId);
       if (!this.addForm.name.trim()) return false;
       if (this.addForm.type === "verse" && (!this.addForm.verseBookId || !this.addForm.verseChapter)) return false;
@@ -1255,6 +1358,11 @@ export default {
     }
   },
   methods: {
+    validEndTime,
+    validStageMinutes(value) {
+      const minutes = Number(value);
+      return Number.isFinite(minutes) && minutes >= 0 && minutes <= 1440;
+    },
     supportsAutomationTrigger(type) {
       return ["music", "media", "link", "scheduled_item"].includes(type);
     },
@@ -1581,6 +1689,9 @@ export default {
     openAddForm(type) {
       this.editingIndex = null;
       this.addForm = {
+        plannedMinutes: 0,
+        timingMode: "duration",
+        endTime: "",
         scheduledCategoryId: null,
         categoryId: type === "category" ? null : this.addCategoryId,
         type,
@@ -1645,6 +1756,9 @@ export default {
         ...(this.editingIndex !== null ? this.currentItems[this.editingIndex] : {}),
         id: Date.now() + Math.random(),
         type: this.addForm.type,
+        plannedMinutes: this.addForm.type === "category" ? 0 : Number(this.addForm.plannedMinutes) || 0,
+        timingMode: this.addForm.type === "category" ? "duration" : this.addForm.timingMode,
+        endTime: this.addForm.type !== "category" && this.addForm.timingMode === "deadline" ? this.addForm.endTime : "",
         name: this.addForm.name.trim(),
         subtitle: this.addForm.subtitle?.trim() || "",
       };
@@ -1748,6 +1862,9 @@ export default {
       const item = this.currentItems[index];
       this.editingIndex = index;
       this.addForm = {
+        plannedMinutes: item.plannedMinutes || 0,
+        timingMode: item.timingMode === "deadline" ? "deadline" : "duration",
+        endTime: item.endTime || "",
         scheduledCategoryId: item.categoryId || null,
         categoryId: item.type === "category" ? null : (this.itemCategory(index)?.id ?? null),
         type: item.type,

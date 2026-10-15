@@ -18,6 +18,28 @@ O IASDPresenter e construido com Electron, Vue 3 e Vuetify, com foco em uso loca
 - Logo e identidade visual IASDPresenter.
 - Autoatualizacao com `electron-updater` a partir do repositorio oficial.
 
+## Tempo por etapa da liturgia
+
+Ao adicionar ou editar um item da liturgia, informe a **Duração prevista (minutos)**.
+O campo é opcional: com 0, o cronômetro mostra apenas o tempo decorrido. Categorias
+são agrupadores e não entram na soma das durações.
+
+Em **Limite da etapa**, escolha **Duração em minutos** ou **Horário de encerramento**.
+O horário corresponde ao dia local em que a etapa é iniciada. Pausar suspende a
+duração, mas não adia um horário fixo. Se o horário já passou, a etapa começa
+com tempo excedido. Ao atingir o limite, o painel mostra **Tempo excedido** e
+conta o atraso em vermelho, também no monitor de retorno.
+
+No painel **Tempo por etapa**, selecione o item e clique em **Iniciar etapa**.
+Use **Pausar**, **Continuar** e **Encerrar etapa** para acompanhar cada momento.
+Encerre a etapa atual antes de iniciar outra. A contagem é manual e independente
+da reprodução das mídias e da seleção de outra liturgia.
+
+O painel mostra o total previsto e quantos itens estão sem duração. A contagem
+também aparece no monitor de retorno e fica vermelha quando o tempo é excedido.
+As durações são salvas e incluídas na exportação da liturgia; o cronômetro ativo
+vale apenas para a sessão atual do aplicativo.
+
 ## Monitor virtual pela rede
 
 Em **Configurações → Projeção e telas → Monitores**, ative **Monitor virtual**.

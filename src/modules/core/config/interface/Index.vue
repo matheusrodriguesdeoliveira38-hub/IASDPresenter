@@ -8,7 +8,9 @@
             <v-icon :icon="manifest.icon || 'mdi-cog'" size="24" />
           </div>
           <div>
-            <h2 class="section-title">{{ t('main_title') }}</h2>
+            <h2 class="section-title">
+{{ t('main_title') }}
+</h2>
             <p>{{ activeTabDescription }}</p>
           </div>
         </div>
@@ -629,7 +631,9 @@
                     />
                     <v-alert v-if="!remote_control_loading && !virtual_monitor_supported" type="warning" variant="tonal" class="mt-3 mb-4">
                       Reinicie o aplicativo para carregar o suporte ao monitor virtual.
-                      <v-btn class="ml-3" size="small" variant="outlined" @click="restartForVirtualMonitor">Reiniciar aplicativo</v-btn>
+                      <v-btn class="ml-3" size="small" variant="outlined" @click="restartForVirtualMonitor">
+Reiniciar aplicativo
+</v-btn>
                     </v-alert>
                     <p class="text-body-2 mt-2 mb-4">
                       Ao ativar, selecione o Monitor virtual como destino da projeção ou do retorno.
@@ -637,7 +641,9 @@
                       A transmissão exibe a imagem em 1920 × 1080, sem áudio.
                     </p>
                     <template v-if="remote_control_config.virtualMonitorEnabled">
-                      <v-alert v-if="remote_control_error" type="error" variant="tonal" class="mb-4">{{ remote_control_error }}</v-alert>
+                      <v-alert v-if="remote_control_error" type="error" variant="tonal" class="mb-4">
+{{ remote_control_error }}
+</v-alert>
                       <v-text-field
                         v-for="address in virtual_monitor_addresses" :key="address"
                         :model-value="address" label="Endereço do monitor virtual" readonly
@@ -650,7 +656,9 @@
                       <v-btn variant="text" size="small" :loading="remote_control_loading" class="mb-4" @click="loadRemoteControlStatus">
                         Atualizar endereços
                       </v-btn>
-                      <p class="text-caption mb-4">O monitor virtual aceita conexões em todas as interfaces de rede do computador, usando a porta configurada em Controle remoto. Com cabo e Wi-Fi conectados, use o endereço IP da rede do dispositivo que exibirá a imagem. Qualquer dispositivo dessa rede com esse endereço pode visualizar a imagem.</p>
+                      <p class="text-caption mb-4">
+O monitor virtual aceita conexões em todas as interfaces de rede do computador, usando a porta configurada em Controle remoto. Com cabo e Wi-Fi conectados, use o endereço IP da rede do dispositivo que exibirá a imagem. Qualquer dispositivo dessa rede com esse endereço pode visualizar a imagem.
+</p>
                     </template>
                     <div class="monitor-showcase">
                       <div
@@ -814,8 +822,7 @@
                 <!-- MONITOR DE RETORNO -->
                     <CollapsiblePanel title="Monitor de Retorno" subtitle="Tela auxiliar para letras, cifras, notas e informações da apresentação" icon="mdi-monitor-dashboard" class="mb-6" :hide-first="false">
                     <div class="return-monitor-settings">
-
-                      <v-switch
+<v-switch
                         v-model="return_monitor_enabled"
                         label="Ativar modo monitor de retorno"
                         color="primary"
@@ -1583,10 +1590,10 @@
                         </div>
                         <v-switch
                           v-model="remote_control_config.enabled"
-                          @update:model-value="saveRemoteControlConfig({ silent: true })"
                           color="primary"
                           inset
                           hide-details
+                          @update:model-value="saveRemoteControlConfig({ silent: true })"
                         />
                       </div>
 
@@ -1834,7 +1841,7 @@
                             fontSize: `${Math.max(10, Math.round(20 * Number(remote_control_config.broadcastFontSize || 100) / 100))}px`,
                           }"
                         >
-                          DIFERENTE UM DO OUTRO,<br>
+                          DIFERENTE UM DO OUTRO,<br />
                           MAS PRA DEUS É COMO SE HOUVESSE
                         </div>
                       </div>
@@ -1881,7 +1888,9 @@
                   <div class="automation-overview" :class="{ active: automation_config.enabled }">
                     <div class="automation-overview-main">
                       <div class="automation-hero-icon">
-                        <v-icon size="30">mdi-lightning-bolt</v-icon>
+                        <v-icon size="30">
+mdi-lightning-bolt
+</v-icon>
                       </div>
                       <div class="automation-overview-copy">
                         <div class="automation-eyebrow">
@@ -1925,14 +1934,22 @@
 
                 <CollapsiblePanel title="Mesas de som" subtitle="Soundcraft Ui, Behringer X32 / X Air e Midas M32" icon="mdi-mixer">
                   <div class="device-card-footer mb-4">
-                    <v-btn color="primary" variant="tonal" prepend-icon="mdi-plus" @click="addAutomationDevice">Adicionar mesa</v-btn>
-                    <v-btn color="primary" prepend-icon="mdi-content-save-outline" :loading="automation_loading" @click="saveAutomationConfig">Salvar automação</v-btn>
+                    <v-btn color="primary" variant="tonal" prepend-icon="mdi-plus" @click="addAutomationDevice">
+Adicionar mesa
+</v-btn>
+                    <v-btn color="primary" prepend-icon="mdi-content-save-outline" :loading="automation_loading" @click="saveAutomationConfig">
+Salvar automação
+</v-btn>
                   </div>
-                  <p v-if="!automation_config.devices.length" class="mb-4">Adicione uma mesa e informe o endereço dela na rede local.</p>
+                  <p v-if="!automation_config.devices.length" class="mb-4">
+Adicione uma mesa e informe o endereço dela na rede local.
+</p>
                   <div v-for="device in automation_config.devices" :key="device.id" class="automation-device-card mb-4">
                     <div class="device-card-intro">
                       <div class="device-visual">
-                        <v-icon size="26">mdi-mixer</v-icon>
+                        <v-icon size="26">
+mdi-mixer
+</v-icon>
                         <span class="device-signal"><i /><i /><i /></span>
                       </div>
                       <div>
@@ -1966,7 +1983,9 @@
 
                     <div class="device-card-footer">
                       <div class="device-network-hint">
-                        <v-icon size="17">mdi-lan</v-icon>
+                        <v-icon size="17">
+mdi-lan
+</v-icon>
                         Rede local segura
                       </div>
                       <div class="device-actions">
@@ -2016,7 +2035,11 @@
                     </div>
 
                     <div v-if="automation_config.triggers.length === 0" class="automation-empty">
-                      <div class="automation-empty-icon"><v-icon size="34">mdi-lightning-bolt-outline</v-icon></div>
+                      <div class="automation-empty-icon">
+<v-icon size="34">
+mdi-lightning-bolt-outline
+</v-icon>
+</div>
                       <h3>Crie seu primeiro gatilho</h3>
                       <p>Adicione uma cena para controlar canais, volumes e transições diretamente pela liturgia.</p>
                       <v-btn
@@ -2106,7 +2129,9 @@
 
                       <div class="trigger-card-footer">
                         <span><v-icon size="16">mdi-shield-check-outline</v-icon> Teste antes de usar na apresentação</span>
-                        <v-btn variant="tonal" prepend-icon="mdi-plus" @click="addAutomationAction(trigger)">Adicionar ação</v-btn>
+                        <v-btn variant="tonal" prepend-icon="mdi-plus" @click="addAutomationAction(trigger)">
+Adicionar ação
+</v-btn>
                         <v-btn
                           color="primary"
                           variant="tonal"
@@ -2282,7 +2307,7 @@ export default {
   }),
   computed: {
     automationDeviceOptions() {
-      return this.automation_config.devices.map(device => ({ title: device.name || 'Nova mesa', value: device.id }));
+      return this.automation_config.devices.map(device => ({ title: device.name || "Nova mesa", value: device.id }));
     },
     module_id() {
       return manifest.id;

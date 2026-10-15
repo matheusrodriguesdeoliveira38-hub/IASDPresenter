@@ -28,7 +28,7 @@ export function isWebUrl(value) {
     const url = new URL(String(value || ""));
     if (typeof location !== "undefined" && url.origin === location.origin && url.pathname.includes("/user-files/")) return false;
     return url.protocol === "http:" || url.protocol === "https:";
-  } catch (_error) {
+  } catch {
     return false;
   }
 }

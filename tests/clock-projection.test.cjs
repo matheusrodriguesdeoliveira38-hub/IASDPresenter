@@ -107,6 +107,7 @@ test('clock rendering and button state are independent of shared projection stat
   assert.equal(screen.computed.is_selected.call(context), true);
   const page = loadTs('src/views/Popup.vue', {
     vue: { defineAsyncComponent() {} }, '@/components/PulpitMessageOverlay.vue': {},
+    '@/components/LiturgyStageClock.vue': {},
   }).default;
   assert.equal(page.computed.module.call({ $route: { query: { module: 'clock' } }, $appdata: appdata }), 'clock');
   assert.equal(page.computed.projectionOverride.call(context), 'none');
@@ -231,6 +232,7 @@ test('all liturgy outputs cover the return clock and closing reveals the running
   const { popup, state, appdata } = runtime();
   const page = loadTs('src/views/Popup.vue', {
     vue: {}, '@/components/PulpitMessageOverlay.vue': {},
+    '@/components/LiturgyStageClock.vue': {},
   }).default;
   const timer = { running: true, endsAt: Date.now() + 600000 };
   state.clock_timer = timer;

@@ -18,7 +18,9 @@
       </span>
     </button>
     <v-expand-transition>
-      <div v-show="open" class="collapsible-panel__body"><slot /></div>
+      <div v-show="open" class="collapsible-panel__body">
+<slot />
+</div>
     </v-expand-transition>
   </section>
 </template>

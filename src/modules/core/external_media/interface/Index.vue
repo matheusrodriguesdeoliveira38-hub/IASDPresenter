@@ -2,8 +2,8 @@
   <div>
     <!-- Hidden audio player (ONLY for audio files) -->
     <audio
-      :key="'audio:' + playbackSession"
       v-if="isAudio && filePath"
+      :key="'audio:' + playbackSession"
       ref="audioEl"
       :src="filePath"
       preload="auto"
@@ -96,8 +96,8 @@
             <div class="w-100 h-100 position-absolute d-flex align-center justify-center bg-black">
               <!-- VIDEO: This is the MAIN player for video files -->
               <iframe
-      :key="'iframe:' + playbackSession"
-                v-if="isYouTube && youtubeEmbedUrl"
+      v-if="isYouTube && youtubeEmbedUrl"
+                :key="'iframe:' + playbackSession"
                 ref="youtubeFrame"
                 class="external-youtube-frame"
                 :src="youtubeEmbedUrl"
@@ -109,8 +109,8 @@
               />
 
               <webview
-      :key="'webview:' + playbackSession"
-                v-else-if="isWebLink && isElectron"
+      v-else-if="isWebLink && isElectron"
+                :key="'webview:' + playbackSession"
                 class="external-web-frame"
 
                 :src="rawFilePath"
@@ -127,8 +127,8 @@
               />
 
               <video
-      :key="'video:' + playbackSession"
-                v-else-if="isVideo && filePath"
+      v-else-if="isVideo && filePath"
+                :key="'video:' + playbackSession"
                 ref="videoEl"
                 class="w-100 h-100"
                 style="object-fit: contain;"
@@ -534,7 +534,7 @@ export default {
       return this.$modules.get(this.module_id);
     },
     playbackSession() {
-      return this.rawFilePath + ":" + (this.$appdata.get("modules.external_media.config.session_id") || "");
+      return `${this.rawFilePath  }:${  this.$appdata.get("modules.external_media.config.session_id") || ""}`;
     },
     rawFilePath() {
       return this.$appdata.get("modules.external_media.filePath") || "";
@@ -753,7 +753,7 @@ export default {
       if (this.currentTime > 0 && Number.isFinite(this.currentTime)) {
         try {
           el.currentTime = this.currentTime;
-        } catch (error) {
+        } catch {
           // Some media elements reject seeking before metadata is ready.
         }
       }
@@ -883,6 +883,8 @@ export default {
       this.youtubeReady = true;
       clearInterval(this.youtubeHandshakeTimer);
       this.sendYouTubeCommand("addEventListener", ["onStateChange"]);
+      this.sendYouTubeCommand("addEventListener", ["onApiChange"]);
+      this.sendYouTubeCommand("unloadModule", ["captions"]);
       this.sendYouTubeCommand("unMute");
       this.sendYouTubeCommand("setVolume", [this.volume]);
       this.sendYouTubeCommand("seekTo", [this.currentTime || 0, true]);
@@ -905,12 +907,13 @@ export default {
       if (typeof payload === "string") {
         try {
           payload = JSON.parse(payload);
-        } catch (error) {
+        } catch {
           return;
         }
       }
 
       if (payload?.event === "onReady") { this.initializeYouTubePlayer(); return; }
+      if (payload?.event === "onApiChange") { this.sendYouTubeCommand("unloadModule", ["captions"]); return; }
       if (payload?.event === "onStateChange") payload = { event: "infoDelivery", info: { playerState: payload.info } };
       if (payload?.event !== "infoDelivery" || !payload.info) return;
 

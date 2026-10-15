@@ -937,7 +937,7 @@ ${data.name}` : data.name)
       await audio.play();
       if (revision !== openRevision) return;
       $appdata.set("modules.media.config.is_paused", audio.paused);
-    } catch (error) {
+    } catch {
       if (revision === openRevision) {
         cancelFade(audio);
         $appdata.set("modules.media.config.is_paused", true);

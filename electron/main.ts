@@ -1,76 +1,77 @@
-const { app, BrowserWindow, Menu, ipcMain, protocol, net, dialog, shell, globalShortcut, session } = require('electron');
-const path = require('path');
-const fs = require('fs');
-const { streamStaticFile } = require('./StaticFile');
-const { syncClockWindowOrder } = require('./ProjectionWindows');
-const { VIRTUAL_MONITOR_ID, virtualMonitorDisplay, createVirtualMonitorHandler } = require('./VirtualMonitor');
-const fsExtra = require('fs-extra');
-const crypto = require('crypto');
-const http = require('http');
-const os = require('os');
-const QRCode = require('qrcode');
-const { spawn } = require('child_process');
-const { autoUpdater } = require('electron-updater');
-const { findSofficeExecutable } = require('./LibreOffice');
-const DbExtractor = require('./DbExtractor');
-const { migrateLocalMusicLibrary } = require('./LocalMusicMigration');
-const { readUserData, writeUserData } = require('./UserDataStorage');
-const { normalizeSmartSearchText, smartTokenScore } = require('./SmartSearch');
-const { normalizeMixerDevice, validateMixerDevice, validateMixerAction, validateMixerConfig } = require('./MixerProfiles');
-const { executeOscAction, testOscMixer } = require('./OscMixer');
+const { app, BrowserWindow, Menu, ipcMain, protocol, net, dialog, shell, globalShortcut, session } = require("electron");
+const path = require("path");
+const fs = require("fs");
+const { streamStaticFile } = require("./StaticFile");
+const { syncClockWindowOrder } = require("./ProjectionWindows");
+const { VIRTUAL_MONITOR_ID, virtualMonitorDisplay, createVirtualMonitorHandler } = require("./VirtualMonitor");
+
+const crypto = require("crypto");
+const http = require("http");
+const os: typeof import("node:os") = require("os");
+const QRCode = require("qrcode");
+const { spawn } = require("child_process");
+const { autoUpdater } = require("electron-updater");
+const { findSofficeExecutable } = require("./LibreOffice");
+const DbExtractor = require("./DbExtractor");
+const { migrateLocalMusicLibrary } = require("./LocalMusicMigration");
+const { readUserData, writeUserData } = require("./UserDataStorage");
+const { normalizeSmartSearchText, smartTokenScore } = require("./SmartSearch");
+const { normalizeMixerDevice, validateMixerDevice, validateMixerAction, validateMixerConfig } = require("./MixerProfiles");
+const { executeOscAction, testOscMixer } = require("./OscMixer");
 const {
   readRecoverableFile,
   writeRecoverableFile,
   writeRecoverableJson,
-} = require('./FileRecovery');
-const ftp = require('basic-ftp');
+} = require("./FileRecovery");
+const ftp = require("basic-ftp");
+const { getYouTubeVideoId, getYouTubeEmbedUrl } = require("./YouTube");
 
 // Chave estática para ofuscação (não é segurança alta, apenas ofuscação)
-const ENCRYPTION_KEY = Buffer.from('v389s8dkj238910s8a7d3h2j1k9s8d7f', 'utf8');
+const ENCRYPTION_KEY = Buffer.from("v389s8dkj238910s8a7d3h2j1k9s8d7f", "utf8");
 const IV_LENGTH = 16;
 
 function encryptData(text) {
   try {
     const iv = crypto.randomBytes(IV_LENGTH);
-    const cipher = crypto.createCipheriv('aes-256-cbc', ENCRYPTION_KEY, iv);
-    let encrypted = cipher.update(text, 'utf8', 'hex');
-    encrypted += cipher.final('hex');
-    return iv.toString('hex') + ':' + encrypted;
+    const cipher = crypto.createCipheriv("aes-256-cbc", ENCRYPTION_KEY, iv);
+    let encrypted = cipher.update(text, "utf8", "hex");
+    encrypted += cipher.final("hex");
+    return `${iv.toString("hex")  }:${  encrypted}`;
   } catch (e) {
-    console.error('Erro ao ofuscar dados', e);
+    console.error("Erro ao ofuscar dados", e);
     return null;
   }
 }
 
 function decryptData(text) {
   try {
-    const textParts = text.split(':');
+    const textParts = text.split(":");
     if (textParts.length !== 2) return null;
-    const iv = Buffer.from(textParts[0], 'hex');
-    const encryptedText = Buffer.from(textParts[1], 'hex');
-    const decipher = crypto.createDecipheriv('aes-256-cbc', ENCRYPTION_KEY, iv);
-    let decrypted = decipher.update(encryptedText, 'hex', 'utf8');
-    decrypted += decipher.final('utf8');
+    const iv = Buffer.from(textParts[0], "hex");
+    const encryptedText = Buffer.from(textParts[1], "hex");
+    const decipher = crypto.createDecipheriv("aes-256-cbc", ENCRYPTION_KEY, iv);
+    let decrypted = decipher.update(encryptedText, "hex", "utf8");
+    decrypted += decipher.final("utf8");
     return decrypted;
   } catch (e) {
-    console.error('Erro ao desofuscar dados', e);
+    console.error("Erro ao desofuscar dados", e);
     return null;
   }
 }
 
-app.setName('IASDPresenter');
-app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required');
-app.commandLine.appendSwitch('disable-popup-blocking');
+app.setName("IASDPresenter");
+app.commandLine.appendSwitch("autoplay-policy", "no-user-gesture-required");
+app.commandLine.appendSwitch("disable-popup-blocking");
 
-const userDataPath = app.getPath('userData');
-const sysDbPath = path.join(userDataPath, '.sysdata');
-const oldDbPath = path.join(userDataPath, 'database');
-const mediaPath = path.join(userDataPath, 'Media');
-const coversPath = path.join(mediaPath, 'covers');
-const musicPath = path.join(mediaPath, 'music');
-const slidesPath = path.join(mediaPath, 'images');
-const backgroundsPath = path.join(mediaPath, 'backgrounds');
-const presentationsPath = path.join(userDataPath, 'Presentations');
+const userDataPath = app.getPath("userData");
+const sysDbPath = path.join(userDataPath, ".sysdata");
+const oldDbPath = path.join(userDataPath, "database");
+const mediaPath = path.join(userDataPath, "Media");
+const coversPath = path.join(mediaPath, "covers");
+const musicPath = path.join(mediaPath, "music");
+const slidesPath = path.join(mediaPath, "images");
+const backgroundsPath = path.join(mediaPath, "backgrounds");
+const presentationsPath = path.join(userDataPath, "Presentations");
 const mediaFolders = {
   covers: coversPath,
   music: musicPath,
@@ -80,19 +81,22 @@ let presentationShortcutsEnabled = false;
 let mainAppWindow = null;
 let remoteControlServer = null;
 let remoteControlStartPromise = null;
-let remoteControlError = '';
-let remoteControlHost = '0.0.0.0';
-const webOutputClients = new Set();
-const webOutputFrameWaiters = new Set();
+let remoteControlError = "";
+let remoteControlHost = "0.0.0.0";
+type WebOutputClient = { kind: string; response: import("node:http").ServerResponse; closed: boolean; blocked?: boolean; keepAlive?: ReturnType<typeof setInterval> };
+type WebOutputWaiter = { response: import("node:http").ServerResponse; timer: ReturnType<typeof setTimeout> };
+const webOutputClients = new Set<WebOutputClient>();
+const webOutputFrameWaiters = new Set<WebOutputWaiter>();
 let webOutputCaptureTimer = null;
 let webOutputCaptureInFlight = false;
 let webOutputLatestFrame = null;
 let webOutputFrameRevision = 0;
-let remoteControlState = {
+type RemoteControlState = { revision: number; updatedAt: string | null; connected: boolean; projection: { active?: boolean; module?: string; override?: string }; current: any; next: any; playback: any; returnMonitorActive?: boolean; webOutputModule?: string; externalMedia?: any };
+let remoteControlState: RemoteControlState = {
   revision: 0,
   updatedAt: null,
   connected: false,
-  projection: { active: false, module: '', override: 'none' },
+  projection: { active: false, module: "", override: "none" },
   current: null,
   next: null,
   playback: {
@@ -100,7 +104,7 @@ let remoteControlState = {
     progress: 0,
     currentTime: 0,
     duration: 0,
-    repeatMode: 'off',
+    repeatMode: "off",
     repeatAvailable: false,
   },
 };
@@ -108,27 +112,27 @@ let remoteCommandLockUntil = 0;
 const recentRemoteCommandIds = new Map();
 let productionAppServer = null;
 let productionAppUrl = null;
-const remoteControlConfigPath = path.join(userDataPath, 'remote-control.json');
-const automationConfigPath = path.join(userDataPath, 'automation-config.json');
-const performanceConfigPath = path.join(userDataPath, 'performance-config.json');
-const firstBootLogPath = path.join(userDataPath, 'first-boot-error.log');
-const userPreferencesPath = path.join(userDataPath, 'user-data.json');
-const supportedDatabaseLanguages = new Set(['pt', 'en', 'es']);
+const remoteControlConfigPath = path.join(userDataPath, "remote-control.json");
+const automationConfigPath = path.join(userDataPath, "automation-config.json");
+const performanceConfigPath = path.join(userDataPath, "performance-config.json");
+const firstBootLogPath = path.join(userDataPath, "first-boot-error.log");
+const userPreferencesPath = path.join(userDataPath, "user-data.json");
+const supportedDatabaseLanguages = new Set(["pt", "en", "es"]);
 
 function normalizeDatabaseLanguage(language) {
-  const normalized = String(language || 'pt').trim().toLowerCase().split(/[-_]/)[0];
-  return supportedDatabaseLanguages.has(normalized) ? normalized : 'pt';
+  const normalized = String(language || "pt").trim().toLowerCase().split(/[-_]/)[0];
+  return supportedDatabaseLanguages.has(normalized) ? normalized : "pt";
 }
 
-function getDatabaseSourceLanguage(language = 'pt') {
+function getDatabaseSourceLanguage(language = "pt") {
   const locale = normalizeDatabaseLanguage(language);
-  return locale === 'en' ? 'pt' : locale;
+  return locale === "en" ? "pt" : locale;
 }
 
-function getRequiredLocalDbFiles(language = 'pt') {
+function getRequiredLocalDbFiles(language = "pt") {
   const locale = normalizeDatabaseLanguage(language);
   return [
-    'config',
+    "config",
     `${locale}_categories`,
     `${locale}_musics`,
     `${locale}_bible_book`,
@@ -139,12 +143,12 @@ const defaultRemoteControlConfig = {
   virtualMonitorEnabled: false,
   enabled: true,
   webOutputEnabled: true,
-  webOutputSource: 'projection',
+  webOutputSource: "projection",
   broadcastBarOpacity: 72,
   broadcastFontSize: 100,
-  host: '0.0.0.0',
+  host: "0.0.0.0",
   port: Number(process.env.LOUVORJA_REMOTE_PORT || 1975),
-  password: '',
+  password: "",
   requirePassword: false,
 };
 let remoteControlConfig = loadRemoteControlConfig();
@@ -155,7 +159,7 @@ const soundcraftConnections = new Map();
 let automationQueue = Promise.resolve();
 const pendingAutomationRestores = [];
 
-function sanitizePerformanceConfig(config = {}) {
+function sanitizePerformanceConfig(config: { lightMode?: boolean; disableHardwareAcceleration?: boolean } = {}) {
   return {
     lightMode: config.lightMode === true,
     disableHardwareAcceleration: config.disableHardwareAcceleration === true,
@@ -169,7 +173,7 @@ function loadPerformanceConfig() {
   return sanitizePerformanceConfig();
 }
 
-function savePerformanceConfig(config = {}) {
+function savePerformanceConfig(config: { lightMode?: boolean; disableHardwareAcceleration?: boolean } = {}) {
   performanceConfig = sanitizePerformanceConfig({ ...performanceConfig, ...config });
   writeRecoverableJson(performanceConfigPath, performanceConfig);
   return performanceConfig;
@@ -177,7 +181,7 @@ function savePerformanceConfig(config = {}) {
 
 if (performanceConfig.disableHardwareAcceleration) {
   app.disableHardwareAcceleration();
-  app.commandLine.appendSwitch('disable-gpu');
+  app.commandLine.appendSwitch("disable-gpu");
 }
 
 function writeFirstBootErrorLog(context, error) {
@@ -185,11 +189,11 @@ function writeFirstBootErrorLog(context, error) {
     const details = [
       `[${new Date().toISOString()}] ${context}`,
       error && error.stack ? error.stack : String(error),
-      '',
-    ].join('\n');
-    fs.appendFileSync(firstBootLogPath, details, 'utf8');
+      "",
+    ].join("\n");
+    fs.appendFileSync(firstBootLogPath, details, "utf8");
   } catch (e) {
-    console.error('Erro ao gravar log de inicialização:', e);
+    console.error("Erro ao gravar log de inicialização:", e);
   }
 }
 
@@ -198,37 +202,37 @@ function sendPresentationShortcut(action) {
     ? mainAppWindow
     : BrowserWindow.getAllWindows().find(win => !win.isDestroyed() && win.webContents && !win.webContents.isDestroyed());
   if (mainWindow) {
-    mainWindow.webContents.send('presentation-shortcut', action);
+    mainWindow.webContents.send("presentation-shortcut", action);
   }
 }
 
 function setPresentationShortcutsEnabled(enabled) {
   if (presentationShortcutsEnabled === enabled) return true;
 
-  globalShortcut.unregister('Left');
-  globalShortcut.unregister('Right');
-  globalShortcut.unregister('Up');
-  globalShortcut.unregister('Down');
+  globalShortcut.unregister("Left");
+  globalShortcut.unregister("Right");
+  globalShortcut.unregister("Up");
+  globalShortcut.unregister("Down");
 
   presentationShortcutsEnabled = false;
   if (!enabled) return true;
 
   const registered = [
-    globalShortcut.register('Left', () => sendPresentationShortcut('prev')),
-    globalShortcut.register('Up', () => sendPresentationShortcut('prev')),
-    globalShortcut.register('Right', () => sendPresentationShortcut('next')),
-    globalShortcut.register('Down', () => sendPresentationShortcut('next')),
+    globalShortcut.register("Left", () => sendPresentationShortcut("prev")),
+    globalShortcut.register("Up", () => sendPresentationShortcut("prev")),
+    globalShortcut.register("Right", () => sendPresentationShortcut("next")),
+    globalShortcut.register("Down", () => sendPresentationShortcut("next")),
   ];
 
   presentationShortcutsEnabled = registered.some(Boolean);
   return presentationShortcutsEnabled;
 }
 
-function sanitizeRemoteControlConfig(config = {}) {
+function sanitizeRemoteControlConfig(config: Partial<typeof defaultRemoteControlConfig> & { broadcastBarOpacity?: number; broadcastFontSize?: number; virtualMonitorEnabled?: boolean; webOutputEnabled?: boolean; webOutputSource?: string } = {}) {
   const port = Number(config.port);
   const opacity = Number(config.broadcastBarOpacity);
   const fontSize = Number(config.broadcastFontSize);
-  const host = typeof config.host === 'string' && config.host.trim()
+  const host = typeof config.host === "string" && config.host.trim()
     ? config.host.trim()
     : defaultRemoteControlConfig.host;
 
@@ -236,12 +240,12 @@ function sanitizeRemoteControlConfig(config = {}) {
     enabled: config.enabled !== false,
     virtualMonitorEnabled: config.virtualMonitorEnabled === true,
     webOutputEnabled: config.webOutputEnabled !== false,
-    webOutputSource: ['return_monitor', 'broadcast'].includes(config.webOutputSource) ? config.webOutputSource : 'projection',
+    webOutputSource: ["return_monitor", "broadcast"].includes(config.webOutputSource) ? config.webOutputSource : "projection",
     broadcastBarOpacity: Number.isFinite(opacity) ? Math.min(100, Math.max(0, Math.round(opacity))) : defaultRemoteControlConfig.broadcastBarOpacity,
     broadcastFontSize: Number.isFinite(fontSize) ? Math.min(160, Math.max(50, Math.round(fontSize))) : defaultRemoteControlConfig.broadcastFontSize,
     host,
     port: Number.isInteger(port) && port >= 1024 && port <= 65535 ? port : defaultRemoteControlConfig.port,
-    password: typeof config.password === 'string' ? config.password : '',
+    password: typeof config.password === "string" ? config.password : "",
     requirePassword: config.requirePassword === true,
   };
 }
@@ -263,7 +267,7 @@ function saveRemoteControlConfig(config) {
   return remoteControlConfig;
 }
 
-function sanitizeAutomationConfig(config = {}) {
+function sanitizeAutomationConfig(config: { enabled?: boolean; showStatus?: boolean; devices?: any[]; triggers?: any[] } = {}): { enabled: boolean; showStatus: boolean; devices: any[]; triggers: any[] } {
   const devices = Array.isArray(config.devices) ? config.devices : [];
   const triggers = Array.isArray(config.triggers) ? config.triggers : [];
 
@@ -272,15 +276,15 @@ function sanitizeAutomationConfig(config = {}) {
     showStatus: config.showStatus !== false,
     devices: devices.filter(Boolean).map(normalizeMixerDevice),
     triggers: triggers.map(trigger => ({
-      id: String(trigger.id || ''),
-      name: String(trigger.name || ''),
+      id: String(trigger.id || ""),
+      name: String(trigger.name || ""),
       enabled: trigger.enabled !== false,
       actions: Array.isArray(trigger.actions) ? trigger.actions.map(action => ({
-        id: String(action.id || ''),
-        deviceId: String(action.deviceId || ''),
-        target: action.target ?? 'input',
+        id: String(action.id || ""),
+        deviceId: String(action.deviceId || ""),
+        target: action.target ?? "input",
         channel: Number(action.channel ?? 1),
-        operation: action.operation ?? 'fadeToDB',
+        operation: action.operation ?? "fadeToDB",
         valueDB: Number(action.valueDB ?? 0),
         fadeMs: Number(action.fadeMs ?? 0),
         restoreOnMediaEnd: action.restoreOnMediaEnd === true,
@@ -298,7 +302,7 @@ function loadAutomationConfig() {
   return sanitizeAutomationConfig();
 }
 
-function saveAutomationConfig(config = {}) {
+function saveAutomationConfig(config: { enabled?: boolean; showStatus?: boolean; devices?: any[]; triggers?: any[] } = {}) {
   const nextConfig = sanitizeAutomationConfig({ ...automationConfig, ...config });
   validateMixerConfig(nextConfig);
   writeRecoverableJson(automationConfigPath, nextConfig);
@@ -311,11 +315,11 @@ function wait(ms) {
 }
 
 function normalizeSoundcraftTarget(value) {
-  return String(value || '')
+  return String(value || "")
     .trim()
-    .replace(/^https?:\/\//i, '')
-    .replace(/^wss?:\/\//i, '')
-    .split('/')[0]
+    .replace(/^https?:\/\//i, "")
+    .replace(/^wss?:\/\//i, "")
+    .split("/")[0]
     .trim();
 }
 
@@ -332,7 +336,7 @@ async function probeSoundcraftHttp(targetIP) {
 
 async function getSoundcraftConnection(device) {
   const ip = normalizeSoundcraftTarget(device?.ip);
-  if (!ip) throw new Error('IP da mesa nao configurado.');
+  if (!ip) throw new Error("IP da mesa nao configurado.");
 
   const cacheKey = `${device.id || ip}:${ip}`;
   const cached = soundcraftConnections.get(cacheKey);
@@ -340,9 +344,9 @@ async function getSoundcraftConnection(device) {
 
   let SoundcraftUI;
   try {
-    ({ SoundcraftUI } = require('soundcraft-ui-connection'));
-  } catch (error) {
-    throw new Error('Dependencia soundcraft-ui-connection nao instalada.');
+    ({ SoundcraftUI } = require("soundcraft-ui-connection"));
+  } catch {
+    throw new Error("Dependencia soundcraft-ui-connection nao instalada.");
   }
 
   const conn = new SoundcraftUI(ip);
@@ -350,7 +354,7 @@ async function getSoundcraftConnection(device) {
     await Promise.race([
       conn.connect(),
       wait(8500).then(() => {
-        throw new Error('Tempo limite ao conectar na Soundcraft Ui.');
+        throw new Error("Tempo limite ao conectar na Soundcraft Ui.");
       }),
     ]);
     soundcraftConnections.set(cacheKey, conn);
@@ -358,7 +362,7 @@ async function getSoundcraftConnection(device) {
   } catch (error) {
     try {
       await conn.disconnect();
-    } catch (e) {
+    } catch {
       // ignore cleanup failures
     }
     soundcraftConnections.delete(cacheKey);
@@ -367,30 +371,30 @@ async function getSoundcraftConnection(device) {
 }
 
 function getSoundcraftTarget(conn, action) {
-  if (action.target === 'master') return conn.master;
-  if (action.target === 'line-left') return conn.master.line(1);
-  if (action.target === 'line-right') return conn.master.line(2);
+  if (action.target === "master") return conn.master;
+  if (action.target === "line-left") return conn.master.line(1);
+  if (action.target === "line-right") return conn.master.line(2);
   return conn.master.input(Number(action.channel) || 1);
 }
 
 async function runMixerAction(device, action) {
   validateMixerAction(device, action);
-  if (device.type !== 'soundcraft-ui') return executeOscAction(device, action);
+  if (device.type !== "soundcraft-ui") return executeOscAction(device, action);
   const conn = await getSoundcraftConnection(device);
   const target = getSoundcraftTarget(conn, action);
-  if (action.operation === 'mute') target.mute();
-  else if (action.operation === 'unmute') target.unmute();
-  else if (action.operation === 'setFaderLevelDB') target.setFaderLevelDB(Number(action.valueDB));
+  if (action.operation === "mute") target.mute();
+  else if (action.operation === "unmute") target.unmute();
+  else if (action.operation === "setFaderLevelDB") target.setFaderLevelDB(Number(action.valueDB));
   else await target.fadeToDB(Number(action.valueDB), Number(action.fadeMs) || 0);
   return { ok: true };
 }
 
 async function executeAutomationAction(action, devices = automationConfig.devices) {
   const device = devices.find(item => item.id === action.deviceId);
-  if (!device) throw new Error('Dispositivo de automacao nao encontrado.');
+  if (!device) throw new Error("Dispositivo de automacao nao encontrado.");
   await runMixerAction(device, action);
 
-  if (action.restoreOnMediaEnd && ['setFaderLevelDB', 'fadeToDB'].includes(action.operation)) {
+  if (action.restoreOnMediaEnd && ["setFaderLevelDB", "fadeToDB"].includes(action.operation)) {
     pendingAutomationRestores.push({
       deviceId: device.id,
       device: { ...device },
@@ -421,7 +425,7 @@ async function executeAutomationTrigger(trigger) {
   return { ok: true, results };
 }
 
-async function restorePendingAutomation(reason = '') {
+async function restorePendingAutomation(reason = "") {
   if (pendingAutomationRestores.length === 0) {
     return { ok: true, restored: 0 };
   }
@@ -432,12 +436,12 @@ async function restorePendingAutomation(reason = '') {
   for (const restore of restores) {
     const device = restore.device || automationConfig.devices.find(item => item.id === restore.deviceId);
     if (!device) {
-      results.push({ ok: false, error: 'Dispositivo de automacao nao encontrado.' });
+      results.push({ ok: false, error: "Dispositivo de automacao nao encontrado." });
       continue;
     }
 
     try {
-      await runMixerAction(device, { ...restore, operation: 'fadeToDB', restoreOnMediaEnd: false });
+      await runMixerAction(device, { ...restore, operation: "fadeToDB", restoreOnMediaEnd: false });
       results.push({ ok: true });
     } catch (error) {
       results.push({ ok: false, error: error.message });
@@ -463,8 +467,8 @@ function getRemoteControlAddresses() {
 
   Object.values(interfaces).forEach((items = []) => {
     items.forEach((item) => {
-      if (item.family === 'IPv4' && !item.internal) {
-        if (remoteControlHost === '0.0.0.0' || remoteControlHost === item.address) {
+      if (item.family === "IPv4" && !item.internal) {
+        if (remoteControlHost === "0.0.0.0" || remoteControlHost === item.address) {
           addresses.push(`http://${item.address}:${port}`);
         }
       }
@@ -481,13 +485,13 @@ function getWebOutputAddresses() {
 
 function getRemoteControlNetworkOptions() {
   const options = [
-    { title: 'Todos os IPs da rede', value: '0.0.0.0' },
+    { title: "Todos os IPs da rede", value: "0.0.0.0" },
   ];
   const interfaces = os.networkInterfaces();
 
   Object.entries(interfaces).forEach(([name, items = []]) => {
     items.forEach((item) => {
-      if (item.family === 'IPv4' && !item.internal) {
+      if (item.family === "IPv4" && !item.internal) {
         options.push({ title: `${name} — ${item.address}`, value: item.address });
       }
     });
@@ -498,17 +502,17 @@ function getRemoteControlNetworkOptions() {
 
 function isRemoteControlPasswordValid(request) {
   if (!remoteControlConfig.requirePassword || !remoteControlConfig.password) return true;
-  return request.headers['x-remote-password'] === remoteControlConfig.password;
+  return request.headers["x-remote-password"] === remoteControlConfig.password;
 }
 
 function getRemoteControlRole(request) {
-  return request.headers['x-remote-role'] === 'presenter' ? 'presenter' : 'operator';
+  return request.headers["x-remote-role"] === "presenter" ? "presenter" : "operator";
 }
 
-function isRemoteControlActionAllowed(role, endpoint, action = '') {
-  if (role === 'operator') return true;
-  if (endpoint === 'control') return ['play_pause', 'next', 'prev', 'repeat'].includes(action);
-  return endpoint === 'liturgy_open';
+function isRemoteControlActionAllowed(role, endpoint, action = "") {
+  if (role === "operator") return true;
+  if (endpoint === "control") return ["play_pause", "next", "prev", "repeat"].includes(action);
+  return endpoint === "liturgy_open";
 }
 
 function reserveRemoteCommand(requestId) {
@@ -529,8 +533,8 @@ function reserveRemoteCommand(requestId) {
   return { ok: true, duplicate: false };
 }
 
-function updateRemoteControlState(state = {}) {
-  const safeState = state && typeof state === 'object' ? state : {};
+function updateRemoteControlState(state: Partial<RemoteControlState> = {}) {
+  const safeState = state && typeof state === "object" ? state : {};
   remoteControlState = {
     ...remoteControlState,
     ...safeState,
@@ -551,7 +555,7 @@ function sendRemoteControlCommand(command) {
     : BrowserWindow.getAllWindows().find(win => !win.isDestroyed() && win.webContents && !win.webContents.isDestroyed());
 
   if (!mainWindow) return false;
-  mainWindow.webContents.send('remote-control-command', command);
+  mainWindow.webContents.send("remote-control-command", command);
   return true;
 }
 
@@ -561,7 +565,7 @@ function sendWebOutputDemand(demand) {
     : BrowserWindow.getAllWindows().find(win => !win.isDestroyed() && win.webContents && !win.webContents.isDestroyed());
 
   if (!mainWindow || mainWindow.webContents.isDestroyed()) return false;
-  mainWindow.webContents.send('web-output-demand', demand);
+  mainWindow.webContents.send("web-output-demand", demand);
   return true;
 }
 
@@ -570,27 +574,27 @@ function getWebOutputViewerCount() {
 }
 
 function getSelectedWebOutputModule(state = remoteControlState) {
-  if (remoteControlConfig.webOutputSource === 'broadcast') {
+  if (remoteControlConfig.webOutputSource === "broadcast") {
     const current = state.current || {};
-    return state.returnMonitorActive === true && current.text ? 'broadcast' : '';
+    return state.returnMonitorActive === true && current.text ? "broadcast" : "";
   }
-  if (remoteControlConfig.webOutputSource === 'return_monitor') {
-    return state.returnMonitorActive === true ? 'return_monitor' : '';
+  if (remoteControlConfig.webOutputSource === "return_monitor") {
+    return state.returnMonitorActive === true ? "return_monitor" : "";
   }
   const projection = state.projection || {};
-  return typeof state.webOutputModule === 'string'
+  return typeof state.webOutputModule === "string"
     ? state.webOutputModule
-    : (typeof projection.module === 'string' ? projection.module : '');
+    : (typeof projection.module === "string" ? projection.module : "");
 }
 
 function normalizeLocalDbFilename(filename) {
-  const normalized = String(filename || '');
-  if (!/^[a-zA-Z0-9_-]+$/.test(normalized)) throw new Error('Nome de banco local invalido.');
+  const normalized = String(filename || "");
+  if (!/^[a-zA-Z0-9_-]+$/.test(normalized)) throw new Error("Nome de banco local invalido.");
   return normalized;
 }
 
 function getLocalDbFilePath(filename) {
-  return path.join(sysDbPath, (normalizeLocalDbFilename(filename) + '.bin'));
+  return path.join(sysDbPath, (`${normalizeLocalDbFilename(filename)  }.bin`));
 }
 
 function getPlainLocalDbFilePath(filename) {
@@ -599,13 +603,13 @@ function getPlainLocalDbFilePath(filename) {
 
 function parseEncryptedDbContent(content) {
   const decrypted = decryptData(content);
-  if (!decrypted) throw new Error('Conteudo criptografado invalido.');
+  if (!decrypted) throw new Error("Conteudo criptografado invalido.");
   return JSON.parse(decrypted);
 }
 
 function writeLocalDbFile(filename, data) {
   const encrypted = encryptData(JSON.stringify(data));
-  if (!encrypted) throw new Error('Nao foi possivel criptografar o banco local.');
+  if (!encrypted) throw new Error("Nao foi possivel criptografar o banco local.");
   return writeRecoverableFile(getLocalDbFilePath(filename), encrypted, { parse: parseEncryptedDbContent });
 }
 
@@ -620,7 +624,7 @@ function readLocalDbFile(filename) {
 
   writeLocalDbFile(filename, plainData);
   fs.rmSync(plainPath, { force: true });
-  fs.rmSync((plainPath + '.bak'), { force: true });
+  fs.rmSync((`${plainPath  }.bak`), { force: true });
   return plainData;
 }
 
@@ -628,7 +632,7 @@ function readRemoteDbFile(filename) {
   try {
     return readLocalDbFile(filename);
   } catch (error) {
-    console.error('[RemoteControl] Erro lendo banco local:', filename, error.message);
+    console.error("[RemoteControl] Erro lendo banco local:", filename, error.message);
     return null;
   }
 }
@@ -636,7 +640,7 @@ function readRemoteDbFile(filename) {
 function hasLocalDbFile(filename) {
   try {
     return readLocalDbFile(filename) !== null;
-  } catch (error) {
+  } catch {
     return false;
   }
 }
@@ -647,15 +651,15 @@ function hasRequiredLocalDbFiles(files = getRequiredLocalDbFiles()) {
 
 function getBundledDatabasePath() {
   const candidates = [
-    path.join(process.resourcesPath || '', 'database.db'),
-    path.join(process.resourcesPath || '', 'resources', 'database.db'),
-    path.join(app.getAppPath(), 'resources', 'database.db'),
+    path.join(process.resourcesPath || "", "database.db"),
+    path.join(process.resourcesPath || "", "resources", "database.db"),
+    path.join(app.getAppPath(), "resources", "database.db"),
   ];
 
   return candidates.find(candidate => candidate && fs.existsSync(candidate)) || null;
 }
 
-async function extractDatabaseFromPath(dbPath, language = 'pt', sourceLanguage = language, progressCallback = null) {
+async function extractDatabaseFromPath(dbPath, language = "pt", sourceLanguage = language, progressCallback = null) {
   const extractor = new DbExtractor(
     dbPath,
     normalizeDatabaseLanguage(language),
@@ -671,12 +675,12 @@ function cleanRemoteSearchText(value) {
 function getPrimaryHymnalSource() {
   try {
     const preferences = readUserData(userPreferencesPath);
-    return preferences?.modules?.config?.primary_hymnal === 'hymnal_1996'
-      ? 'hymnal_1996'
-      : 'hymnal';
+    return preferences?.modules?.config?.primary_hymnal === "hymnal_1996"
+      ? "hymnal_1996"
+      : "hymnal";
   } catch (error) {
-    console.error('[RemoteControl] Erro lendo o hinario principal:', error.message);
-    return 'hymnal';
+    console.error("[RemoteControl] Erro lendo o hinario principal:", error.message);
+    return "hymnal";
   }
 }
 
@@ -687,13 +691,13 @@ function normalizeRemoteSong(item, source, sourceLabel) {
   return {
     id_music: item.id_music,
     id_album: firstAlbum.id_album || item.id_album || null,
-    name: item.name || '',
-    track: item.track || firstAlbum.track || firstAlbum.pivot?.track || '',
-    duration: item.duration || '',
+    name: item.name || "",
+    track: item.track || firstAlbum.track || firstAlbum.pivot?.track || "",
+    duration: item.duration || "",
     has_music: item.has_music,
     has_instrumental_music: item.has_instrumental_music,
     album_name: firstAlbum.name || sourceLabel,
-    albums_names: item.albums_names || albums.map(album => album.name).filter(Boolean).join(' '),
+    albums_names: item.albums_names || albums.map(album => album.name).filter(Boolean).join(" "),
     source,
     source_label: sourceLabel,
   };
@@ -702,23 +706,23 @@ function normalizeRemoteSong(item, source, sourceLabel) {
 function getRemoteSearchLibrary() {
   const primaryHymnal = getPrimaryHymnalSource();
   const sources = [
-    { file: 'pt_hymnal', source: 'hymnal', label: 'Hinario Adventista' },
-    { file: 'pt_hymnal_1996', source: 'hymnal_1996', label: 'Hinario Adventista 1996' },
-    { file: 'pt_musics', source: 'musics', label: 'Musicas' },
-    { file: 'es_hymnal', source: 'hymnal', label: 'Himnario Adventista' },
-    { file: 'es_hymnal_1996', source: 'hymnal_1996', label: 'Himnario Adventista 1996' },
-    { file: 'es_musics', source: 'musics', label: 'Musicas' },
+    { file: "pt_hymnal", source: "hymnal", label: "Hinario Adventista" },
+    { file: "pt_hymnal_1996", source: "hymnal_1996", label: "Hinario Adventista 1996" },
+    { file: "pt_musics", source: "musics", label: "Musicas" },
+    { file: "es_hymnal", source: "hymnal", label: "Himnario Adventista" },
+    { file: "es_hymnal_1996", source: "hymnal_1996", label: "Himnario Adventista 1996" },
+    { file: "es_musics", source: "musics", label: "Musicas" },
   ];
 
   const songs = [];
   sources.forEach((source) => {
-    if (source.source !== 'musics' && source.source !== primaryHymnal) return;
+    if (source.source !== "musics" && source.source !== primaryHymnal) return;
     const data = readRemoteDbFile(source.file);
     if (Array.isArray(data)) {
       data.forEach(item => {
-        const hymnals = (item?.albums || []).filter(album => album.type === 'hymnal');
+        const hymnals = (item?.albums || []).filter(album => album.type === "hymnal");
         // Hymns are already included with their selected edition and track above.
-        if (source.source === 'musics' && hymnals.length) return;
+        if (source.source === "musics" && hymnals.length) return;
         if (item && item.id_music) songs.push(normalizeRemoteSong(item, source.source, source.label));
       });
     }
@@ -738,22 +742,22 @@ function searchRemoteSongs(query, limit = 30) {
     .map((song) => {
       const track = Number(song.track);
       const name = cleanRemoteSearchText(song.name);
-      const metadata = cleanRemoteSearchText(`${song.album_name || ''} ${song.albums_names || ''} ${song.source_label || ''}`);
-      const isHymnal = song.source === 'hymnal' || song.source === 'hymnal_1996';
+      const metadata = cleanRemoteSearchText(`${song.album_name || ""} ${song.albums_names || ""} ${song.source_label || ""}`);
+      const isHymnal = song.source === "hymnal" || song.source === "hymnal_1996";
       let score = 0;
-      let match_hint = '';
+      let match_hint = "";
 
       if (numericQuery !== null) {
         if (isHymnal && track === numericQuery) {
           score = song.source === primaryHymnal ? 122 : 121;
         }
-        else if (String(song.track || '').startsWith(cleanQuery)) score = 55;
+        else if (String(song.track || "").startsWith(cleanQuery)) score = 55;
       } else {
         const nameScore = smartTokenScore(cleanQuery, name);
         const metadataScore = Math.round(smartTokenScore(cleanQuery, metadata) * 0.65);
         score = Math.max(nameScore, metadataScore);
         if (score > 0 && !name.includes(cleanQuery) && nameScore < 82) {
-          match_hint = 'Resultado aproximado';
+          match_hint = "Resultado aproximado";
         }
       }
 
@@ -762,53 +766,53 @@ function searchRemoteSongs(query, limit = 30) {
     .filter(song => song.score > 0)
     .sort((a, b) => b.score - a.score || String(a.name).localeCompare(String(b.name)))
     .slice(0, Math.max(1, Math.min(Number(limit) || 30, 50)))
-    .map(({ score, ...song }) => song);
+    .map(({ score: _score, ...song }) => song);
 }
 
 function normalizeRemoteBibleText(text) {
-  return String(text || '')
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/\biii\b/gi, '3')
-    .replace(/\bii\b/gi, '2')
-    .replace(/\bi\b/gi, '1')
-    .replace(/[.ªº]/g, '')
-    .replace(/\s+/g, ' ')
+  return String(text || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\biii\b/gi, "3")
+    .replace(/\bii\b/gi, "2")
+    .replace(/\bi\b/gi, "1")
+    .replace(/[.ªº]/g, "")
+    .replace(/\s+/g, " ")
     .trim()
     .toLowerCase();
 }
 
-function getRemoteBibleBooks(locale = 'pt') {
+function getRemoteBibleBooks(locale = "pt") {
   const books = readRemoteDbFile(`${locale}_bible_book`);
   return Array.isArray(books) ? books : [];
 }
 
-function getRemoteBibleVersions(locale = 'pt') {
+function getRemoteBibleVersions(locale = "pt") {
   const versions = readRemoteDbFile(`${locale}_bible_version`);
   return Array.isArray(versions) ? versions : [];
 }
 
-function getDefaultRemoteBibleVersion(locale = 'pt') {
+function getDefaultRemoteBibleVersion(locale = "pt") {
   const versions = getRemoteBibleVersions(locale);
-  return versions.find(version => version.abbreviation === 'ARA' || version.name === 'ARA') || versions[0] || null;
+  return versions.find(version => version.abbreviation === "ARA" || version.name === "ARA") || versions[0] || null;
 }
 
 function findRemoteBibleBook(input, books) {
   const normalizedInput = normalizeRemoteBibleText(input);
-  const compactInput = normalizedInput.replace(/\s+/g, '');
+  const compactInput = normalizedInput.replace(/\s+/g, "");
   const bookEntries = books.map((book) => ({
     book,
     names: [book.name, book.abbreviation]
       .filter(Boolean)
       .flatMap((name) => {
         const normalizedName = normalizeRemoteBibleText(name);
-        return [normalizedName, normalizedName.replace(/\s+/g, '')];
+        return [normalizedName, normalizedName.replace(/\s+/g, "")];
       }),
   }));
 
   for (const entry of bookEntries) {
     if (entry.names.some(name => normalizedInput === name || compactInput === name)) {
-      return { book: entry.book, rest: '' };
+      return { book: entry.book, rest: "" };
     }
   }
 
@@ -837,7 +841,7 @@ function findRemoteBibleBook(input, books) {
   // Aceita pequenos erros no nome do livro, inclusive quando seguido da referencia.
   const fuzzyReference = normalizedInput.match(/^(.*?)(\d+(?:\s*[: ]\s*.*)?)$/);
   const fuzzyBookText = (fuzzyReference?.[1] || normalizedInput).trim();
-  const fuzzyRest = fuzzyReference?.[2]?.trim() || '';
+  const fuzzyRest = fuzzyReference?.[2]?.trim() || "";
   if (fuzzyBookText.length >= 3) {
     const candidates = bookEntries
       .map((entry) => ({
@@ -854,7 +858,7 @@ function findRemoteBibleBook(input, books) {
 }
 
 function parseRemoteBibleSearch(input, books) {
-  const query = String(input || '').trim();
+  const query = String(input || "").trim();
   if (!query) return null;
 
   const bookMatch = findRemoteBibleBook(query, books);
@@ -862,11 +866,11 @@ function parseRemoteBibleSearch(input, books) {
   const rest = bookMatch ? bookMatch.rest : query;
   const referenceMatch = rest.match(/^(\d+)(?:\s*[: ]\s*(.+))?$/);
 
-  if (book || referenceMatch?.[2] || (referenceMatch && query.includes(':'))) {
+  if (book || referenceMatch?.[2] || (referenceMatch && query.includes(":"))) {
     return {
       book,
       chapter: referenceMatch ? Number(referenceMatch[1]) : null,
-      verseQuery: referenceMatch?.[2]?.trim() || '',
+      verseQuery: referenceMatch?.[2]?.trim() || "",
       isReference: true,
     };
   }
@@ -881,12 +885,12 @@ function parseRemoteBibleSearch(input, books) {
 
 function getRemoteBibleChapter(versionId, bookId, chapter) {
   const verses = readRemoteDbFile(`bible_${versionId}_${bookId}_${chapter}`);
-  return verses && typeof verses === 'object' ? verses : {};
+  return verses && typeof verses === "object" ? verses : {};
 }
 
 function filterRemoteVersesByQuery(input, verses) {
-  const selected = new Set();
-  const parts = String(input || '').split(',');
+  const selected = new Set<number>();
+  const parts = String(input || "").split(",");
 
   for (const part of parts) {
     const range = part.trim().match(/^(\d+)\s*-\s*(\d+)$/);
@@ -908,7 +912,7 @@ function filterRemoteVersesByQuery(input, verses) {
 }
 
 function numbersInterval(numbers) {
-  if (!numbers || numbers.length === 0) return '';
+  if (!numbers || numbers.length === 0) return "";
 
   const sorted = [...numbers].sort((a, b) => a - b);
   const result = [];
@@ -925,28 +929,28 @@ function numbersInterval(numbers) {
     }
   }
 
-  return result.join(', ');
+  return result.join(", ");
 }
 
 function getRemoteSelectedVerses(verses, keys) {
   const sorted = [...keys].sort((a, b) => a - b);
-  let result = '';
+  let result = "";
   let previousKey = null;
 
   sorted.forEach((key) => {
     if (previousKey !== null && key - previousKey > 1) {
-      result += ' [...] ';
+      result += " [...] ";
     } else if (result) {
-      result += ' ';
+      result += " ";
     }
-    result += verses[key] || '';
+    result += verses[key] || "";
     previousKey = key;
   });
 
   return result;
 }
 
-function buildRemoteBiblePayload({ versionId, bookId, chapter, verseNumbers, locale = 'pt' }) {
+function buildRemoteBiblePayload({ versionId, bookId, chapter, verseNumbers, locale = "pt" }) {
   const books = getRemoteBibleBooks(locale);
   const versions = getRemoteBibleVersions(locale);
   const version = versions.find(item => Number(item.id_bible_version) === Number(versionId)) || getDefaultRemoteBibleVersion(locale);
@@ -973,22 +977,22 @@ function buildRemoteBiblePayload({ versionId, bookId, chapter, verseNumbers, loc
     book: book.name,
     chapter: targetChapter,
     verses: selectedVerses,
-    scriptural_reference: `${book.name} ${targetChapter}${versesInterval ? `:${versesInterval}` : ''}${version.abbreviation ? ` (${version.abbreviation})` : ''}`.trim(),
+    scriptural_reference: `${book.name} ${targetChapter}${versesInterval ? `:${versesInterval}` : ""}${version.abbreviation ? ` (${version.abbreviation})` : ""}`.trim(),
     text: getRemoteSelectedVerses(verses, selectedVerses),
   };
 }
 
-function searchRemoteBible(query, locale = 'pt') {
+function searchRemoteBible(query, locale = "pt") {
   const books = getRemoteBibleBooks(locale);
   const version = getDefaultRemoteBibleVersion(locale);
-  const cleanQuery = String(query || '').trim();
+  const cleanQuery = String(query || "").trim();
 
   if (!books.length || !version) {
-    return { ready: false, mode: 'empty', results: [] };
+    return { ready: false, mode: "empty", results: [] };
   }
 
   if (!cleanQuery) {
-    return { ready: true, mode: 'books', results: books.slice(0, 12).map(book => ({ type: 'book', book })) };
+    return { ready: true, mode: "books", results: books.slice(0, 12).map(book => ({ type: "book", book })) };
   }
 
   const parsed = parseRemoteBibleSearch(cleanQuery, books);
@@ -1004,21 +1008,21 @@ function searchRemoteBible(query, locale = 'pt') {
           smartTokenScore(normalizedQuery, normalizedName),
           smartTokenScore(normalizedQuery, normalizedAbbreviation),
         );
-        return { type: 'book', book, score };
+        return { type: "book", book, score };
       })
       .filter(item => item.score > 0)
       .sort((a, b) => b.score - a.score || a.book.book_number - b.book.book_number)
       .slice(0, 12)
-      .map(({ score, ...item }) => item);
+      .map(({ score: _score, ...item }) => item);
 
-    return { ready: true, mode: 'books', results };
+    return { ready: true, mode: "books", results };
   }
 
   const chapter = Math.min(Math.max(parsed.chapter || 1, 1), Number(targetBook.chapters || 1));
   if (!parsed.verseQuery) {
     return {
       ready: true,
-      mode: parsed.chapter ? 'verses' : 'chapters',
+      mode: parsed.chapter ? "verses" : "chapters",
       book: targetBook,
       chapter,
       version,
@@ -1026,7 +1030,7 @@ function searchRemoteBible(query, locale = 'pt') {
         ? Object.entries(getRemoteBibleChapter(version.id_bible_version, targetBook.id_bible_book, chapter)).map(([num, text]) => {
           const verseNumber = Number(num);
           return {
-            type: 'verse',
+            type: "verse",
             book: targetBook,
             chapter,
             verseNumbers: [verseNumber],
@@ -1043,7 +1047,7 @@ function searchRemoteBible(query, locale = 'pt') {
           };
         })
         : Array.from({ length: Number(targetBook.chapters || 1) }, (_, index) => ({
-          type: 'chapter',
+          type: "chapter",
           book: targetBook,
           chapter: index + 1,
           reference: `${targetBook.name} ${index + 1}`,
@@ -1063,12 +1067,12 @@ function searchRemoteBible(query, locale = 'pt') {
 
   return {
     ready: true,
-    mode: 'selected',
+    mode: "selected",
     book: targetBook,
     chapter,
     version,
     results: payload ? [{
-      type: 'selected',
+      type: "selected",
       payload,
       text: payload.text,
       reference: payload.scriptural_reference,
@@ -1090,57 +1094,57 @@ async function getRemoteUserData() {
     if (!raw) return {};
     return JSON.parse(raw);
   } catch (error) {
-    console.error('[RemoteControl] Erro lendo preferencias locais:', error.message);
+    console.error("[RemoteControl] Erro lendo preferencias locais:", error.message);
     return {};
   }
 }
 
 function getRemoteUserDataValue(data, key, fallback = null) {
-  if (!data || typeof data !== 'object') return fallback;
+  if (!data || typeof data !== "object") return fallback;
   if (Object.prototype.hasOwnProperty.call(data, key)) return data[key];
 
-  return key.split('.').reduce((current, part) => {
-    if (!current || typeof current !== 'object') return undefined;
+  return key.split(".").reduce((current, part) => {
+    if (!current || typeof current !== "object") return undefined;
     return current[part];
   }, data) ?? fallback;
 }
 
 function getTodayLiturgyDay() {
-  return ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'][new Date().getDay()];
+  return ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"][new Date().getDay()];
 }
 
 function getLiturgyDayLabel(day) {
   return {
-    sunday: 'Domingo',
-    monday: 'Segunda',
-    tuesday: 'Terca',
-    wednesday: 'Quarta',
-    thursday: 'Quinta',
-    friday: 'Sexta',
-    saturday: 'Sabado',
-  }[day] || 'Hoje';
+    sunday: "Domingo",
+    monday: "Segunda",
+    tuesday: "Terca",
+    wednesday: "Quarta",
+    thursday: "Quinta",
+    friday: "Sexta",
+    saturday: "Sabado",
+  }[day] || "Hoje";
 }
 
 function getLiturgyTypeLabel(type) {
   return {
-    annotation: 'Anotacao',
-    category: 'Categoria',
-    music: 'Musica',
-    verse: 'Versiculo',
-    media: 'Midia',
-    link: 'Link',
-  }[type] || 'Item';
+    annotation: "Anotacao",
+    category: "Categoria",
+    music: "Musica",
+    verse: "Versiculo",
+    media: "Midia",
+    link: "Link",
+  }[type] || "Item";
 }
 
 function normalizeRemoteLiturgyItem(item, index) {
-  const executable = ['music', 'verse', 'media', 'link'].includes(item?.type);
+  const executable = ["music", "verse", "media", "link"].includes(item?.type);
   return {
     index,
-    number: item?.type === 'category' ? '' : index + 1,
-    type: item?.type || 'annotation',
+    number: item?.type === "category" ? "" : index + 1,
+    type: item?.type || "annotation",
     type_label: getLiturgyTypeLabel(item?.type),
-    name: item?.name || '',
-    subtitle: item?.subtitle || '',
+    name: item?.name || "",
+    subtitle: item?.subtitle || "",
     done: item?.done === true,
     executable,
     payload: item,
@@ -1149,7 +1153,7 @@ function normalizeRemoteLiturgyItem(item, index) {
 
 async function getRemoteTodayLiturgy() {
   const userData = await getRemoteUserData();
-  const liturgies = getRemoteUserDataValue(userData, 'modules.liturgy.liturgies', {});
+  const liturgies = getRemoteUserDataValue(userData, "modules.liturgy.liturgies", {});
   const day = getTodayLiturgyDay();
   const items = Array.isArray(liturgies?.[day]) ? liturgies[day] : [];
 
@@ -1164,41 +1168,40 @@ async function getRemoteTodayLiturgy() {
 
 function sendJson(response, statusCode, payload) {
   response.writeHead(statusCode, {
-    'Content-Type': 'application/json; charset=utf-8',
-    'Cache-Control': 'no-store',
+    "Content-Type": "application/json; charset=utf-8",
+    "Cache-Control": "no-store",
   });
   response.end(JSON.stringify(payload));
 }
 
 function readRequestJson(request) {
-  return new Promise((resolve, reject) => {
-    let body = '';
-    request.on('data', chunk => {
+  return new Promise<Record<string, any>>((resolve, reject) => {
+    let body = "";
+    request.on("data", chunk => {
       body += chunk.toString();
       if (body.length > 1024 * 1024) {
         request.destroy();
-        reject(new Error('Payload muito grande.'));
+        reject(new Error("Payload muito grande."));
       }
     });
-    request.on('end', () => {
+    request.on("end", () => {
       try {
         resolve(body ? JSON.parse(body) : {});
       } catch (error) {
         reject(error);
       }
     });
-    request.on('error', reject);
+    request.on("error", reject);
   });
 }
 
-const outputVideoExtensions = new Set(['mp4', 'mkv', 'avi', 'mov', 'wmv', 'webm']);
-const outputYouTubeIdPattern = /^[a-zA-Z0-9_-]{11}$/;
+const outputVideoExtensions = new Set(["mp4", "mkv", "avi", "mov", "wmv", "webm"]);
 
 function getOutputFileExtension(value) {
-  const cleanValue = String(value || '').split(/[?#]/)[0];
-  const fileName = cleanValue.split(/[\\/]/).pop() || '';
-  const parts = fileName.split('.');
-  return parts.length > 1 ? String(parts.pop() || '').toLowerCase() : '';
+  const cleanValue = String(value || "").split(/[?#]/)[0];
+  const fileName = cleanValue.split(/[\\/]/).pop() || "";
+  const parts = fileName.split(".");
+  return parts.length > 1 ? String(parts.pop() || "").toLowerCase() : "";
 }
 
 function isOutputVideoFile(value) {
@@ -1207,49 +1210,30 @@ function isOutputVideoFile(value) {
 
 function getOutputWebUrl(value) {
   try {
-    const url = new URL(String(value || '').trim());
-    return ['http:', 'https:'].includes(url.protocol) ? url : null;
-  } catch (error) {
+    const url = new URL(String(value || "").trim());
+    return ["http:", "https:"].includes(url.protocol) ? url : null;
+  } catch {
     return null;
   }
 }
 
 function getOutputYouTubeVideoId(value) {
-  const url = getOutputWebUrl(value);
-  if (!url) return '';
-  const host = url.hostname.replace(/^www\./, '').toLowerCase();
-  const parts = url.pathname.split('/').filter(Boolean);
-  if (host === 'youtu.be') return outputYouTubeIdPattern.test(parts[0] || '') ? parts[0] : '';
-  if (!/(^|\.)youtube(-nocookie)?\.com$/.test(host)) return '';
-  const watchId = url.searchParams.get('v');
-  if (outputYouTubeIdPattern.test(watchId || '')) return watchId;
-  const knownPathIndex = parts.findIndex(part => ['embed', 'shorts', 'live', 'v'].includes(part));
-  if (knownPathIndex >= 0 && outputYouTubeIdPattern.test(parts[knownPathIndex + 1] || '')) {
-    return parts[knownPathIndex + 1];
-  }
-  return '';
+  return getYouTubeVideoId(value);
 }
 
-function getOutputYouTubeEmbedUrl(value, origin = '') {
-  const videoId = getOutputYouTubeVideoId(value);
-  if (!videoId) return '';
-  const params = new URLSearchParams({
-    enablejsapi: '1', autoplay: '0', controls: '0', disablekb: '1', fs: '0',
-    iv_load_policy: '3', rel: '0', modestbranding: '1', playsinline: '1', mute: '1',
-  });
-  if (/^https?:\/\//i.test(origin)) params.set('origin', origin);
-  return `https://www.youtube.com/embed/${videoId}?${params.toString()}`;
+function getOutputYouTubeEmbedUrl(value, origin = "") {
+  return getYouTubeEmbedUrl(value, { autoplay: false, muted: true, startSeconds: 0, origin });
 }
 
 function getOutputExternalMediaState(request = null) {
   const media = remoteControlState.externalMedia || null;
   if (!media || !media.filePath) return null;
-  const filePath = String(media.filePath || '');
+  const filePath = String(media.filePath || "");
   const webUrl = getOutputWebUrl(filePath);
   const sessionId = String(media.sessionId || filePath);
   const common = {
     sessionId,
-    title: String(media.title || ''),
+    title: String(media.title || ""),
     currentTime: Number(media.currentTime || 0),
     playbackUpdatedAt: Number(media.playbackUpdatedAt || 0),
     paused: media.paused !== false,
@@ -1257,24 +1241,24 @@ function getOutputExternalMediaState(request = null) {
     duration: Number(media.duration || 0),
   };
   if (getOutputYouTubeVideoId(filePath)) {
-    const origin = request ? `http://${request.headers.host || 'localhost'}` : '';
-    return { ...common, kind: 'youtube', direct: true, embedUrl: getOutputYouTubeEmbedUrl(filePath, origin) };
+    const origin = request ? `http://${request.headers.host || "localhost"}` : "";
+    return { ...common, kind: "youtube", direct: true, embedUrl: getOutputYouTubeEmbedUrl(filePath, origin) };
   }
   if (isOutputVideoFile(filePath)) {
-    return { ...common, kind: 'video', direct: true, url: webUrl ? filePath : `/output/media?session=${encodeURIComponent(sessionId)}` };
+    return { ...common, kind: "video", direct: true, url: webUrl ? filePath : `/output/media?session=${encodeURIComponent(sessionId)}` };
   }
-  if (webUrl) return { ...common, kind: 'web', direct: true, url: filePath };
-  return { ...common, kind: 'capture', direct: false };
+  if (webUrl) return { ...common, kind: "web", direct: true, url: filePath };
+  return { ...common, kind: "capture", direct: false };
 }
 
 function getBroadcastOutputState() {
   const current = remoteControlState.current || {};
-  const text = remoteControlState.returnMonitorActive === true && typeof current.text === 'string'
+  const text = remoteControlState.returnMonitorActive === true && typeof current.text === "string"
     ? current.text.trim()
-    : '';
+    : "";
   return {
     text,
-    title: typeof current.title === 'string' ? current.title : '',
+    title: typeof current.title === "string" ? current.title : "",
     active: Boolean(text),
     barOpacity: remoteControlConfig.broadcastBarOpacity,
     fontSize: remoteControlConfig.broadcastFontSize,
@@ -1283,19 +1267,19 @@ function getBroadcastOutputState() {
 
 function getOutputExternalMediaFilePath(sessionId) {
   const media = remoteControlState.externalMedia || null;
-  if (!media || String(media.sessionId || media.filePath || '') !== String(sessionId || '')) return '';
-  const filePath = String(media.filePath || '');
-  if (getOutputWebUrl(filePath) || !isOutputVideoFile(filePath) || !path.isAbsolute(filePath)) return '';
-  return fs.existsSync(filePath) ? filePath : '';
+  if (!media || String(media.sessionId || media.filePath || "") !== String(sessionId || "")) return "";
+  const filePath = String(media.filePath || "");
+  if (getOutputWebUrl(filePath) || !isOutputVideoFile(filePath) || !path.isAbsolute(filePath)) return "";
+  return fs.existsSync(filePath) ? filePath : "";
 }
 
 function sendOutputMediaFile(request, response, filePath) {
   const stat = fs.statSync(filePath);
   const range = request.headers.range;
   const ext = getOutputFileExtension(filePath);
-  const contentType = ext === 'webm' ? 'video/webm' : ext === 'mov' ? 'video/quicktime' : 'video/mp4';
+  const contentType = ext === "webm" ? "video/webm" : ext === "mov" ? "video/quicktime" : "video/mp4";
   if (!range) {
-    response.writeHead(200, { 'Content-Type': contentType, 'Content-Length': stat.size, 'Accept-Ranges': 'bytes', 'Cache-Control': 'no-store' });
+    response.writeHead(200, { "Content-Type": contentType, "Content-Length": stat.size, "Accept-Ranges": "bytes", "Cache-Control": "no-store" });
     fs.createReadStream(filePath).pipe(response);
     return;
   }
@@ -1303,16 +1287,16 @@ function sendOutputMediaFile(request, response, filePath) {
   const start = match && match[1] ? Number(match[1]) : 0;
   const end = match && match[2] ? Math.min(Number(match[2]), stat.size - 1) : stat.size - 1;
   if (!Number.isFinite(start) || !Number.isFinite(end) || start > end || start >= stat.size) {
-    response.writeHead(416, { 'Content-Range': `bytes */${stat.size}` });
+    response.writeHead(416, { "Content-Range": `bytes */${stat.size}` });
     response.end();
     return;
   }
   response.writeHead(206, {
-    'Content-Type': contentType,
-    'Content-Length': end - start + 1,
-    'Content-Range': `bytes ${start}-${end}/${stat.size}`,
-    'Accept-Ranges': 'bytes',
-    'Cache-Control': 'no-store',
+    "Content-Type": contentType,
+    "Content-Length": end - start + 1,
+    "Content-Range": `bytes ${start}-${end}/${stat.size}`,
+    "Accept-Ranges": "bytes",
+    "Cache-Control": "no-store",
   });
   fs.createReadStream(filePath, { start, end }).pipe(response);
 }
@@ -1338,7 +1322,7 @@ function getWebOutputHtml() {
   <div id="status" class="status"><span class="dot"></span><span>Aguardando a saída do IASDPresenter…</span></div>
   <script>
     (function(){
-      var stage=document.getElementById('stage'),fallback=document.getElementById('fallback'),directVideo=document.getElementById('directVideo'),directFrame=document.getElementById('directFrame'),broadcast=document.getElementById('broadcast'),broadcastText=document.getElementById('broadcastText'),status=document.getElementById('status'),context=stage.getContext('2d',{alpha:false,desynchronized:true}),frameReady=false,outputActive=false,revision=0,failures=0,fallbackStarted=false,frameMode=true,directKind='',directSession='',broadcastMode=false,youtubeReady=false,youtubeCurrentTime=0,youtubeSampleAt=0,lastYoutubeSyncAt=0,youtubeHandshakeTimer=null,live=null;
+      var stage=document.getElementById('stage'),fallback=document.getElementById('fallback'),directVideo=document.getElementById('directVideo'),directFrame=document.getElementById('directFrame'),broadcast=document.getElementById('broadcast'),broadcastText=document.getElementById('broadcastText'),status=document.getElementById('status'),context=stage.getContext('2d',{alpha:false,desynchronized:true}),frameReady=false,outputActive=false,revision=0,failures=0,fallbackStarted=false,frameMode=true,directKind='',directSession='',broadcastMode=false,youtubeReady=false,youtubeCurrentTime=0,youtubeSampleAt=0,lastYoutubeSyncAt=0,youtubeHandshakeTimer=null,directMedia=null,live=null;
       var YOUTUBE_ORIGIN='https://www.youtube.com';
       function render(){
         stage.classList.toggle('inactive',!outputActive||!frameMode);
@@ -1357,7 +1341,7 @@ function getWebOutputHtml() {
       }
       function stopYoutubeHandshake(){if(youtubeHandshakeTimer){clearInterval(youtubeHandshakeTimer);youtubeHandshakeTimer=null}}
       function startYoutubeHandshake(){stopYoutubeHandshake();var listen=function(){if(youtubeReady){stopYoutubeHandshake();return}if(directFrame.contentWindow){directFrame.contentWindow.postMessage(JSON.stringify({event:'listening',id:'outputYouTube'}),YOUTUBE_ORIGIN)}};listen();youtubeHandshakeTimer=setInterval(listen,500)}
-      function stopDirect(){if(!directKind)return;directKind='';directSession='';youtubeReady=false;stopYoutubeHandshake();directFrame.removeAttribute('src');directVideo.pause();directVideo.removeAttribute('src');directVideo.load();frameMode=true;fallbackStarted=false;showOnly('frame')}
+      function stopDirect(){if(!directKind)return;directKind='';directSession='';directMedia=null;youtubeReady=false;stopYoutubeHandshake();directFrame.removeAttribute('src');directVideo.pause();directVideo.removeAttribute('src');directVideo.load();frameMode=true;fallbackStarted=false;showOnly('frame')}
       function stopBroadcast(){if(!broadcastMode)return;broadcastMode=false;broadcastText.textContent='';frameMode=true;showOnly('frame')}
       async function nextFrame(){
         if(fallbackStarted||!frameMode){setTimeout(nextFrame,80);return}
@@ -1381,15 +1365,16 @@ function getWebOutputHtml() {
           ytCommand('mute');ytCommand(media.paused||media.buffering?'pauseVideo':'playVideo');
           var elapsed=!media.paused&&!media.buffering?Math.min(500,Math.max(0,Date.now()-youtubeSampleAt))/1000:0;
           var drift=target-(Number(youtubeCurrentTime||0)+elapsed),now=Date.now();
-          if(force||(Math.abs(drift)>.18&&now-lastYoutubeSyncAt>350)){lastYoutubeSyncAt=now;ytCommand('seekTo',[target,true])}
+          if(force||(!media.buffering&&youtubeSampleAt>0&&Math.abs(drift)>1.5&&now-lastYoutubeSyncAt>2000)){lastYoutubeSyncAt=now;ytCommand('seekTo',[target,true])}
         }
       }
       function startDirect(media){
+        directMedia=media;
         stopBroadcast();
         frameMode=false;fallbackStarted=false;frameReady=true;
         if(media.kind!==directKind||media.sessionId!==directSession){
           directKind=media.kind;directSession=media.sessionId;youtubeReady=false;youtubeCurrentTime=0;youtubeSampleAt=0;lastYoutubeSyncAt=0;
-          if(media.kind==='video'){stopYoutubeHandshake();directFrame.removeAttribute('src');directVideo.src=media.url;directVideo.load();showOnly('video');directVideo.onloadedmetadata=function(){syncDirect(media,true)};directVideo.oncanplay=function(){syncDirect(media,true)}}
+          if(media.kind==='video'){stopYoutubeHandshake();directFrame.removeAttribute('src');directVideo.src=media.url;directVideo.load();showOnly('video');directVideo.onloadedmetadata=function(){if(directKind==='video'&&directMedia)syncDirect(directMedia,true)};directVideo.oncanplay=function(){if(directKind==='video'&&directMedia)syncDirect(directMedia,false)}}
           else {directVideo.pause();directVideo.removeAttribute('src');directVideo.load();directFrame.src=media.kind==='youtube'?media.embedUrl:media.url;showOnly(media.kind);directFrame.onload=function(){if(media.kind==='youtube')startYoutubeHandshake();if(media.kind==='web')frameReady=true;render()}}
         }
         syncDirect(media,false);render();
@@ -1406,7 +1391,7 @@ function getWebOutputHtml() {
       async function pollState(){
         try{var response=await fetch('/api/output-state',{cache:'no-store'}),data=await response.json();if(data.webOutputEnabled===false){outputActive=false;stopBroadcast();stopDirect();render();return}outputActive=data.active===true;if(data.source==='broadcast'){startBroadcast(data.broadcast||{});return}stopBroadcast();var media=data.externalMedia;if(outputActive&&data.module==='external_media'&&media&&media.direct&&['video','youtube','web'].includes(media.kind))startDirect(media);else stopDirect();render()}catch(error){}finally{setTimeout(pollState,200)}
       }
-      window.addEventListener('message',function(event){if(event.origin!==YOUTUBE_ORIGIN)return;var payload=event.data;if(typeof payload==='string'){try{payload=JSON.parse(payload)}catch(error){return}}if(payload&&payload.event==='onReady'){youtubeReady=true;stopYoutubeHandshake();ytCommand('addEventListener',['onStateChange']);ytCommand('mute')}if(payload&&payload.event==='infoDelivery'&&payload.info&&typeof payload.info.currentTime==='number'){youtubeCurrentTime=payload.info.currentTime;youtubeSampleAt=Date.now()}});
+      window.addEventListener('message',function(event){if(event.origin!==YOUTUBE_ORIGIN||event.source!==directFrame.contentWindow)return;var payload=event.data;if(typeof payload==='string'){try{payload=JSON.parse(payload)}catch(error){return}}if(payload&&payload.event==='onReady'){youtubeReady=true;stopYoutubeHandshake();ytCommand('addEventListener',['onStateChange']);ytCommand('addEventListener',['onApiChange']);ytCommand('unloadModule',['captions']);ytCommand('mute')}if(payload&&payload.event==='onApiChange'){ytCommand('unloadModule',['captions'])}if(payload&&payload.event==='infoDelivery'&&payload.info&&typeof payload.info.currentTime==='number'){youtubeCurrentTime=payload.info.currentTime;youtubeSampleAt=Date.now()}});
       live=new EventSource('/output/live');nextFrame();pollState();
     })();
   </script>
@@ -1419,7 +1404,7 @@ function getProjectionCaptureWindow() {
     if (!win || win.isDestroyed() || win === mainAppWindow || win.webContents?.isDestroyed()) return false;
     const url = win.webContents.getURL();
     const isWebOutput = /[?&]webOutput=1(?:&|$)/.test(url);
-    return url.includes('#/popup') && (isWebOutput || !/[?&]module=return_monitor(?:&|$)/.test(url));
+    return url.includes("#/popup") && (isWebOutput || !/[?&]module=return_monitor(?:&|$)/.test(url));
   });
 
   return projectionWindows.find(win => /[?&]webOutput=1(?:&|$)/.test(win.webContents.getURL()))
@@ -1429,9 +1414,9 @@ function getProjectionCaptureWindow() {
 
 async function sendRemoteControlPreview(response) {
   const projection = remoteControlState.projection || {};
-  const media = projection.module === 'external_media' ? getOutputExternalMediaState() : null;
-  if (!projection.active || projection.module === 'media' || ['video', 'youtube'].includes(media?.kind)) {
-    response.writeHead(204, { 'Cache-Control': 'no-store' });
+  const media = projection.module === "external_media" ? getOutputExternalMediaState() : null;
+  if (!projection.active || projection.module === "media" || ["video", "youtube"].includes(media?.kind)) {
+    response.writeHead(204, { "Cache-Control": "no-store" });
     response.end();
     return;
   }
@@ -1440,24 +1425,24 @@ async function sendRemoteControlPreview(response) {
   const projectionWindow = BrowserWindow.getAllWindows().find((win) => {
     if (!win || win.isDestroyed() || win === mainAppWindow || win.webContents?.isDestroyed()) return false;
     const url = win.webContents.getURL();
-    const params = new URLSearchParams(url.split('#/popup?')[1] || '');
-    return url.includes('#/popup?')
+    const params = new URLSearchParams(url.split("#/popup?")[1] || "");
+    return url.includes("#/popup?")
       && !/[?&](?:webOutput=1|module=return_monitor)(?:&|$)/.test(url)
-      && !['clock', 'pulpit_message'].includes(params.get('module'));
+      && !["clock", "pulpit_message"].includes(params.get("module"));
   });
   if (!projectionWindow) {
-    response.writeHead(204, { 'Cache-Control': 'no-store' });
+    response.writeHead(204, { "Cache-Control": "no-store" });
     response.end();
     return;
   }
   try {
     const image = await projectionWindow.webContents.capturePage();
-    if (image.isEmpty()) throw new Error('Empty projection');
-    const frame = image.resize({ width: 960, quality: 'good' }).toJPEG(80);
-    response.writeHead(200, { 'Content-Type': 'image/jpeg', 'Cache-Control': 'no-store', 'Content-Length': frame.length });
+    if (image.isEmpty()) throw new Error("Empty projection");
+    const frame = image.resize({ width: 960, quality: "good" }).toJPEG(80);
+    response.writeHead(200, { "Content-Type": "image/jpeg", "Cache-Control": "no-store", "Content-Length": frame.length });
     response.end(frame);
-  } catch (error) {
-    response.writeHead(503, { 'Cache-Control': 'no-store' });
+  } catch {
+    response.writeHead(503, { "Cache-Control": "no-store" });
     response.end();
   }
 }
@@ -1465,29 +1450,29 @@ async function sendRemoteControlPreview(response) {
 function hasWebOutputFrameConsumers() {
   if (webOutputFrameWaiters.size > 0) return true;
   for (const client of webOutputClients) {
-    if (client.kind === 'mjpeg' && !client.closed) return true;
+    if (client.kind === "mjpeg" && !client.closed) return true;
   }
   return false;
 }
 
 function shouldSuspendWebOutputFrameCapture() {
-  if (remoteControlConfig.webOutputSource === 'broadcast') return true;
-  if (getSelectedWebOutputModule() !== 'external_media') return false;
+  if (remoteControlConfig.webOutputSource === "broadcast") return true;
+  if (getSelectedWebOutputModule() !== "external_media") return false;
   const media = getOutputExternalMediaState();
-  return Boolean(media?.direct && ['video', 'youtube', 'web'].includes(media.kind));
+  return Boolean(media?.direct && ["video", "youtube", "web"].includes(media.kind));
 }
 
 function getWebOutputDemandPayload(moduleName = getSelectedWebOutputModule()) {
-  if (remoteControlConfig.webOutputSource === 'broadcast') {
-    return { active: false, module: '', source: remoteControlConfig.webOutputSource, direct: true };
+  if (remoteControlConfig.webOutputSource === "broadcast") {
+    return { active: false, module: "", source: remoteControlConfig.webOutputSource, direct: true };
   }
-  if (remoteControlConfig.webOutputSource === 'projection' && moduleName === 'external_media') {
+  if (remoteControlConfig.webOutputSource === "projection" && moduleName === "external_media") {
     const media = getOutputExternalMediaState();
-    if (media?.direct && ['video', 'youtube', 'web'].includes(media.kind)) {
-      return { active: false, module: '', source: remoteControlConfig.webOutputSource, direct: true };
+    if (media?.direct && ["video", "youtube", "web"].includes(media.kind)) {
+      return { active: false, module: "", source: remoteControlConfig.webOutputSource, direct: true };
     }
   }
-  return { active: Boolean(moduleName), module: moduleName || '', source: remoteControlConfig.webOutputSource };
+  return { active: Boolean(moduleName), module: moduleName || "", source: remoteControlConfig.webOutputSource };
 }
 
 function releaseWebOutputFrameWaitersWithoutFrame() {
@@ -1495,7 +1480,7 @@ function releaseWebOutputFrameWaitersWithoutFrame() {
     clearTimeout(waiter.timer);
     webOutputFrameWaiters.delete(waiter);
     if (!waiter.response.writableEnded) {
-      waiter.response.writeHead(204, { 'Cache-Control': 'no-store', 'X-Frame-Revision': String(webOutputFrameRevision) });
+      waiter.response.writeHead(204, { "Cache-Control": "no-store", "X-Frame-Revision": String(webOutputFrameRevision) });
       waiter.response.end();
     }
   });
@@ -1525,7 +1510,7 @@ async function captureWebOutputFrame() {
         const size = image.getSize();
         const outputImage = size.width === 1920 && size.height === 1080
           ? image
-          : image.resize({ width: 1920, height: 1080, quality: 'good' });
+          : image.resize({ width: 1920, height: 1080, quality: "good" });
         const frame = outputImage.toJPEG(78);
         webOutputLatestFrame = frame;
         webOutputFrameRevision += 1;
@@ -1535,12 +1520,12 @@ async function captureWebOutputFrame() {
           sendWebOutputFrame(waiter.response, frame, webOutputFrameRevision);
         });
         const header = Buffer.from(`--iasdpresenter\r\nContent-Type: image/jpeg\r\nContent-Length: ${frame.length}\r\n\r\n`);
-        const trailer = Buffer.from('\r\n');
+        const trailer = Buffer.from("\r\n");
         webOutputClients.forEach((client) => {
-          if (client.kind !== 'mjpeg' || client.closed || client.blocked) return;
+          if (client.kind !== "mjpeg" || client.closed || client.blocked) return;
           try {
             client.blocked = !client.response.write(Buffer.concat([header, frame, trailer]));
-          } catch (error) {
+          } catch {
             client.closed = true;
             webOutputClients.delete(client);
           }
@@ -1548,7 +1533,7 @@ async function captureWebOutputFrame() {
       }
     }
   } catch (error) {
-    console.warn('[WebOutput] Falha ao capturar quadro:', error.message);
+    console.warn("[WebOutput] Falha ao capturar quadro:", error.message);
   } finally {
     webOutputCaptureInFlight = false;
     stopWebOutputCaptureIfIdle();
@@ -1561,11 +1546,11 @@ async function captureWebOutputFrame() {
 function sendWebOutputFrame(response, frame, revision) {
   if (response.destroyed || response.writableEnded) return;
   response.writeHead(200, {
-    'Content-Type': 'image/jpeg',
-    'Content-Length': frame.length,
-    'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0',
-    'X-Frame-Revision': String(revision),
-    'Access-Control-Allow-Origin': '*',
+    "Content-Type": "image/jpeg",
+    "Content-Length": frame.length,
+    "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+    "X-Frame-Revision": String(revision),
+    "Access-Control-Allow-Origin": "*",
   });
   response.end(frame);
 }
@@ -1573,16 +1558,16 @@ function sendWebOutputFrame(response, frame, revision) {
 function addWebOutputLiveClient(request, response) {
   request.socket.setNoDelay(true);
   response.writeHead(200, {
-    'Content-Type': 'text/event-stream; charset=utf-8',
-    'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0',
-    'Connection': 'keep-alive',
-    'X-Accel-Buffering': 'no',
+    "Content-Type": "text/event-stream; charset=utf-8",
+    "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+    Connection: "keep-alive",
+    "X-Accel-Buffering": "no",
   });
   response.flushHeaders();
-  response.write('retry: 500\nevent: ready\ndata: 1\n\n');
-  const client = { kind: 'live', response, blocked: false, closed: false, keepAlive: null };
+  response.write("retry: 500\nevent: ready\ndata: 1\n\n");
+  const client = { kind: "live", response, blocked: false, closed: false, keepAlive: null };
   client.keepAlive = setInterval(() => {
-    if (!client.closed && !response.writableEnded) response.write(': keepalive\n\n');
+    if (!client.closed && !response.writableEnded) response.write(": keepalive\n\n");
   }, 5000);
   webOutputClients.add(client);
   const moduleName = getSelectedWebOutputModule();
@@ -1595,36 +1580,36 @@ function addWebOutputLiveClient(request, response) {
     stopWebOutputCaptureIfIdle();
     if (getWebOutputViewerCount() === 0) sendWebOutputDemand(false);
   };
-  request.socket.on('close', removeClient);
-  response.on('close', removeClient);
+  request.socket.on("close", removeClient);
+  response.on("close", removeClient);
   stopWebOutputCaptureIfIdle();
 }
 
 function addWebOutputClient(request, response) {
   request.socket.setNoDelay(true);
   response.writeHead(200, {
-    'Content-Type': 'multipart/x-mixed-replace; boundary=iasdpresenter',
-    'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0',
-    'Pragma': 'no-cache',
-    'Connection': 'keep-alive',
-    'Access-Control-Allow-Origin': '*',
-    'X-Accel-Buffering': 'no',
+    "Content-Type": "multipart/x-mixed-replace; boundary=iasdpresenter",
+    "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+    Pragma: "no-cache",
+    Connection: "keep-alive",
+    "Access-Control-Allow-Origin": "*",
+    "X-Accel-Buffering": "no",
   });
   response.flushHeaders();
 
-  const client = { kind: 'mjpeg', response, blocked: false, closed: false };
+  const client = { kind: "mjpeg", response, blocked: false, closed: false };
   webOutputClients.add(client);
   const moduleName = getSelectedWebOutputModule();
   sendWebOutputDemand(getWebOutputDemandPayload(moduleName));
-  response.on('drain', () => { client.blocked = false; });
+  response.on("drain", () => { client.blocked = false; });
   const removeClient = () => {
     client.closed = true;
     webOutputClients.delete(client);
     stopWebOutputCaptureIfIdle();
     if (getWebOutputViewerCount() === 0) sendWebOutputDemand(false);
   };
-  request.socket.on('close', removeClient);
-  response.on('close', removeClient);
+  request.socket.on("close", removeClient);
+  response.on("close", removeClient);
 
   if (!webOutputCaptureTimer && !webOutputCaptureInFlight && !shouldSuspendWebOutputFrameCapture()) captureWebOutputFrame();
 }
@@ -1767,37 +1752,37 @@ const handleVirtualMonitorRequest = createVirtualMonitorHandler({
 });
 
 async function handleRemoteControlRequest(request, response) {
-  const url = new URL(request.url, `http://${request.headers.host || 'localhost'}`);
+  const url = new URL(request.url, `http://${request.headers.host || "localhost"}`);
   if (await handleVirtualMonitorRequest(request, response, url.pathname)) return;
 
-  if (url.pathname === '/output' || url.pathname === '/output/' || url.pathname === '/output/stream.mjpg' || url.pathname === '/output/live' || url.pathname === '/output/frame.jpg' || url.pathname === '/output/media') {
+  if (url.pathname === "/output" || url.pathname === "/output/" || url.pathname === "/output/stream.mjpg" || url.pathname === "/output/live" || url.pathname === "/output/frame.jpg" || url.pathname === "/output/media") {
     if (!remoteControlConfig.webOutputEnabled) {
-      response.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' });
-      response.end('Saída web desativada nas configurações do IASDPresenter.');
+      response.writeHead(404, { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-store" });
+      response.end("Saída web desativada nas configurações do IASDPresenter.");
       return;
     }
   }
 
-  if (request.method === 'GET' && (url.pathname === '/output' || url.pathname === '/output/')) {
-    response.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' });
+  if (request.method === "GET" && (url.pathname === "/output" || url.pathname === "/output/")) {
+    response.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" });
     response.end(getWebOutputHtml());
     return;
   }
 
-  if (request.method === 'GET' && url.pathname === '/output/stream.mjpg') {
+  if (request.method === "GET" && url.pathname === "/output/stream.mjpg") {
     addWebOutputClient(request, response);
     return;
   }
 
-  if (request.method === 'GET' && url.pathname === '/output/live') {
+  if (request.method === "GET" && url.pathname === "/output/live") {
     addWebOutputLiveClient(request, response);
     return;
   }
 
-  if (request.method === 'GET' && url.pathname === '/output/frame.jpg') {
-    const after = Math.max(0, Number(url.searchParams.get('after') || 0));
+  if (request.method === "GET" && url.pathname === "/output/frame.jpg") {
+    const after = Math.max(0, Number(url.searchParams.get("after") || 0));
     if (shouldSuspendWebOutputFrameCapture()) {
-      response.writeHead(204, { 'Cache-Control': 'no-store', 'X-Frame-Revision': String(webOutputFrameRevision) });
+      response.writeHead(204, { "Cache-Control": "no-store", "X-Frame-Revision": String(webOutputFrameRevision) });
       response.end();
       return;
     }
@@ -1809,12 +1794,12 @@ async function handleRemoteControlRequest(request, response) {
     waiter.timer = setTimeout(() => {
       webOutputFrameWaiters.delete(waiter);
       if (!response.writableEnded) {
-        response.writeHead(204, { 'Cache-Control': 'no-store', 'X-Frame-Revision': String(webOutputFrameRevision) });
+        response.writeHead(204, { "Cache-Control": "no-store", "X-Frame-Revision": String(webOutputFrameRevision) });
         response.end();
       }
     }, 1000);
     webOutputFrameWaiters.add(waiter);
-    response.on('close', () => {
+    response.on("close", () => {
       clearTimeout(waiter.timer);
       webOutputFrameWaiters.delete(waiter);
     });
@@ -1822,24 +1807,24 @@ async function handleRemoteControlRequest(request, response) {
     return;
   }
 
-  if (request.method === 'GET' && url.pathname === '/output/media') {
-    const filePath = getOutputExternalMediaFilePath(url.searchParams.get('session'));
+  if (request.method === "GET" && url.pathname === "/output/media") {
+    const filePath = getOutputExternalMediaFilePath(url.searchParams.get("session"));
     if (!filePath) {
-      response.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' });
-      response.end('Midia indisponivel.');
+      response.writeHead(404, { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-store" });
+      response.end("Midia indisponivel.");
       return;
     }
     sendOutputMediaFile(request, response, filePath);
     return;
   }
 
-  if (request.method === 'GET' && url.pathname === '/api/output-state') {
+  if (request.method === "GET" && url.pathname === "/api/output-state") {
     if (remoteControlConfig.webOutputEnabled === false) {
       sendJson(response, 200, {
         ok: true,
         webOutputEnabled: false,
         active: false,
-        module: '',
+        module: "",
         source: remoteControlConfig.webOutputSource,
         externalMedia: null,
         broadcast: null,
@@ -1854,35 +1839,35 @@ async function handleRemoteControlRequest(request, response) {
       active: Boolean(moduleName),
       module: moduleName,
       source: remoteControlConfig.webOutputSource,
-      externalMedia: moduleName === 'external_media' ? getOutputExternalMediaState(request) : null,
-      broadcast: remoteControlConfig.webOutputSource === 'broadcast' ? getBroadcastOutputState() : null,
+      externalMedia: moduleName === "external_media" ? getOutputExternalMediaState(request) : null,
+      broadcast: remoteControlConfig.webOutputSource === "broadcast" ? getBroadcastOutputState() : null,
       revision: remoteControlState.revision,
     });
     return;
   }
 
-  if (request.method === 'GET' && url.pathname === '/ico/favicon.png') {
-    const iconPath = path.join(__dirname, '..', 'dist', 'ico', 'favicon.png');
+  if (request.method === "GET" && url.pathname === "/ico/favicon.png") {
+    const iconPath = path.join(__dirname, "..", "dist", "ico", "favicon.png");
     if (!fs.existsSync(iconPath)) {
       response.writeHead(404);
       response.end();
       return;
     }
     response.writeHead(200, {
-      'Content-Type': 'image/png',
-      'Cache-Control': 'public, max-age=86400',
+      "Content-Type": "image/png",
+      "Cache-Control": "public, max-age=86400",
     });
     fs.createReadStream(iconPath).pipe(response);
     return;
   }
 
-  if (request.method === 'GET' && url.pathname === '/') {
-    response.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' });
+  if (request.method === "GET" && url.pathname === "/") {
+    response.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" });
     response.end(getRemoteControlHtml());
     return;
   }
 
-  if (request.method === 'GET' && url.pathname === '/api/info') {
+  if (request.method === "GET" && url.pathname === "/api/info") {
     sendJson(response, 200, {
       ok: true,
       port: remoteControlConfig.port,
@@ -1892,7 +1877,7 @@ async function handleRemoteControlRequest(request, response) {
     return;
   }
 
-  if (request.method === 'POST' && url.pathname === '/api/login') {
+  if (request.method === "POST" && url.pathname === "/api/login") {
     const body = await readRequestJson(request);
     const ok = !remoteControlConfig.requirePassword || body.password === remoteControlConfig.password;
     sendJson(response, ok ? 200 : 401, { ok });
@@ -1900,25 +1885,25 @@ async function handleRemoteControlRequest(request, response) {
   }
 
   if (!isRemoteControlPasswordValid(request)) {
-    sendJson(response, 401, { ok: false, error: 'Senha obrigatoria.' });
+    sendJson(response, 401, { ok: false, error: "Senha obrigatoria." });
     return;
   }
 
   const remoteRole = getRemoteControlRole(request);
 
-  if (request.method === 'GET' && url.pathname === '/api/preview') {
+  if (request.method === "GET" && url.pathname === "/api/preview") {
     await sendRemoteControlPreview(response);
     return;
   }
 
-  if (request.method === 'GET' && url.pathname === '/api/state') {
+  if (request.method === "GET" && url.pathname === "/api/state") {
     sendJson(response, 200, { ok: true, role: remoteRole, state: remoteControlState });
     return;
   }
 
-  if (request.method === 'GET' && url.pathname === '/api/search') {
-    const query = url.searchParams.get('q') || '';
-    const results = searchRemoteSongs(query, url.searchParams.get('limit') || 30);
+  if (request.method === "GET" && url.pathname === "/api/search") {
+    const query = url.searchParams.get("q") || "";
+    const results = searchRemoteSongs(query, Number(url.searchParams.get("limit") || 30));
     sendJson(response, 200, {
       ok: true,
       ready: getRemoteSearchLibrary().length > 0,
@@ -1928,9 +1913,9 @@ async function handleRemoteControlRequest(request, response) {
     return;
   }
 
-  if (request.method === 'GET' && url.pathname === '/api/bible/search') {
-    const query = url.searchParams.get('q') || '';
-    const data = searchRemoteBible(query, 'pt');
+  if (request.method === "GET" && url.pathname === "/api/bible/search") {
+    const query = url.searchParams.get("q") || "";
+    const data = searchRemoteBible(query, "pt");
     sendJson(response, 200, {
       ok: true,
       ...data,
@@ -1939,7 +1924,7 @@ async function handleRemoteControlRequest(request, response) {
     return;
   }
 
-  if (request.method === 'GET' && url.pathname === '/api/liturgy/today') {
+  if (request.method === "GET" && url.pathname === "/api/liturgy/today") {
     const data = await getRemoteTodayLiturgy();
     sendJson(response, 200, {
       ok: true,
@@ -1948,15 +1933,15 @@ async function handleRemoteControlRequest(request, response) {
     return;
   }
 
-  if (request.method === 'POST' && url.pathname === '/api/play') {
+  if (request.method === "POST" && url.pathname === "/api/play") {
     const body = await readRequestJson(request);
-    if (!isRemoteControlActionAllowed(remoteRole, 'play')) {
-      sendJson(response, 403, { ok: false, error: 'Perfil sem permissao para trocar a musica.' });
+    if (!isRemoteControlActionAllowed(remoteRole, "play")) {
+      sendJson(response, 403, { ok: false, error: "Perfil sem permissao para trocar a musica." });
       return;
     }
-    const reservation = reserveRemoteCommand(String(body.requestId || ''));
+    const reservation = reserveRemoteCommand(String(body.requestId || ""));
     if (!reservation.ok) {
-      sendJson(response, 409, { ok: false, error: 'Outro comando esta sendo processado.', retryAfter: reservation.retryAfter });
+      sendJson(response, 409, { ok: false, error: "Outro comando esta sendo processado.", retryAfter: reservation.retryAfter });
       return;
     }
     if (reservation.duplicate) {
@@ -1965,29 +1950,29 @@ async function handleRemoteControlRequest(request, response) {
     }
     const idMusic = Number(body.id_music);
     if (!Number.isFinite(idMusic) || idMusic <= 0) {
-      sendJson(response, 400, { ok: false, error: 'Musica invalida.' });
+      sendJson(response, 400, { ok: false, error: "Musica invalida." });
       return;
     }
 
     const ok = sendRemoteControlCommand({
-      type: 'open_media',
+      type: "open_media",
       id_music: idMusic,
       id_album: body.id_album ? Number(body.id_album) : null,
-      mode: ['audio', 'instrumental', 'no_audio'].includes(body.mode) ? body.mode : 'audio',
+      mode: ["audio", "instrumental", "no_audio"].includes(body.mode) ? body.mode : "audio",
     });
     sendJson(response, ok ? 200 : 503, { ok });
     return;
   }
 
-  if (request.method === 'POST' && url.pathname === '/api/bible/open') {
+  if (request.method === "POST" && url.pathname === "/api/bible/open") {
     const body = await readRequestJson(request);
-    if (!isRemoteControlActionAllowed(remoteRole, 'bible_open')) {
-      sendJson(response, 403, { ok: false, error: 'Perfil sem permissao para trocar a projecao.' });
+    if (!isRemoteControlActionAllowed(remoteRole, "bible_open")) {
+      sendJson(response, 403, { ok: false, error: "Perfil sem permissao para trocar a projecao." });
       return;
     }
-    const reservation = reserveRemoteCommand(String(body.requestId || ''));
+    const reservation = reserveRemoteCommand(String(body.requestId || ""));
     if (!reservation.ok) {
-      sendJson(response, 409, { ok: false, error: 'Outro comando esta sendo processado.', retryAfter: reservation.retryAfter });
+      sendJson(response, 409, { ok: false, error: "Outro comando esta sendo processado.", retryAfter: reservation.retryAfter });
       return;
     }
     if (reservation.duplicate) {
@@ -1999,64 +1984,64 @@ async function handleRemoteControlRequest(request, response) {
       bookId: body.id_bible_book,
       chapter: body.chapter,
       verseNumbers: body.verses,
-      locale: 'pt',
+      locale: "pt",
     });
 
     if (!payload) {
-      sendJson(response, 400, { ok: false, error: 'Referencia invalida.' });
+      sendJson(response, 400, { ok: false, error: "Referencia invalida." });
       return;
     }
 
     const ok = sendRemoteControlCommand({
-      type: 'open_bible',
+      type: "open_bible",
       bible: payload,
     });
     sendJson(response, ok ? 200 : 503, { ok });
     return;
   }
 
-  if (request.method === 'POST' && url.pathname === '/api/liturgy/open') {
+  if (request.method === "POST" && url.pathname === "/api/liturgy/open") {
     const body = await readRequestJson(request);
-    if (!isRemoteControlActionAllowed(remoteRole, 'liturgy_open')) {
-      sendJson(response, 403, { ok: false, error: 'Perfil sem permissao para abrir este item.' });
+    if (!isRemoteControlActionAllowed(remoteRole, "liturgy_open")) {
+      sendJson(response, 403, { ok: false, error: "Perfil sem permissao para abrir este item." });
       return;
     }
-    const reservation = reserveRemoteCommand(String(body.requestId || ''));
+    const reservation = reserveRemoteCommand(String(body.requestId || ""));
     if (!reservation.ok) {
-      sendJson(response, 409, { ok: false, error: 'Outro comando esta sendo processado.', retryAfter: reservation.retryAfter });
+      sendJson(response, 409, { ok: false, error: "Outro comando esta sendo processado.", retryAfter: reservation.retryAfter });
       return;
     }
     if (reservation.duplicate) {
       sendJson(response, 200, { ok: true, duplicate: true });
       return;
     }
-    if (!body.item || typeof body.item !== 'object') {
-      sendJson(response, 400, { ok: false, error: 'Item invalido.' });
+    if (!body.item || typeof body.item !== "object") {
+      sendJson(response, 400, { ok: false, error: "Item invalido." });
       return;
     }
 
     const ok = sendRemoteControlCommand({
-      type: 'open_liturgy_item',
+      type: "open_liturgy_item",
       item: body.item,
     });
     sendJson(response, ok ? 200 : 503, { ok });
     return;
   }
 
-  if (request.method === 'POST' && url.pathname === '/api/control') {
+  if (request.method === "POST" && url.pathname === "/api/control") {
     const body = await readRequestJson(request);
-    const action = String(body.action || '');
-    if (!['play_pause', 'next', 'prev', 'repeat', 'close', 'maximize'].includes(action)) {
-      sendJson(response, 400, { ok: false, error: 'Comando invalido.' });
+    const action = String(body.action || "");
+    if (!["play_pause", "next", "prev", "repeat", "close", "maximize"].includes(action)) {
+      sendJson(response, 400, { ok: false, error: "Comando invalido." });
       return;
     }
-    if (!isRemoteControlActionAllowed(remoteRole, 'control', action)) {
-      sendJson(response, 403, { ok: false, error: 'Este comando exige o perfil Operador.' });
+    if (!isRemoteControlActionAllowed(remoteRole, "control", action)) {
+      sendJson(response, 403, { ok: false, error: "Este comando exige o perfil Operador." });
       return;
     }
-    const reservation = reserveRemoteCommand(String(body.requestId || ''));
+    const reservation = reserveRemoteCommand(String(body.requestId || ""));
     if (!reservation.ok) {
-      sendJson(response, 409, { ok: false, error: 'Outro comando esta sendo processado.', retryAfter: reservation.retryAfter });
+      sendJson(response, 409, { ok: false, error: "Outro comando esta sendo processado.", retryAfter: reservation.retryAfter });
       return;
     }
     if (reservation.duplicate) {
@@ -2064,25 +2049,25 @@ async function handleRemoteControlRequest(request, response) {
       return;
     }
 
-    const ok = sendRemoteControlCommand({ type: 'control', action });
+    const ok = sendRemoteControlCommand({ type: "control", action });
     sendJson(response, ok ? 200 : 503, { ok });
     return;
   }
 
-  if (request.method === 'POST' && url.pathname === '/api/emergency') {
+  if (request.method === "POST" && url.pathname === "/api/emergency") {
     const body = await readRequestJson(request);
-    const action = String(body.action || '');
-    if (!['blackout', 'freeze', 'logo', 'clear'].includes(action)) {
-      sendJson(response, 400, { ok: false, error: 'Acao de emergencia invalida.' });
+    const action = String(body.action || "");
+    if (!["blackout", "freeze", "logo", "clear"].includes(action)) {
+      sendJson(response, 400, { ok: false, error: "Acao de emergencia invalida." });
       return;
     }
-    if (!isRemoteControlActionAllowed(remoteRole, 'emergency')) {
-      sendJson(response, 403, { ok: false, error: 'Acoes de emergencia exigem o perfil Operador.' });
+    if (!isRemoteControlActionAllowed(remoteRole, "emergency")) {
+      sendJson(response, 403, { ok: false, error: "Acoes de emergencia exigem o perfil Operador." });
       return;
     }
-    const reservation = reserveRemoteCommand(String(body.requestId || ''));
+    const reservation = reserveRemoteCommand(String(body.requestId || ""));
     if (!reservation.ok) {
-      sendJson(response, 409, { ok: false, error: 'Outro comando esta sendo processado.', retryAfter: reservation.retryAfter });
+      sendJson(response, 409, { ok: false, error: "Outro comando esta sendo processado.", retryAfter: reservation.retryAfter });
       return;
     }
     if (reservation.duplicate) {
@@ -2090,29 +2075,29 @@ async function handleRemoteControlRequest(request, response) {
       return;
     }
 
-    const ok = sendRemoteControlCommand({ type: 'emergency', action });
+    const ok = sendRemoteControlCommand({ type: "emergency", action });
     sendJson(response, ok ? 200 : 503, { ok });
     return;
   }
 
-  sendJson(response, 404, { ok: false, error: 'Nao encontrado.' });
+  sendJson(response, 404, { ok: false, error: "Nao encontrado." });
 }
 
 function startRemoteControlServer() {
   if (remoteControlStartPromise) return remoteControlStartPromise;
   if (remoteControlServer?.listening || !shouldRunNetworkServer()) return Promise.resolve();
-  remoteControlError = '';
+  remoteControlError = "";
   const availableHosts = getRemoteControlNetworkOptions().map(option => option.value);
   // The virtual monitor must remain reachable through Ethernet while Wi-Fi is
   // connected to a mixer, even when remote control has a saved Wi-Fi address.
   remoteControlHost = !remoteControlConfig.virtualMonitorEnabled && availableHosts.includes(remoteControlConfig.host)
-    ? remoteControlConfig.host : '0.0.0.0';
+    ? remoteControlConfig.host : "0.0.0.0";
 
   remoteControlServer = http.createServer((request, response) => {
     handleRemoteControlRequest(request, response).catch((error) => {
-      console.error('[RemoteControl] Erro:', error);
+      console.error("[RemoteControl] Erro:", error);
       if (!response.headersSent) {
-        sendJson(response, 500, { ok: false, error: 'Erro interno.' });
+        sendJson(response, 500, { ok: false, error: "Erro interno." });
       } else {
         response.end();
       }
@@ -2121,16 +2106,16 @@ function startRemoteControlServer() {
 
   const server = remoteControlServer;
   remoteControlStartPromise = new Promise<void>((resolve) => {
-    server.once('error', (error) => {
-      remoteControlError = error.code === 'EADDRINUSE'
-        ? 'A porta do controle remoto já está em uso. Escolha outra porta ou feche a outra instância do app.'
-        : 'Não foi possível iniciar o controle remoto: ' + error.message;
-      console.error('[RemoteControl] ' + remoteControlError);
+    server.once("error", (error) => {
+      remoteControlError = error.code === "EADDRINUSE"
+        ? "A porta do controle remoto já está em uso. Escolha outra porta ou feche a outra instância do app."
+        : `Não foi possível iniciar o controle remoto: ${  error.message}`;
+      console.error(`[RemoteControl] ${  remoteControlError}`);
       if (remoteControlServer === server) remoteControlServer = null;
       resolve();
     });
     server.listen(remoteControlConfig.port, remoteControlHost, () => {
-      console.log('[RemoteControl] Controle remoto ativo: ' + getRemoteControlAddresses().join(' | '));
+      console.log(`[RemoteControl] Controle remoto ativo: ${  getRemoteControlAddresses().join(" | ")}`);
       resolve();
     });
   }).finally(() => { remoteControlStartPromise = null; });
@@ -2142,7 +2127,7 @@ async function stopRemoteControlServer() {
   return new Promise((resolve) => {
     webOutputClients.forEach((client) => {
       client.closed = true;
-      try { client.response.end(); } catch (error) { /* ignore */ }
+      try { client.response.end(); } catch { /* ignore */ }
     });
     webOutputClients.clear();
     webOutputFrameWaiters.forEach((waiter) => {
@@ -2168,16 +2153,16 @@ async function getRemoteControlStatus() {
   await remoteControlStartPromise;
   const running = remoteControlServer?.listening === true;
   const addresses = running ? getRemoteControlAddresses() : [];
-  let qrCode = '';
+  let qrCode = "";
   if (addresses[0]) {
     try {
       qrCode = await QRCode.toDataURL(addresses[0], {
         width: 320,
         margin: 2,
-        color: { dark: '#081526', light: '#FFFFFF' },
+        color: { dark: "#081526", light: "#FFFFFF" },
       });
     } catch (error) {
-      console.error('[RemoteControl] Nao foi possivel gerar QR Code:', error.message);
+      console.error("[RemoteControl] Nao foi possivel gerar QR Code:", error.message);
     }
   }
 
@@ -2185,7 +2170,7 @@ async function getRemoteControlStatus() {
     running,
     error: remoteControlError,
     effectiveHost: remoteControlHost,
-    config: { ...remoteControlConfig, password: remoteControlConfig.password ? '********' : '' },
+    config: { ...remoteControlConfig, password: remoteControlConfig.password ? "********" : "" },
     addresses,
     outputAddresses: running ? getWebOutputAddresses() : [],
     virtualMonitorAddresses: running && remoteControlConfig.virtualMonitorEnabled
@@ -2196,7 +2181,7 @@ async function getRemoteControlStatus() {
 }
 
 function resolveInsideBase(basePath, relativePath) {
-  if (typeof relativePath !== 'string') return null;
+  if (typeof relativePath !== "string") return null;
 
   const normalizedRelativePath = relativePath.replace(/[\\/]+/g, path.sep);
   if (path.isAbsolute(normalizedRelativePath)) return null;
@@ -2217,17 +2202,17 @@ function getMediaFolder(destFolderType) {
 function isAllowedExternalUrl(url) {
   try {
     const parsed = new URL(url);
-    return ['http:', 'https:', 'mailto:'].includes(parsed.protocol);
-  } catch (e) {
+    return ["http:", "https:", "mailto:"].includes(parsed.protocol);
+  } catch {
     return false;
   }
 }
 
 if (fs.existsSync(oldDbPath)) {
   try {
-    const fsExtra = require('fs-extra');
+    const fsExtra = require("fs-extra");
     fsExtra.removeSync(oldDbPath);
-  } catch (e) {
+  } catch {
     // A remoção é best-effort; o app consegue recriar o diretório depois.
   }
 }
@@ -2237,20 +2222,20 @@ if (fs.existsSync(oldDbPath)) {
 });
 
 function runProcess(command, args, options = {}) {
-  return new Promise((resolve, reject) => {
+  return new Promise<void>((resolve, reject) => {
     const child = spawn(command, args, { windowsHide: true, ...options });
-    let stdout = '';
-    let stderr = '';
-    child.stdout?.on('data', data => {
+    let stdout = "";
+    let stderr = "";
+    child.stdout?.on("data", data => {
       stdout += data.toString();
     });
-    child.stderr?.on('data', data => {
+    child.stderr?.on("data", data => {
       stderr += data.toString();
     });
-    child.on('error', error => {
-      reject(new Error(`${error.message}${stderr ? `\n${stderr}` : ''}${stdout ? `\n${stdout}` : ''}`));
+    child.on("error", error => {
+      reject(new Error(`${error.message}${stderr ? `\n${stderr}` : ""}${stdout ? `\n${stdout}` : ""}`));
     });
-    child.on('close', code => {
+    child.on("close", code => {
       if (code === 0) resolve();
       else reject(new Error(stderr || stdout || `${command} exited with code ${code}`));
     });
@@ -2259,88 +2244,88 @@ function runProcess(command, args, options = {}) {
 
 async function convertPresentationWithLibreOffice(sourcePath, outputDir) {
   const soffice = findSofficeExecutable();
-  if (!soffice) throw new Error('LibreOffice nao encontrado.');
+  if (!soffice) throw new Error("LibreOffice nao encontrado.");
 
   await runProcess(soffice, [
-    '--headless',
-    '--convert-to',
-    'pdf',
-    '--outdir',
+    "--headless",
+    "--convert-to",
+    "pdf",
+    "--outdir",
     outputDir,
     sourcePath,
   ]);
 
   const outputPath = path.join(outputDir, `${path.basename(sourcePath, path.extname(sourcePath))}.pdf`);
-  if (!fs.existsSync(outputPath)) throw new Error('Conversao pelo LibreOffice nao gerou PDF.');
+  if (!fs.existsSync(outputPath)) throw new Error("Conversao pelo LibreOffice nao gerou PDF.");
   return outputPath;
 }
 
 async function convertPresentationWithPowerPoint(sourcePath, outputPath) {
-  if (process.platform !== 'win32') throw new Error('Microsoft PowerPoint COM disponivel apenas no Windows.');
-  const scriptPath = path.join(path.dirname(outputPath), 'convert-powerpoint.ps1');
+  if (process.platform !== "win32") throw new Error("Microsoft PowerPoint COM disponivel apenas no Windows.");
+  const scriptPath = path.join(path.dirname(outputPath), "convert-powerpoint.ps1");
   const script = [
-    'param($sourceFile, $targetFile)',
+    "param($sourceFile, $targetFile)",
     '$ErrorActionPreference = "Stop"',
-    '$inputPath = [System.IO.Path]::GetFullPath($sourceFile)',
-    '$outputPath = [System.IO.Path]::GetFullPath($targetFile)',
-    'Unblock-File -LiteralPath $inputPath -ErrorAction SilentlyContinue',
-    '$powerPoint = New-Object -ComObject PowerPoint.Application',
-    '$powerPoint.DisplayAlerts = 1',
-    '$presentation = $null',
-    'try {',
-    '  $presentation = $powerPoint.Presentations.Open($inputPath, $true, $false, $false)',
-    '  try {',
-    '    $presentation.ExportAsFixedFormat($outputPath, 2)',
-    '  } catch {',
-    '    $presentation.SaveAs($outputPath, 32)',
-    '  }',
-    '} finally {',
-    '  if ($presentation -ne $null) { $presentation.Close() }',
-    '  $powerPoint.Quit()',
-    '  [System.Runtime.InteropServices.Marshal]::ReleaseComObject($powerPoint) | Out-Null',
-    '}',
-  ].join('\r\n');
+    "$inputPath = [System.IO.Path]::GetFullPath($sourceFile)",
+    "$outputPath = [System.IO.Path]::GetFullPath($targetFile)",
+    "Unblock-File -LiteralPath $inputPath -ErrorAction SilentlyContinue",
+    "$powerPoint = New-Object -ComObject PowerPoint.Application",
+    "$powerPoint.DisplayAlerts = 1",
+    "$presentation = $null",
+    "try {",
+    "  $presentation = $powerPoint.Presentations.Open($inputPath, $true, $false, $false)",
+    "  try {",
+    "    $presentation.ExportAsFixedFormat($outputPath, 2)",
+    "  } catch {",
+    "    $presentation.SaveAs($outputPath, 32)",
+    "  }",
+    "} finally {",
+    "  if ($presentation -ne $null) { $presentation.Close() }",
+    "  $powerPoint.Quit()",
+    "  [System.Runtime.InteropServices.Marshal]::ReleaseComObject($powerPoint) | Out-Null",
+    "}",
+  ].join("\r\n");
 
-  fs.writeFileSync(scriptPath, script, 'utf8');
+  fs.writeFileSync(scriptPath, script, "utf8");
   try {
-    await runProcess('powershell.exe', [
-      '-NoProfile',
-      '-Sta',
-      '-ExecutionPolicy',
-      'Bypass',
-      '-File',
+    await runProcess("powershell.exe", [
+      "-NoProfile",
+      "-Sta",
+      "-ExecutionPolicy",
+      "Bypass",
+      "-File",
       scriptPath,
       sourcePath,
       outputPath,
     ]);
   } finally {
-    try { fs.unlinkSync(scriptPath); } catch (e) { /* ignore */ }
+    try { fs.unlinkSync(scriptPath); } catch { /* ignore */ }
   }
 
-  if (!fs.existsSync(outputPath)) throw new Error('Conversao pelo PowerPoint nao gerou PDF.');
+  if (!fs.existsSync(outputPath)) throw new Error("Conversao pelo PowerPoint nao gerou PDF.");
   return outputPath;
 }
 
 async function preparePresentationFile(sourcePath) {
-  if (typeof sourcePath !== 'string' || !path.isAbsolute(sourcePath) || !fs.existsSync(sourcePath)) {
-    return { ok: false, error: 'Arquivo invalido.' };
+  if (typeof sourcePath !== "string" || !path.isAbsolute(sourcePath) || !fs.existsSync(sourcePath)) {
+    return { ok: false, error: "Arquivo invalido." };
   }
 
   const ext = path.extname(sourcePath).toLowerCase();
-  if (ext === '.pdf') {
-    return { ok: true, filePath: sourcePath, sourcePath, sourceType: 'pdf' };
+  if (ext === ".pdf") {
+    return { ok: true, filePath: sourcePath, sourcePath, sourceType: "pdf" };
   }
 
-  if (!['.ppt', '.pptx'].includes(ext)) {
-    return { ok: false, error: 'Formato nao suportado.' };
+  if (![".ppt", ".pptx"].includes(ext)) {
+    return { ok: false, error: "Formato nao suportado." };
   }
 
   const stat = fs.statSync(sourcePath);
-  const cacheKey = crypto.createHash('sha1')
+  const cacheKey = crypto.createHash("sha1")
     .update(`${sourcePath}:${stat.size}:${stat.mtimeMs}`)
-    .digest('hex');
+    .digest("hex");
   const outputDir = path.join(presentationsPath, cacheKey);
-  const outputPath = path.join(outputDir, 'presentation.pdf');
+  const outputPath = path.join(outputDir, "presentation.pdf");
   const cachedSourcePath = path.join(outputDir, `source${ext}`);
   fs.mkdirSync(outputDir, { recursive: true });
 
@@ -2365,98 +2350,98 @@ async function preparePresentationFile(sourcePath) {
         sourcePath,
         sourceType: ext.slice(1),
         needsConversion: true,
-        error: process.platform === 'win32'
-          ? 'Nao foi possivel converter PowerPoint para PDF. Instale o Microsoft PowerPoint ou o LibreOffice, ou exporte o arquivo para PDF.'
-          : 'Nao foi possivel converter a apresentacao para PDF. Instale o LibreOffice Impress ou exporte o arquivo para PDF.',
+        error: process.platform === "win32"
+          ? "Nao foi possivel converter PowerPoint para PDF. Instale o Microsoft PowerPoint ou o LibreOffice, ou exporte o arquivo para PDF."
+          : "Nao foi possivel converter a apresentacao para PDF. Instale o LibreOffice Impress ou exporte o arquivo para PDF.",
         details: `${powerPointError.message || powerPointError}; ${libreOfficeError.message || libreOfficeError}`,
       };
     }
   }
 }
 
-ipcMain.handle('open-file-dialog', async (event, options) => {
+ipcMain.handle("open-file-dialog", async (event, options) => {
   const win = BrowserWindow.fromWebContents(event.sender);
   const result = await dialog.showOpenDialog(win, {
-    title: options?.title || 'Selecionar Arquivo',
+    title: options?.title || "Selecionar Arquivo",
     filters: options?.filters || [
-      { name: 'Vídeos', extensions: ['mp4', 'mkv', 'avi', 'mov', 'wmv', 'webm'] },
+      { name: "Vídeos", extensions: ["mp4", "mkv", "avi", "mov", "wmv", "webm"] },
     ],
-    properties: ['openFile'],
+    properties: ["openFile"],
   });
   if (result.canceled) return null;
   return result.filePaths[0];
 });
 
-ipcMain.handle('save-file-dialog', async (event, options) => {
+ipcMain.handle("save-file-dialog", async (event, options) => {
   const win = BrowserWindow.fromWebContents(event.sender);
   const result = await dialog.showSaveDialog(win, {
-    title: options?.title || 'Salvar Arquivo',
+    title: options?.title || "Salvar Arquivo",
     defaultPath: options?.defaultPath,
     filters: options?.filters || [
-      { name: 'Arquivos JSON', extensions: ['json'] },
+      { name: "Arquivos JSON", extensions: ["json"] },
     ],
   });
   if (result.canceled) return null;
   return result.filePath;
 });
 
-ipcMain.handle('read-text-file', async (event, filePath) => {
-  if (typeof filePath !== 'string' || !path.isAbsolute(filePath) || !fs.existsSync(filePath)) {
-    return { ok: false, error: 'Arquivo nao encontrado.' };
+ipcMain.handle("read-text-file", async (event, filePath) => {
+  if (typeof filePath !== "string" || !path.isAbsolute(filePath) || !fs.existsSync(filePath)) {
+    return { ok: false, error: "Arquivo nao encontrado." };
   }
 
   try {
-    return { ok: true, content: fs.readFileSync(filePath, 'utf8') };
+    return { ok: true, content: fs.readFileSync(filePath, "utf8") };
   } catch (error) {
-    return { ok: false, error: error.message || 'Nao foi possivel ler o arquivo.' };
+    return { ok: false, error: error.message || "Nao foi possivel ler o arquivo." };
   }
 });
 
-ipcMain.handle('write-text-file', async (event, filePath, content) => {
-  if (typeof filePath !== 'string' || !path.isAbsolute(filePath)) {
-    return { ok: false, error: 'Caminho invalido.' };
+ipcMain.handle("write-text-file", async (event, filePath, content) => {
+  if (typeof filePath !== "string" || !path.isAbsolute(filePath)) {
+    return { ok: false, error: "Caminho invalido." };
   }
-  if (typeof content !== 'string') {
-    return { ok: false, error: 'Conteudo invalido.' };
+  if (typeof content !== "string") {
+    return { ok: false, error: "Conteudo invalido." };
   }
 
   try {
-    fs.writeFileSync(filePath, content, 'utf8');
+    fs.writeFileSync(filePath, content, "utf8");
     return { ok: true };
   } catch (error) {
-    return { ok: false, error: error.message || 'Nao foi possivel salvar o arquivo.' };
+    return { ok: false, error: error.message || "Nao foi possivel salvar o arquivo." };
   }
 });
 
-ipcMain.handle('open-external', async (event, url) => {
+ipcMain.handle("open-external", async (event, url) => {
   if (isAllowedExternalUrl(url)) await shell.openExternal(url);
 });
 
-ipcMain.handle('is-file-readable', async (_event, filePath) => {
-  if (typeof filePath !== 'string' || !path.isAbsolute(filePath)) return false;
+ipcMain.handle("is-file-readable", async (_event, filePath) => {
+  if (typeof filePath !== "string" || !path.isAbsolute(filePath)) return false;
   try {
     await fs.promises.access(filePath, fs.constants.R_OK);
     return (await fs.promises.stat(filePath)).isFile();
   } catch { return false; }
 });
 
-ipcMain.handle('open-path', async (event, filePath) => {
-  if (typeof filePath === 'string' && path.isAbsolute(filePath) && fs.existsSync(filePath)) {
+ipcMain.handle("open-path", async (event, filePath) => {
+  if (typeof filePath === "string" && path.isAbsolute(filePath) && fs.existsSync(filePath)) {
     await shell.openPath(filePath);
   }
 });
 
-ipcMain.handle('prepare-presentation-file', async (event, filePath) => {
+ipcMain.handle("prepare-presentation-file", async (event, filePath) => {
   return preparePresentationFile(filePath);
 });
 
-ipcMain.handle('read-presentation-file', async (event, filePath) => {
-  if (typeof filePath !== 'string' || !path.isAbsolute(filePath) || !fs.existsSync(filePath)) {
-    return { ok: false, error: 'Arquivo nao encontrado.' };
+ipcMain.handle("read-presentation-file", async (event, filePath) => {
+  if (typeof filePath !== "string" || !path.isAbsolute(filePath) || !fs.existsSync(filePath)) {
+    return { ok: false, error: "Arquivo nao encontrado." };
   }
 
-  if (path.extname(filePath).toLowerCase() !== '.pdf') {
-    return { ok: false, error: 'O arquivo preparado nao e um PDF.' };
+  if (path.extname(filePath).toLowerCase() !== ".pdf") {
+    return { ok: false, error: "O arquivo preparado nao e um PDF." };
   }
 
   const fileBuffer = fs.readFileSync(filePath);
@@ -2468,27 +2453,27 @@ ipcMain.handle('read-presentation-file', async (event, filePath) => {
   return { ok: true, data: arrayBuffer };
 });
 
-ipcMain.handle('set-presentation-shortcuts-enabled', async (event, enabled) => {
+ipcMain.handle("set-presentation-shortcuts-enabled", async (event, enabled) => {
   return setPresentationShortcutsEnabled(enabled === true);
 });
 
-ipcMain.on('get-user-data', (event) => {
+ipcMain.on("get-user-data", (event) => {
   event.returnValue = readUserData(userPreferencesPath);
 });
 
-ipcMain.handle('save-user-data', async (event, data) => {
+ipcMain.handle("save-user-data", async (event, data) => {
   try {
     writeUserData(userPreferencesPath, data);
     return { ok: true };
   } catch (error) {
-    console.error('Erro ao salvar dados do usuario:', error);
+    console.error("Erro ao salvar dados do usuario:", error);
     return { ok: false, error: error.message };
   }
 });
 
-ipcMain.handle('clear-all-data', async () => {
+ipcMain.handle("clear-all-data", async () => {
   try {
-    const fsExtra = require('fs-extra');
+    const fsExtra = require("fs-extra");
     if (fsExtra.existsSync(sysDbPath)) fsExtra.emptyDirSync(sysDbPath);
     if (fsExtra.existsSync(mediaPath)) fsExtra.emptyDirSync(mediaPath);
     [sysDbPath, mediaPath, coversPath, musicPath, slidesPath, backgroundsPath].forEach(dir => {
@@ -2496,96 +2481,96 @@ ipcMain.handle('clear-all-data', async () => {
     });
     return true;
   } catch (error) {
-    console.error('Erro ao limpar dados:', error);
+    console.error("Erro ao limpar dados:", error);
     return false;
   }
 });
 
-ipcMain.handle('save-custom-background', async (event, filename, data) => {
+ipcMain.handle("save-custom-background", async (event, filename, data) => {
   try {
-    const safeName = path.basename(String(filename || 'background'));
+    const safeName = path.basename(String(filename || "background"));
     const timestamp = Date.now();
-    const finalName = `${timestamp}-${safeName.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
+    const finalName = `${timestamp}-${safeName.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
     const filePath = resolveInsideBase(backgroundsPath, finalName);
     if (!filePath) return null;
 
     fs.writeFileSync(filePath, Buffer.from(data));
     return filePath;
   } catch (error) {
-    console.error('Erro ao salvar fundo personalizado:', error);
+    console.error("Erro ao salvar fundo personalizado:", error);
     return null;
   }
 });
 
-ipcMain.handle('save-custom-music', async (event, sourcePath) => {
+ipcMain.handle("save-custom-music", async (event, sourcePath) => {
   try {
-    if (typeof sourcePath !== 'string' || !path.isAbsolute(sourcePath) || !fs.existsSync(sourcePath)) {
+    if (typeof sourcePath !== "string" || !path.isAbsolute(sourcePath) || !fs.existsSync(sourcePath)) {
       return null;
     }
 
-    if (path.extname(sourcePath).toLowerCase() !== '.mp3') {
+    if (path.extname(sourcePath).toLowerCase() !== ".mp3") {
       return null;
     }
 
-    const safeName = path.basename(sourcePath).replace(/[^a-zA-Z0-9._-]/g, '_');
+    const safeName = path.basename(sourcePath).replace(/[^a-zA-Z0-9._-]/g, "_");
     const finalName = `custom/${Date.now()}-${safeName}`;
     const filePath = resolveInsideBase(musicPath, finalName);
     if (!filePath) return null;
 
     fs.mkdirSync(path.dirname(filePath), { recursive: true });
     fs.copyFileSync(sourcePath, filePath);
-    return `/musics/${finalName.replace(/\\/g, '/')}`;
+    return `/musics/${finalName.replace(/\\/g, "/")}`;
   } catch (error) {
-    console.error('Erro ao salvar musica personalizada:', error);
+    console.error("Erro ao salvar musica personalizada:", error);
     return null;
   }
 });
 
-ipcMain.handle('get-local-db', async (event, filename) => {
+ipcMain.handle("get-local-db", async (event, filename) => {
   try {
     return readLocalDbFile(filename);
   } catch (error) {
-    console.error('[Database] Erro lendo banco local:', filename, error.message);
+    console.error("[Database] Erro lendo banco local:", filename, error.message);
     return null;
   }
 });
 
-ipcMain.handle('has-local-db-files', async (event, filenames) => {
+ipcMain.handle("has-local-db-files", async (event, filenames) => {
   const files = Array.isArray(filenames) && filenames.length ? filenames : getRequiredLocalDbFiles();
   return hasRequiredLocalDbFiles(files);
 });
 
-ipcMain.handle('extract-bundled-database', async (event, language = 'pt') => {
+ipcMain.handle("extract-bundled-database", async (event, language = "pt") => {
   try {
     const bundledDbPath = getBundledDatabasePath();
     if (!bundledDbPath) {
-      return { ok: false, error: 'Banco de dados local empacotado nao encontrado.' };
+      return { ok: false, error: "Banco de dados local empacotado nao encontrado." };
     }
 
     await extractDatabaseFromPath(bundledDbPath, language, language, (data) => {
-      event.sender.send('extract-progress', data);
+      event.sender.send("extract-progress", data);
     });
 
     return { ok: true };
   } catch (error) {
-    console.error('Erro ao extrair banco empacotado:', error);
-    writeFirstBootErrorLog('extract-bundled-database', error);
+    console.error("Erro ao extrair banco empacotado:", error);
+    writeFirstBootErrorLog("extract-bundled-database", error);
     return { ok: false, error: error.message || String(error) };
   }
 });
 
-ipcMain.handle('save-local-db', async (event, filename, data) => {
+ipcMain.handle("save-local-db", async (event, filename, data) => {
   try {
     return writeLocalDbFile(filename, data);
   } catch (error) {
-    console.error('[Database] Erro salvando banco local:', filename, error.message);
+    console.error("[Database] Erro salvando banco local:", filename, error.message);
     return false;
   }
 });
 
-ipcMain.handle('extract-local-db', async (event, language = 'pt', sourceLanguage = language) => {
+ipcMain.handle("extract-local-db", async (event, language = "pt", sourceLanguage = language) => {
   try {
-    const finalDbPath = path.join(app.getPath('userData'), 'database.db');
+    const finalDbPath = path.join(app.getPath("userData"), "database.db");
 
     if (!fs.existsSync(finalDbPath)) {
       throw new Error(`Arquivo não encontrado em: ${finalDbPath}`);
@@ -2597,20 +2582,20 @@ ipcMain.handle('extract-local-db', async (event, language = 'pt', sourceLanguage
     }
 
     await extractDatabaseFromPath(finalDbPath, language, sourceLanguage, (data) => {
-      event.sender.send('extract-progress', data);
+      event.sender.send("extract-progress", data);
     });
 
     // Excluir após extração para economizar espaço
     try {
       fs.unlinkSync(finalDbPath);
     } catch(e) {
-      console.error('Erro ao excluir database.db após extração:', e);
+      console.error("Erro ao excluir database.db após extração:", e);
     }
 
     return { ok: true };
   } catch (error) {
-    console.error('Erro na extração do banco:', error);
-    writeFirstBootErrorLog('extract-local-db', error);
+    console.error("Erro na extração do banco:", error);
+    writeFirstBootErrorLog("extract-local-db", error);
     return { ok: false, error: error.message || String(error) };
   }
 });
@@ -2623,34 +2608,34 @@ async function getFtpParams() {
   if (globalFtpParamsPromise) return globalFtpParamsPromise;
 
   globalFtpParamsPromise = (async () => {
-    const response = await net.fetch('https://api.louvorja.com.br/params?type=env');
-    if (!response.ok) throw new Error('Falha ao buscar parâmetros');
+    const response = await net.fetch("https://api.louvorja.com.br/params?type=env");
+    if (!response.ok) throw new Error("Falha ao buscar parâmetros");
     const text = await response.text();
 
     const params = {};
-    text.split('\n').forEach(line => {
-      const idx = line.indexOf('=');
+    text.split("\n").forEach(line => {
+      const idx = line.indexOf("=");
       if (idx > 0) {
         params[line.slice(0, idx).trim()] = line.slice(idx + 1).trim();
       }
     });
 
-    const connFtp = params['conn_ftp'];
-    if (!connFtp) throw new Error('conn_ftp não encontrado');
+    const connFtp = params["conn_ftp"];
+    if (!connFtp) throw new Error("conn_ftp não encontrado");
 
     // The authorization service uses the legacy PT tenant for shared FTP credentials.
     // Content language is selected later through the database filename.
-    const payload = Buffer.from('pc_name=Electron&lang=PT').toString('base64');
-    const ftpUrl = connFtp + (connFtp.includes('?') ? '&' : '?') + 'data=' + payload + '&lang=PT';
+    const payload = Buffer.from("pc_name=Electron&lang=PT").toString("base64");
+    const ftpUrl = `${connFtp + (connFtp.includes("?") ? "&" : "?")  }data=${  payload  }&lang=PT`;
 
     const ftpResponse = await net.fetch(ftpUrl);
-    if (!ftpResponse.ok) throw new Error('Falha ao autorizar FTP');
+    if (!ftpResponse.ok) throw new Error("Falha ao autorizar FTP");
     const encodedFtpParams = await ftpResponse.text();
 
-    const decodedFtpText = Buffer.from(encodedFtpParams, 'base64').toString('utf8');
+    const decodedFtpText = Buffer.from(encodedFtpParams, "base64").toString("utf8");
     const ftpParams = {};
-    decodedFtpText.split('\n').forEach(line => {
-      const idx = line.indexOf('=');
+    decodedFtpText.split("\n").forEach(line => {
+      const idx = line.indexOf("=");
       if (idx > 0) {
         ftpParams[line.slice(0, idx).trim()] = line.slice(idx + 1).trim();
       }
@@ -2667,7 +2652,7 @@ async function getFtpParams() {
   }
 }
 
-ipcMain.handle('download-database', async (event, language = 'pt') => {
+ipcMain.handle("download-database", async (event, language = "pt") => {
   let client = null;
   try {
     const ftpParams = await getFtpParams();
@@ -2675,29 +2660,29 @@ ipcMain.handle('download-database', async (event, language = 'pt') => {
     client = new ftp.Client();
 
     await client.access({
-      host: ftpParams['host'],
-      user: ftpParams['username'],
-      password: ftpParams['password'],
-      port: parseInt(ftpParams['port'] || '21'),
-      secure: false
+      host: ftpParams["host"],
+      user: ftpParams["username"],
+      password: ftpParams["password"],
+      port: parseInt(ftpParams["port"] || "21"),
+      secure: false,
     });
 
-    const finalDbPath = path.join(app.getPath('userData'), 'database.db');
+    const finalDbPath = path.join(app.getPath("userData"), "database.db");
     const selectedLanguage = normalizeDatabaseLanguage(language);
     const langPrefix = getDatabaseSourceLanguage(selectedLanguage);
-    const remotePath = (ftpParams['root'] || '/') + (ftpParams['root']?.endsWith('/') ? '' : '/') + `config/${langPrefix}_database.db`;
+    const remotePath = `${(ftpParams["root"] || "/") + (ftpParams["root"]?.endsWith("/") ? "" : "/")  }config/${langPrefix}_database.db`;
 
     let size = 0;
     try {
       size = await client.size(remotePath);
     } catch (e) {
-      console.warn('Não foi possível obter o tamanho do arquivo via FTP:', e.message);
+      console.warn("Não foi possível obter o tamanho do arquivo via FTP:", e.message);
     }
 
     client.trackProgress(info => {
       if (size > 0) {
         const percent = Math.floor((info.bytesOverall / size) * 100);
-        event.sender.send('download-db-progress', { progress: percent });
+        event.sender.send("download-db-progress", { progress: percent });
       }
     });
 
@@ -2714,12 +2699,12 @@ ipcMain.handle('download-database', async (event, language = 'pt') => {
 
     return { ok: true, language: selectedLanguage, sourceLanguage: langPrefix };
   } catch (error) {
-    console.error('Erro no download do banco:', error);
-    writeFirstBootErrorLog('download-database', error);
+    console.error("Erro no download do banco:", error);
+    writeFirstBootErrorLog("download-database", error);
     return { ok: false, error: error.message || String(error) };
   } finally {
     if (client) {
-      try { client.close(); } catch (e) { /* ignore */ }
+      try { client.close(); } catch { /* ignore */ }
     }
   }
 });
@@ -2735,7 +2720,7 @@ function resetFtpFallbackTimer() {
   if (ftpFallbackTimer) clearTimeout(ftpFallbackTimer);
   // Se não houver requisições de mídia por 2 minutos, voltamos a tentar HTTP
   ftpFallbackTimer = setTimeout(() => {
-    console.log('[FTP] Timeout de inatividade HTTP atingido. Voltando a tentar HTTP...');
+    console.log("[FTP] Timeout de inatividade HTTP atingido. Voltando a tentar HTTP...");
     useFtpFallback = false;
   }, 120000);
 }
@@ -2745,8 +2730,8 @@ function scheduleFtpClose() {
   // Fecha a conexão FTP se ficar 30s sem uso
   ftpCloseTimer = setTimeout(() => {
     if (ftpClient) {
-      console.log('[FTP] Fechando conexão FTP por inatividade...');
-      try { ftpClient.close(); } catch (e) { /* ignore */ }
+      console.log("[FTP] Fechando conexão FTP por inatividade...");
+      try { ftpClient.close(); } catch { /* ignore */ }
       ftpClient = null;
     }
   }, 30000);
@@ -2762,16 +2747,16 @@ async function getOrCreateFtpClient() {
   const client = new ftp.Client();
   client.ftp.verbose = false;
 
-  const host = ftpParams['host'];
-  const user = ftpParams['username'];
-  const port = parseInt(ftpParams['port'] || '21');
+  const host = ftpParams["host"];
+  const user = ftpParams["username"];
+  const port = parseInt(ftpParams["port"] || "21");
 
   await client.access({
-    host: host,
-    user: user,
-    password: ftpParams['password'],
-    port: port,
-    secure: false
+    host,
+    user,
+    password: ftpParams["password"],
+    port,
+    secure: false,
   });
 
   ftpClient = client;
@@ -2780,6 +2765,8 @@ async function getOrCreateFtpClient() {
 }
 
 class Mutex {
+  queue: Array<() => void>;
+  locked: boolean;
   constructor() {
     this.queue = [];
     this.locked = false;
@@ -2790,7 +2777,7 @@ class Mutex {
       this.locked = true;
       return;
     }
-    return new Promise(resolve => this.queue.push(resolve));
+    return new Promise<void>(resolve => this.queue.push(resolve));
   }
 
   unlock() {
@@ -2808,20 +2795,20 @@ const ftpMutex = new Mutex();
 async function downloadMediaViaFtp(destFolderType, filename, filePath, retries = 2) {
   const ftpParams = await getFtpParams();
 
-  let ftpFolder = 'config/capas';
-  if (destFolderType === 'music') ftpFolder = 'config/musicas';
-  else if (destFolderType === 'slides') ftpFolder = 'config/imagens';
+  let ftpFolder = "config/capas";
+  if (destFolderType === "music") ftpFolder = "config/musicas";
+  else if (destFolderType === "slides") ftpFolder = "config/imagens";
 
   let cleanFilename = filename;
   // O servidor FTP não possui as subpastas pt/ ou es/ sob config/musicas
-  if (cleanFilename.startsWith('pt/') || cleanFilename.startsWith('es/')) {
+  if (cleanFilename.startsWith("pt/") || cleanFilename.startsWith("es/")) {
     cleanFilename = cleanFilename.substring(3);
   }
 
   // Construir o caminho remoto exatamente como o Delphi faz:
   // ftp_dir + arquivo_ftp (onde ftp_dir = root, e arquivo_ftp = config/musicas/...)
-  const root = ftpParams['root'] || '/';
-  const remotePath = root + (root.endsWith('/') ? '' : '/') + `${ftpFolder}/${cleanFilename}`;
+  const root = ftpParams["root"] || "/";
+  const remotePath = `${root + (root.endsWith("/") ? "" : "/")  }${ftpFolder}/${cleanFilename}`;
 
   await ftpMutex.lock();
   try {
@@ -2834,7 +2821,7 @@ async function downloadMediaViaFtp(destFolderType, filename, filePath, retries =
         console.error(`[FTP] ERRO ao baixar ${remotePath}: ${err.message}`);
         // Se deu erro, fecha a conexão atual para forçar reconexão no próximo attempt
         if (ftpClient) {
-          try { ftpClient.close(); } catch (e) { /* ignore */ }
+          try { ftpClient.close(); } catch { /* ignore */ }
           ftpClient = null;
         }
 
@@ -2855,12 +2842,12 @@ async function downloadMediaViaFtp(destFolderType, filename, filePath, retries =
 function buildApiUrl(destFolderType, filename) {
   // Constrói a URL real da API a partir do tipo e nome do arquivo
   // Mapeamento: music -> /musics/, slides -> /images/, covers -> /covers/
-  let urlFolder = 'covers';
-  if (destFolderType === 'music') urlFolder = 'musics';
-  else if (destFolderType === 'slides') urlFolder = 'images';
+  let urlFolder = "covers";
+  if (destFolderType === "music") urlFolder = "musics";
+  else if (destFolderType === "slides") urlFolder = "images";
 
-  const cleanFilename = filename.replace(/\\/g, '/');
-  return `https://api.louvorja.com.br/file/${urlFolder}/${encodeURIComponent(cleanFilename).replace(/%2F/g, '/')}`;
+  const cleanFilename = filename.replace(/\\/g, "/");
+  return `https://api.louvorja.com.br/file/${urlFolder}/${encodeURIComponent(cleanFilename).replace(/%2F/g, "/")}`;
 }
 
 const activeMediaDownloads = new Map();
@@ -2869,7 +2856,7 @@ function isUsableMediaFile(filePath) {
   try {
     const stats = fs.statSync(filePath);
     return stats.isFile() && stats.size > 0;
-  } catch (error) {
+  } catch {
     return false;
   }
 }
@@ -2881,8 +2868,8 @@ function getLocalMediaUrl(destFolderType, decodedFilename) {
   const filePath = resolveInsideBase(destFolder, decodedFilename);
   if (!filePath || !isUsableMediaFile(filePath)) return false;
 
-  const cleanFilename = decodedFilename.replace(/\\/g, '/');
-  const mappedType = destFolderType === 'slides' ? 'images' : destFolderType;
+  const cleanFilename = decodedFilename.replace(/\\/g, "/");
+  const mappedType = destFolderType === "slides" ? "images" : destFolderType;
   return `local://media/${mappedType}/${cleanFilename}`;
 }
 
@@ -2897,7 +2884,7 @@ async function performMediaDownload(destFolderType, decodedFilename, filePath) {
 
   try {
     // Busca credenciais antes de um eventual fallback para FTP.
-    await getFtpParams().catch(e => console.warn('Não foi possível fazer pre-fetch das credenciais FTP:', e.message));
+    await getFtpParams().catch(e => console.warn("Não foi possível fazer pre-fetch das credenciais FTP:", e.message));
 
     if (isUsableMediaFile(filePath)) return true;
     await fs.promises.mkdir(fileDir, { recursive: true });
@@ -2907,11 +2894,11 @@ async function performMediaDownload(destFolderType, decodedFilename, filePath) {
       resetFtpFallbackTimer();
       try {
         await downloadMediaViaFtp(destFolderType, decodedFilename, tempPath);
-        if (!isUsableMediaFile(tempPath)) throw new Error('Arquivo baixado está vazio');
+        if (!isUsableMediaFile(tempPath)) throw new Error("Arquivo baixado está vazio");
         await replaceDownloadedMedia(tempPath, filePath);
         return true;
       } catch (ftpError) {
-        console.error('[FTP] Erro no fallback FTP (direto):', ftpError.message);
+        console.error("[FTP] Erro no fallback FTP (direto):", ftpError.message);
         return false;
       }
     }
@@ -2920,16 +2907,16 @@ async function performMediaDownload(destFolderType, decodedFilename, filePath) {
     const response = await net.fetch(apiUrl);
 
     if (response.status === 429) {
-      console.warn('[HTTP] Rate limit 429 atingido. Trocando para FTP para todos os downloads...');
+      console.warn("[HTTP] Rate limit 429 atingido. Trocando para FTP para todos os downloads...");
       useFtpFallback = true;
       resetFtpFallbackTimer();
       try {
         await downloadMediaViaFtp(destFolderType, decodedFilename, tempPath);
-        if (!isUsableMediaFile(tempPath)) throw new Error('Arquivo baixado está vazio');
+        if (!isUsableMediaFile(tempPath)) throw new Error("Arquivo baixado está vazio");
         await replaceDownloadedMedia(tempPath, filePath);
         return true;
       } catch (ftpError) {
-        console.error('[FTP] Erro no fallback FTP após 429:', ftpError.message);
+        console.error("[FTP] Erro no fallback FTP após 429:", ftpError.message);
         return false;
       }
     }
@@ -2942,21 +2929,21 @@ async function performMediaDownload(destFolderType, decodedFilename, filePath) {
     await replaceDownloadedMedia(tempPath, filePath);
     return true;
   } catch (error) {
-    console.error('[Download] Erro baixando mídia:', error.message);
+    console.error("[Download] Erro baixando mídia:", error.message);
     return false;
   } finally {
     await fs.promises.rm(tempPath, { force: true }).catch(() => {});
   }
 }
 
-ipcMain.handle('download-media', async (event, url, destFolderType, filename) => {
+ipcMain.handle("download-media", async (event, url, destFolderType, filename) => {
   const destFolder = getMediaFolder(destFolderType);
-  if (!destFolder || typeof filename !== 'string') return false;
+  if (!destFolder || typeof filename !== "string") return false;
 
   let decodedFilename;
   try {
     decodedFilename = decodeURIComponent(filename);
-  } catch (error) {
+  } catch {
     return false;
   }
 
@@ -2975,26 +2962,26 @@ ipcMain.handle('download-media', async (event, url, destFolderType, filename) =>
   return download;
 });
 
-ipcMain.handle('check-media', async (event, destFolderType, filename) => {
+ipcMain.handle("check-media", async (event, destFolderType, filename) => {
   try {
     return getLocalMediaUrl(destFolderType, decodeURIComponent(filename));
-  } catch (error) {
+  } catch {
     return false;
   }
 });
 
-ipcMain.handle('check-media-batch', async (event, items = []) => {
+ipcMain.handle("check-media-batch", async (event, items = []) => {
   if (!Array.isArray(items)) return [];
 
   return items.map((item) => {
     try {
-      return getLocalMediaUrl(item?.type, decodeURIComponent(item?.filename || ''));
-    } catch (error) {
+      return getLocalMediaUrl(item?.type, decodeURIComponent(item?.filename || ""));
+    } catch {
       return false;
     }
   });
 });
-ipcMain.handle('delete-media', async (event, destFolderType, filename) => {
+ipcMain.handle("delete-media", async (event, destFolderType, filename) => {
   const destFolder = getMediaFolder(destFolderType);
   if (!destFolder) return false;
 
@@ -3007,43 +2994,43 @@ ipcMain.handle('delete-media', async (event, destFolderType, filename) => {
       fs.unlinkSync(filePath);
       return true;
     } catch (e) {
-      console.error('Erro ao deletar mídia:', e);
+      console.error("Erro ao deletar mídia:", e);
       return false;
     }
   }
   return true;
 });
 
-ipcMain.handle('get-displays', () => {
-  const { screen } = require('electron');
+ipcMain.handle("get-displays", () => {
+  const { screen } = require("electron");
   const displays = screen.getAllDisplays().map(d => ({
     id: d.id,
     bounds: d.bounds,
     workArea: d.workArea,
     scaleFactor: d.scaleFactor,
-    isPrimary: d.id === screen.getPrimaryDisplay().id
+    isPrimary: d.id === screen.getPrimaryDisplay().id,
   }));
   if (remoteControlConfig.virtualMonitorEnabled) displays.push(virtualMonitorDisplay());
   return displays;
 });
 
-ipcMain.handle('get-system-fonts', async () => {
-  if (process.platform !== 'win32') return [];
+ipcMain.handle("get-system-fonts", async () => {
+  if (process.platform !== "win32") return [];
 
   return new Promise((resolve) => {
     const command = [
-      '[Console]::OutputEncoding = [System.Text.Encoding]::UTF8',
-      'Add-Type -AssemblyName System.Drawing',
-      '$fonts = (New-Object System.Drawing.Text.InstalledFontCollection).Families | ForEach-Object { $_.Name } | Sort-Object -Unique',
-      '$fonts | ConvertTo-Json -Compress',
-    ].join('; ');
-    const child = spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', command], {
+      "[Console]::OutputEncoding = [System.Text.Encoding]::UTF8",
+      "Add-Type -AssemblyName System.Drawing",
+      "$fonts = (New-Object System.Drawing.Text.InstalledFontCollection).Families | ForEach-Object { $_.Name } | Sort-Object -Unique",
+      "$fonts | ConvertTo-Json -Compress",
+    ].join("; ");
+    const child = spawn("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", command], {
       windowsHide: true,
     });
-    let stdout = '';
-    child.stdout.on('data', chunk => { stdout += chunk.toString(); });
-    child.on('error', () => resolve([]));
-    child.on('close', code => {
+    let stdout = "";
+    child.stdout.on("data", chunk => { stdout += chunk.toString(); });
+    child.on("error", () => resolve([]));
+    child.on("close", code => {
       if (code !== 0 || !stdout.trim()) return resolve([]);
       try {
         const parsed = JSON.parse(stdout.trim());
@@ -3055,12 +3042,12 @@ ipcMain.handle('get-system-fonts', async () => {
   });
 });
 
-ipcMain.handle('identify-displays', () => {
-  const { screen } = require('electron');
+ipcMain.handle("identify-displays", () => {
+  const { screen } = require("electron");
   const displays = screen.getAllDisplays();
 
   displays.forEach((display, index) => {
-    let win = new BrowserWindow({
+    const win = new BrowserWindow({
       x: display.bounds.x,
       y: display.bounds.y,
       width: display.bounds.width,
@@ -3070,7 +3057,7 @@ ipcMain.handle('identify-displays', () => {
       alwaysOnTop: true,
       focusable: false,
       hasShadow: false,
-      webPreferences: { nodeIntegration: false, contextIsolation: true }
+      webPreferences: { nodeIntegration: false, contextIsolation: true },
     });
 
     win.setIgnoreMouseEvents(true);
@@ -3085,7 +3072,7 @@ ipcMain.handle('identify-displays', () => {
       </html>
     `;
 
-    win.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(html));
+    win.loadURL(`data:text/html;charset=utf-8,${  encodeURIComponent(html)}`);
 
     setTimeout(() => {
       if (win && !win.isDestroyed()) {
@@ -3096,30 +3083,30 @@ ipcMain.handle('identify-displays', () => {
   return true;
 });
 
-ipcMain.handle('get-remote-control-status', () => getRemoteControlStatus());
-ipcMain.handle('set-remote-control-state', (event, state) => updateRemoteControlState(state));
+ipcMain.handle("get-remote-control-status", () => getRemoteControlStatus());
+ipcMain.handle("set-remote-control-state", (event, state) => updateRemoteControlState(state));
 
-ipcMain.handle('get-automation-config', () => automationConfig);
+ipcMain.handle("get-automation-config", () => automationConfig);
 
-ipcMain.handle('save-automation-config', (event, config) => saveAutomationConfig(config));
+ipcMain.handle("save-automation-config", (event, config) => saveAutomationConfig(config));
 
-ipcMain.handle('test-automation-device', async (event, device) => {
+ipcMain.handle("test-automation-device", async (event, device) => {
   try {
     device = normalizeMixerDevice(device || {});
     validateMixerDevice(device);
-    if (device.type !== 'soundcraft-ui') return await testOscMixer(device);
+    if (device.type !== "soundcraft-ui") return await testOscMixer(device);
   } catch (error) {
     return { ok: false, error: error.message };
   }
 
   const targetIP = normalizeSoundcraftTarget(device.ip);
   if (!targetIP) {
-    return { ok: false, error: 'Informe o IP da mesa Soundcraft Ui.' };
+    return { ok: false, error: "Informe o IP da mesa Soundcraft Ui." };
   }
 
   try {
     await probeSoundcraftHttp(targetIP);
-  } catch (error) {
+  } catch {
     return {
       ok: false,
       error: `Nao foi possivel acessar http://${targetIP}. Confirme se o computador esta na mesma rede da mesa e se o IP esta correto.`,
@@ -3145,7 +3132,7 @@ function queueAutomation(work) {
   return result;
 }
 
-ipcMain.handle('test-automation-trigger', (event, trigger) => queueAutomation(async () => {
+ipcMain.handle("test-automation-trigger", (event, trigger) => queueAutomation(async () => {
   try {
     const sanitized = sanitizeAutomationConfig({
       ...automationConfig,
@@ -3157,11 +3144,11 @@ ipcMain.handle('test-automation-trigger', (event, trigger) => queueAutomation(as
   }
 }));
 
-ipcMain.handle('run-automation-trigger', (event, triggerId) => queueAutomation(async () => {
+ipcMain.handle("run-automation-trigger", (event, triggerId) => queueAutomation(async () => {
   if (!automationConfig.enabled) return { ok: true, skipped: true };
 
   const trigger = automationConfig.triggers.find(item => item.id === triggerId);
-  if (!trigger) return { ok: false, error: 'Gatilho nao encontrado.' };
+  if (!trigger) return { ok: false, error: "Gatilho nao encontrado." };
 
   try {
     return await executeAutomationTrigger(trigger);
@@ -3170,19 +3157,19 @@ ipcMain.handle('run-automation-trigger', (event, triggerId) => queueAutomation(a
   }
 }));
 
-ipcMain.handle('restore-automation', (event, reason = '') => queueAutomation(() => restorePendingAutomation(reason)));
+ipcMain.handle("restore-automation", (event, reason = "") => queueAutomation(() => restorePendingAutomation(reason)));
 
-ipcMain.handle('get-performance-config', () => ({
+ipcMain.handle("get-performance-config", () => ({
   ...performanceConfig,
   appliedDisableHardwareAcceleration: appliedPerformanceConfig.disableHardwareAcceleration,
 }));
 
-ipcMain.handle('save-performance-config', (event, config) => savePerformanceConfig(config));
+ipcMain.handle("save-performance-config", (event, config) => savePerformanceConfig(config));
 
-ipcMain.handle('restart-app', (event, config) => {
+ipcMain.handle("restart-app", (event, config) => {
   // Persiste a configuração imediatamente antes de encerrar, evitando que o
   // reinício aconteça enquanto uma gravação assíncrona ainda está pendente.
-  if (config && typeof config === 'object') {
+  if (config && typeof config === "object") {
     savePerformanceConfig(config);
   }
 
@@ -3192,9 +3179,9 @@ ipcMain.handle('restart-app', (event, config) => {
   return true;
 });
 
-ipcMain.handle('save-remote-control-config', async (event, config) => {
+ipcMain.handle("save-remote-control-config", async (event, config) => {
   const nextConfig = { ...config };
-  if (nextConfig.password === '********') {
+  if (nextConfig.password === "********") {
     nextConfig.password = remoteControlConfig.password;
   }
 
@@ -3206,7 +3193,7 @@ ipcMain.handle('save-remote-control-config', async (event, config) => {
     if (!remoteControlConfig.virtualMonitorEnabled) {
       BrowserWindow.getAllWindows().filter(isVirtualMonitorWindow).forEach(win => win.close());
     }
-    mainAppWindow?.webContents.send('displays-changed');
+    mainAppWindow?.webContents.send("displays-changed");
   }
 
   const bindingChanged = previousConfig.host !== remoteControlConfig.host
@@ -3230,14 +3217,14 @@ ipcMain.handle('save-remote-control-config', async (event, config) => {
   return getRemoteControlStatus();
 });
 
-ipcMain.handle('start-remote-control-server', () => {
+ipcMain.handle("start-remote-control-server", () => {
   remoteControlConfig.enabled = true;
   saveRemoteControlConfig(remoteControlConfig);
   startRemoteControlServer();
   return getRemoteControlStatus();
 });
 
-ipcMain.handle('stop-remote-control-server', async () => {
+ipcMain.handle("stop-remote-control-server", async () => {
   remoteControlConfig.enabled = false;
   saveRemoteControlConfig(remoteControlConfig);
   if (shouldRunNetworkServer()) {
@@ -3251,65 +3238,65 @@ ipcMain.handle('stop-remote-control-server', async () => {
 const isDev = !app.isPackaged;
 const youtubeEmbedUrlFilter = {
   urls: [
-    'https://www.youtube.com/embed/*',
-    'https://www.youtube-nocookie.com/embed/*',
+    "https://www.youtube.com/embed/*",
+    "https://www.youtube-nocookie.com/embed/*",
   ],
 };
 const staticMimeTypes = {
-  '.html': 'text/html; charset=utf-8',
-  '.js': 'text/javascript; charset=utf-8',
-  '.mjs': 'text/javascript; charset=utf-8',
-  '.css': 'text/css; charset=utf-8',
-  '.json': 'application/json; charset=utf-8',
-  '.webmanifest': 'application/manifest+json; charset=utf-8',
-  '.svg': 'image/svg+xml',
-  '.png': 'image/png',
-  '.jpg': 'image/jpeg',
-  '.jpeg': 'image/jpeg',
-  '.ico': 'image/x-icon',
-  '.woff': 'font/woff',
-  '.woff2': 'font/woff2',
-  '.ttf': 'font/ttf',
-  '.eot': 'application/vnd.ms-fontobject',
+  ".html": "text/html; charset=utf-8",
+  ".js": "text/javascript; charset=utf-8",
+  ".mjs": "text/javascript; charset=utf-8",
+  ".css": "text/css; charset=utf-8",
+  ".json": "application/json; charset=utf-8",
+  ".webmanifest": "application/manifest+json; charset=utf-8",
+  ".svg": "image/svg+xml",
+  ".png": "image/png",
+  ".jpg": "image/jpeg",
+  ".jpeg": "image/jpeg",
+  ".ico": "image/x-icon",
+  ".woff": "font/woff",
+  ".woff2": "font/woff2",
+  ".ttf": "font/ttf",
+  ".eot": "application/vnd.ms-fontobject",
 };
 
 function getStaticMimeType(filePath) {
-  return staticMimeTypes[path.extname(filePath).toLowerCase()] || 'application/octet-stream';
+  return staticMimeTypes[path.extname(filePath).toLowerCase()] || "application/octet-stream";
 }
 
 function sendStaticFile(response, filePath) {
   const extension = path.extname(filePath).toLowerCase();
   return streamStaticFile(response, filePath, {
-    'Content-Type': getStaticMimeType(filePath),
-    'Referrer-Policy': 'strict-origin-when-cross-origin',
-    'Cache-Control': extension === '.html' ? 'no-store' : 'public, max-age=31536000, immutable',
+    "Content-Type": getStaticMimeType(filePath),
+    "Referrer-Policy": "strict-origin-when-cross-origin",
+    "Cache-Control": extension === ".html" ? "no-store" : "public, max-age=31536000, immutable",
   });
 }
 
 function resolveDistFile(urlPath) {
-  const distPath = path.join(__dirname, '..', 'dist');
-  let pathname = '/';
+  const distPath = path.join(__dirname, "..", "dist");
+  let pathname = "/";
   try {
-    pathname = decodeURIComponent(urlPath.split('?')[0].split('#')[0] || '/');
-  } catch (error) {
-    pathname = '/';
+    pathname = decodeURIComponent(urlPath.split("?")[0].split("#")[0] || "/");
+  } catch {
+    pathname = "/";
   }
 
-  const relativePath = pathname === '/'
-    ? 'index.html'
-    : pathname.replace(/^\/+/, '');
+  const relativePath = pathname === "/"
+    ? "index.html"
+    : pathname.replace(/^\/+/, "");
   const resolvedPath = path.resolve(distPath, relativePath);
   const resolvedDist = path.resolve(distPath);
 
   if (resolvedPath !== resolvedDist && !resolvedPath.startsWith(resolvedDist + path.sep)) {
-    return path.join(distPath, 'index.html');
+    return path.join(distPath, "index.html");
   }
 
   if (fs.existsSync(resolvedPath) && fs.statSync(resolvedPath).isFile()) {
     return resolvedPath;
   }
 
-  return path.join(distPath, 'index.html');
+  return path.join(distPath, "index.html");
 }
 
 function startProductionAppServer() {
@@ -3320,17 +3307,17 @@ function startProductionAppServer() {
     }
 
     productionAppServer = http.createServer((request, response) => {
-      if (!['GET', 'HEAD'].includes(request.method)) {
-        response.writeHead(405, { 'Content-Type': 'text/plain; charset=utf-8' });
-        response.end('Method not allowed');
+      if (!["GET", "HEAD"].includes(request.method)) {
+        response.writeHead(405, { "Content-Type": "text/plain; charset=utf-8" });
+        response.end("Method not allowed");
         return;
       }
 
-      const filePath = resolveDistFile(request.url || '/');
-      if (request.method === 'HEAD') {
+      const filePath = resolveDistFile(request.url || "/");
+      if (request.method === "HEAD") {
         response.writeHead(200, {
-          'Content-Type': getStaticMimeType(filePath),
-          'Referrer-Policy': 'strict-origin-when-cross-origin',
+          "Content-Type": getStaticMimeType(filePath),
+          "Referrer-Policy": "strict-origin-when-cross-origin",
         });
         response.end();
         return;
@@ -3339,11 +3326,11 @@ function startProductionAppServer() {
       sendStaticFile(response, filePath);
     });
 
-    productionAppServer.once('error', reject);
-    productionAppServer.listen(0, '127.0.0.1', () => {
+    productionAppServer.once("error", reject);
+    productionAppServer.listen(0, "127.0.0.1", () => {
       const address = productionAppServer.address();
       productionAppUrl = `http://127.0.0.1:${address.port}`;
-      productionAppServer.removeListener('error', reject);
+      productionAppServer.removeListener("error", reject);
       resolve(productionAppUrl);
     });
   });
@@ -3359,13 +3346,13 @@ function stopProductionAppServer() {
 function setupYouTubeEmbedHeaders() {
   session.defaultSession.webRequest.onBeforeSendHeaders(youtubeEmbedUrlFilter, (details, callback) => {
     const requestHeaders = { ...details.requestHeaders };
-    const refererKey = Object.keys(requestHeaders).find(key => key.toLowerCase() === 'referer');
-    const originKey = Object.keys(requestHeaders).find(key => key.toLowerCase() === 'origin');
-    const currentReferer = refererKey ? String(requestHeaders[refererKey] || '') : '';
-    const currentOrigin = originKey ? String(requestHeaders[originKey] || '') : '';
+    const refererKey = Object.keys(requestHeaders).find(key => key.toLowerCase() === "referer");
+    const originKey = Object.keys(requestHeaders).find(key => key.toLowerCase() === "origin");
+    const currentReferer = refererKey ? String(requestHeaders[refererKey] || "") : "";
+    const currentOrigin = originKey ? String(requestHeaders[originKey] || "") : "";
 
-    const fallbackOrigin = productionAppUrl || 'http://127.0.0.1';
-    requestHeaders[refererKey || 'Referer'] = /^https?:\/\//i.test(currentReferer)
+    const fallbackOrigin = productionAppUrl || "http://127.0.0.1";
+    requestHeaders[refererKey || "Referer"] = /^https?:\/\//i.test(currentReferer)
       ? currentReferer
       : `${fallbackOrigin}/`;
     if (originKey && !/^https?:\/\//i.test(currentOrigin)) {
@@ -3381,10 +3368,10 @@ async function clearDesktopWebAppCaches() {
 
   try {
     await session.defaultSession.clearStorageData({
-      storages: ['serviceworkers', 'cachestorage'],
+      storages: ["serviceworkers", "cachestorage"],
     });
   } catch (error) {
-    console.warn('Erro ao limpar cache/service worker do app:', error.message);
+    console.warn("Erro ao limpar cache/service worker do app:", error.message);
   }
 }
 
@@ -3394,157 +3381,157 @@ async function createWindow() {
     height: 900,
     minWidth: 920,
     minHeight: 760,
-    title: 'IASDPresenter',
-    icon: path.join(app.getAppPath(), app.isPackaged ? 'dist/ico/favicon-256x256.png' : 'public/ico/favicon-256x256.png'),
+    title: "IASDPresenter",
+    icon: path.join(app.getAppPath(), app.isPackaged ? "dist/ico/favicon-256x256.png" : "public/ico/favicon-256x256.png"),
     webPreferences: {
-      preload: path.join(__dirname, 'preload.js'),
+      preload: path.join(__dirname, "preload.js"),
       contextIsolation: true,
       nodeIntegration: false,
       webviewTag: true,
       backgroundThrottling: true,
     },
-    frame: false
+    frame: false,
   });
   mainAppWindow = mainWindow;
 
-  mainWindow.on('page-title-updated', (event) => {
+  mainWindow.on("page-title-updated", (event) => {
     event.preventDefault();
   });
 
-  mainWindow.on('maximize', () => {
-    mainWindow.webContents.send('window-maximized-state', true);
+  mainWindow.on("maximize", () => {
+    mainWindow.webContents.send("window-maximized-state", true);
   });
-  mainWindow.on('unmaximize', () => {
-    mainWindow.webContents.send('window-maximized-state', false);
+  mainWindow.on("unmaximize", () => {
+    mainWindow.webContents.send("window-maximized-state", false);
   });
 
   // Menu nativo personalizado
   const menuTemplate = [
     // macOS: menu com nome do app
-    ...(process.platform === 'darwin' ? [{
-      label: 'IASDPresenter',
+    ...(process.platform === "darwin" ? [{
+      label: "IASDPresenter",
       submenu: [
-        { role: 'about' },
-        { type: 'separator' },
-        { role: 'services' },
-        { type: 'separator' },
-        { role: 'hide' },
-        { role: 'hideOthers' },
-        { role: 'unhide' },
-        { type: 'separator' },
-        { role: 'quit' }
-      ]
+        { role: "about" },
+        { type: "separator" },
+        { role: "services" },
+        { type: "separator" },
+        { role: "hide" },
+        { role: "hideOthers" },
+        { role: "unhide" },
+        { type: "separator" },
+        { role: "quit" },
+      ],
     }, {
-      label: 'Edit',
+      label: "Edit",
       submenu: [
-        { role: 'undo' },
-        { role: 'redo' },
-        { type: 'separator' },
-        { role: 'cut' },
-        { role: 'copy' },
-        { role: 'paste' },
-        { role: 'pasteAndMatchStyle' },
-        { role: 'delete' },
-        { role: 'selectAll' }
-      ]
+        { role: "undo" },
+        { role: "redo" },
+        { type: "separator" },
+        { role: "cut" },
+        { role: "copy" },
+        { role: "paste" },
+        { role: "pasteAndMatchStyle" },
+        { role: "delete" },
+        { role: "selectAll" },
+      ],
     }] : []),
     {
-      label: 'Página Inicial',
+      label: "Página Inicial",
       submenu: [
         {
-          label: 'Ir para Página Inicial',
-          accelerator: 'CmdOrCtrl+H',
+          label: "Ir para Página Inicial",
+          accelerator: "CmdOrCtrl+H",
           click: () => {
-            mainWindow.webContents.send('navigate-module', 'home');
+            mainWindow.webContents.send("navigate-module", "home");
           },
         },
         {
-          label: 'Buscar M\u00fasicas',
-          accelerator: 'CmdOrCtrl+F',
+          label: "Buscar M\u00fasicas",
+          accelerator: "CmdOrCtrl+F",
           click: () => {
-            mainWindow.webContents.send('open-quick-search', 'music');
-          },
-        }
-      ]
-    },
-    {
-      label: 'Álbuns e Coletâneas',
-      submenu: [
-        {
-          label: 'Hinário Adventista',
-          click: () => {
-            mainWindow.webContents.send('navigate-module', 'hymnal');
-          },
-        },
-        {
-          label: 'Hinário Adventista - 1996',
-          click: () => {
-            mainWindow.webContents.send('navigate-module', 'hymnal_1996');
-          },
-        },
-        {
-          label: 'Álbuns',
-          click: () => {
-            mainWindow.webContents.send('navigate-module', 'collections');
+            mainWindow.webContents.send("open-quick-search", "music");
           },
         },
       ],
     },
     {
-      label: 'Bíblia',
+      label: "Álbuns e Coletâneas",
       submenu: [
         {
-          label: 'Abrir Bíblia',
-          accelerator: 'CmdOrCtrl+B',
+          label: "Hinário Adventista",
           click: () => {
-            mainWindow.webContents.send('open-quick-search', 'bible');
+            mainWindow.webContents.send("navigate-module", "hymnal");
           },
-        }
-      ]
+        },
+        {
+          label: "Hinário Adventista - 1996",
+          click: () => {
+            mainWindow.webContents.send("navigate-module", "hymnal_1996");
+          },
+        },
+        {
+          label: "Álbuns",
+          click: () => {
+            mainWindow.webContents.send("navigate-module", "collections");
+          },
+        },
+      ],
     },
     {
-      label: 'Utilitários',
+      label: "Bíblia",
       submenu: [
         {
-          label: 'Módulos utilitários',
-          enabled: false
-        }
-      ]
+          label: "Abrir Bíblia",
+          accelerator: "CmdOrCtrl+B",
+          click: () => {
+            mainWindow.webContents.send("open-quick-search", "bible");
+          },
+        },
+      ],
     },
     {
-      label: 'Biblioteca Local',
+      label: "Utilitários",
       submenu: [
         {
-          label: 'Abrir Biblioteca',
-          accelerator: 'CmdOrCtrl+L',
-          click: () => {
-            mainWindow.webContents.send('navigate-module', 'sync');
-          },
-        }
-      ]
+          label: "Módulos utilitários",
+          enabled: false,
+        },
+      ],
     },
     {
-      label: 'Configurações',
+      label: "Biblioteca Local",
       submenu: [
         {
-          label: 'Abrir Configurações',
-          accelerator: 'CmdOrCtrl+,',
+          label: "Abrir Biblioteca",
+          accelerator: "CmdOrCtrl+L",
           click: () => {
-            mainWindow.webContents.send('navigate-module', 'config');
+            mainWindow.webContents.send("navigate-module", "sync");
           },
-        }
-      ]
+        },
+      ],
     },
     {
-      label: 'Ajuda',
+      label: "Configurações",
       submenu: [
         {
-          label: 'Ajuda e Sobre',
+          label: "Abrir Configurações",
+          accelerator: "CmdOrCtrl+,",
           click: () => {
-            mainWindow.webContents.send('navigate-route', 'help');
+            mainWindow.webContents.send("navigate-module", "config");
           },
-        }
-      ]
+        },
+      ],
+    },
+    {
+      label: "Ajuda",
+      submenu: [
+        {
+          label: "Ajuda e Sobre",
+          click: () => {
+            mainWindow.webContents.send("navigate-route", "help");
+          },
+        },
+      ],
     },
   ];
 
@@ -3552,25 +3539,25 @@ async function createWindow() {
   Menu.setApplicationMenu(menu);
 
   mainWindow.webContents.setWindowOpenHandler(({ url, features }) => {
-    const isFullscreen = features.includes('fullscreen=yes');
-    const isWebOutput = features.includes('weboutput=yes') || url.includes('webOutput=1');
-    const isVirtualMonitor = features.split(',').includes(`monitor=${VIRTUAL_MONITOR_ID}`);
-    if (isVirtualMonitor && !remoteControlConfig.virtualMonitorEnabled) return { action: 'deny' };
-    const { screen } = require('electron');
+    const isFullscreen = features.includes("fullscreen=yes");
+    const isWebOutput = features.includes("weboutput=yes") || url.includes("webOutput=1");
+    const isVirtualMonitor = features.split(",").includes(`monitor=${VIRTUAL_MONITOR_ID}`);
+    if (isVirtualMonitor && !remoteControlConfig.virtualMonitorEnabled) return { action: "deny" };
+    const { screen } = require("electron");
     const displays = screen.getAllDisplays();
 
-    let windowConfig = {
+    let windowConfig: import("electron").BrowserWindowConstructorOptions = {
       width: 800,
       height: 600,
-      backgroundColor: '#000000',
+      backgroundColor: "#000000",
       show: false,
       webPreferences: {
-        preload: path.join(__dirname, 'preload.js'),
+        preload: path.join(__dirname, "preload.js"),
         contextIsolation: true,
         nodeIntegration: false,
         webviewTag: true,
-        backgroundThrottling: true,
-      }
+        backgroundThrottling: false,
+      },
     };
 
     if (isWebOutput || isVirtualMonitor) {
@@ -3622,40 +3609,40 @@ async function createWindow() {
     }
 
     return {
-      action: 'allow',
-      overrideBrowserWindowOptions: windowConfig
+      action: "allow",
+      overrideBrowserWindowOptions: windowConfig,
     };
   });
 
-  mainWindow.webContents.on('did-create-window', (childWindow, details) => {
+  mainWindow.webContents.on("did-create-window", (childWindow, details) => {
     const syncClockOrder = () => syncClockWindowOrder(BrowserWindow.getAllWindows());
-    childWindow.on('closed', syncClockOrder);
-    childWindow.on('focus', syncClockOrder);
-    if (details?.url?.includes('virtualMonitor=1')) {
+    childWindow.on("closed", syncClockOrder);
+    childWindow.on("focus", syncClockOrder);
+    if (details?.url?.includes("virtualMonitor=1")) {
       childWindow.webContents.setAudioMuted(true);
-      childWindow.once('ready-to-show', () => {
+      childWindow.once("ready-to-show", () => {
         childWindow.setPosition(-32000, -32000, false);
         childWindow.showInactive();
       });
       return;
     }
-    if (details?.url?.includes('webOutput=1')) {
-      childWindow.once('ready-to-show', () => {
+    if (details?.url?.includes("webOutput=1")) {
+      childWindow.once("ready-to-show", () => {
         childWindow.setPosition(-32000, -32000, false);
         childWindow.showInactive();
       });
       return;
     }
-    childWindow.once('ready-to-show', () => {
+    childWindow.once("ready-to-show", () => {
       if (!childWindow.isResizable()) {
-        if (process.platform === 'win32') {
-          const { screen } = require('electron');
+        if (process.platform === "win32") {
+          const { screen } = require("electron");
           const bounds = childWindow.getBounds();
           const display = screen.getDisplayMatching(bounds);
 
           childWindow.setFullScreen(false);
           childWindow.setBounds(display.bounds);
-          childWindow.setAlwaysOnTop(true, details?.url?.includes('module=clock') ? 'floating' : 'screen-saver');
+          childWindow.setAlwaysOnTop(true, details?.url?.includes("module=clock") ? "floating" : "screen-saver");
         } else {
           childWindow.setFullScreen(true);
         }
@@ -3668,7 +3655,7 @@ async function createWindow() {
 
   if (isDev) {
     // Em desenvolvimento, carrega o servidor Vite
-    mainWindow.loadURL('http://localhost:5173');
+    mainWindow.loadURL("http://localhost:5173");
     // mainWindow.webContents.openDevTools();
   } else {
     // Em produção, carrega o build estático por HTTP local para fornecer Referer válido a embeds externos.
@@ -3677,10 +3664,10 @@ async function createWindow() {
   }
 
   // Intercepta o evento de fechar para perguntar ao usuário
-  mainWindow.on('close', (e) => {
+  mainWindow.on("close", (e) => {
     if (!global.isQuitting) {
       e.preventDefault();
-      mainWindow.webContents.send('request-close-app');
+      mainWindow.webContents.send("request-close-app");
     }
   });
 }
@@ -3689,26 +3676,26 @@ async function createWindow() {
 
 // Registra o protocolo customizado como privilegiado ANTES do app estar pronto
 protocol.registerSchemesAsPrivileged([
-  { scheme: 'local', privileges: { standard: true, bypassCSP: true, supportFetchAPI: true, secure: true, corsEnabled: true, stream: true } }
+  { scheme: "local", privileges: { standard: true, bypassCSP: true, supportFetchAPI: true, secure: true, corsEnabled: true, stream: true } },
 ]);
 
 app.whenReady().then(async () => {
   await migrateLocalMusicLibrary({
-    appDataPath: app.getPath('appData'),
+    appDataPath: app.getPath("appData"),
     currentUserDataPath: userDataPath,
   });
 
   // Bloqueios de Segurança para Produção (Impede DevTools e Reload)
   if (!isDev) {
-    app.on('browser-window-created', (event, window) => {
-      window.webContents.on('before-input-event', (event, input) => {
-        const isReload = (input.control && input.key.toLowerCase() === 'r') || input.key === 'F5';
-        const isDevTools = (input.control && input.shift && input.key.toLowerCase() === 'i') || input.key === 'F12';
+    app.on("browser-window-created", (event, window) => {
+      window.webContents.on("before-input-event", (event, input) => {
+        const isReload = (input.control && input.key.toLowerCase() === "r") || input.key === "F5";
+        const isDevTools = (input.control && input.shift && input.key.toLowerCase() === "i") || input.key === "F12";
         if (isReload || isDevTools) {
           event.preventDefault();
         }
       });
-      window.webContents.on('devtools-opened', () => {
+      window.webContents.on("devtools-opened", () => {
         window.webContents.closeDevTools();
       });
     });
@@ -3716,23 +3703,23 @@ app.whenReady().then(async () => {
 
   // Protocolo customizado para carregar mídia local offline via API nativa do Chromium
   // Garante suporte perfeito a Range requests e MP4 metadata buffering
-  protocol.registerFileProtocol('local', (request, callback) => {
+  protocol.registerFileProtocol("local", (request, callback) => {
     let url;
     try {
       url = new URL(request.url);
-    } catch(e) {
+    } catch {
       return callback({ error: -2 }); // net::ERR_FAILED
     }
 
     let filePath = decodeURIComponent(url.pathname);
     const host = url.host;
 
-    if (host === 'app') {
+    if (host === "app") {
       // Arquivo externo absoluto (ex: local://app/Users/...)
-      if (process.platform === 'win32' && url.pathname.match(/^\/[a-zA-Z]%3A\//i)) {
+      if (process.platform === "win32" && url.pathname.match(/^\/[a-zA-Z]%3A\//i)) {
         filePath = decodeURIComponent(url.pathname).slice(1);
       }
-      if (process.platform === 'win32' && filePath.match(/^\/[a-zA-Z]:\//)) {
+      if (process.platform === "win32" && filePath.match(/^\/[a-zA-Z]:\//)) {
         filePath = filePath.slice(1);
       }
       if (!path.isAbsolute(filePath) || !fs.existsSync(filePath)) {
@@ -3742,27 +3729,27 @@ app.whenReady().then(async () => {
     }
 
     // Caminho relativo da biblioteca (ex: local:///musics/... ou local://media/covers/...)
-    let fallbackPath = '';
-    if (host === 'media') {
+    let fallbackPath = "";
+    if (host === "media") {
       fallbackPath = filePath;
     } else if (host) {
-      fallbackPath = '/' + host + filePath;
+      fallbackPath = `/${  host  }${filePath}`;
     } else {
       fallbackPath = filePath;
     }
 
-    const userDataPath = app.getPath('userData');
-    const mediaPath = path.join(userDataPath, 'Media');
+    const userDataPath = app.getPath("userData");
+    const mediaPath = path.join(userDataPath, "Media");
     filePath = path.join(mediaPath, fallbackPath);
 
     if (!fs.existsSync(filePath)) {
       // Proxy transparente: baixa da API e salva localmente antes de servir
-      const apiUrl = `https://api.louvorja.com.br/file${fallbackPath.replace(/\\/g, '/')}`;
+      const apiUrl = `https://api.louvorja.com.br/file${fallbackPath.replace(/\\/g, "/")}`;
       net.fetch(apiUrl).then(res => {
         if (res.ok) {
           return res.arrayBuffer();
         }
-        throw new Error('API request failed');
+        throw new Error("API request failed");
       }).then(buffer => {
         fs.mkdirSync(path.dirname(filePath), { recursive: true });
         fs.writeFileSync(filePath, Buffer.from(buffer));
@@ -3783,65 +3770,65 @@ app.whenReady().then(async () => {
   await createWindow();
   setupAutoUpdater();
 
-  const { screen } = require('electron');
+  const { screen } = require("electron");
   const notifyDisplaysChanged = () => {
     BrowserWindow.getAllWindows().forEach(win => {
       if (!win.isDestroyed()) {
-        win.webContents.send('displays-changed');
+        win.webContents.send("displays-changed");
       }
     });
   };
 
-  screen.on('display-added', notifyDisplaysChanged);
-  screen.on('display-removed', notifyDisplaysChanged);
-  screen.on('display-metrics-changed', notifyDisplaysChanged);
+  screen.on("display-added", notifyDisplaysChanged);
+  screen.on("display-removed", notifyDisplaysChanged);
+  screen.on("display-metrics-changed", notifyDisplaysChanged);
 
-  app.on('activate', () => {
+  app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) {
       createWindow().catch(error => {
-        console.error('Erro ao criar janela:', error);
+        console.error("Erro ao criar janela:", error);
       });
     }
   });
 });
 
 // Controle customizado da barra de título
-ipcMain.handle('window-control', (event, action) => {
+ipcMain.handle("window-control", (event, action) => {
   const win = BrowserWindow.fromWebContents(event.sender);
   if (!win) return;
-  if (action === 'minimize') {
+  if (action === "minimize") {
     win.minimize();
-  } else if (action === 'maximize') {
+  } else if (action === "maximize") {
     if (win.isMaximized()) {
       win.unmaximize();
     } else {
       win.maximize();
     }
-  } else if (action === 'close') {
+  } else if (action === "close") {
     // Em vez de fechar direto, pede confirmação
     if (win === BrowserWindow.getAllWindows()[0] || win.id === 1) { // mainWindow
-      win.webContents.send('request-close-app');
+      win.webContents.send("request-close-app");
     } else {
       win.close();
     }
-  } else if (action === 'is-maximized') {
+  } else if (action === "is-maximized") {
     return win.isMaximized();
   }
 });
 
 // Encerra o aplicativo inteiro à força após confirmação do usuário
-ipcMain.handle('force-quit-app', () => {
+ipcMain.handle("force-quit-app", () => {
   global.isQuitting = true;
   app.quit();
 });
-app.on('window-all-closed', () => {
+app.on("window-all-closed", () => {
   globalShortcut.unregisterAll();
-  if (process.platform !== 'darwin') {
+  if (process.platform !== "darwin") {
     app.quit();
   }
 });
 
-app.on('will-quit', () => {
+app.on("will-quit", () => {
   globalShortcut.unregisterAll();
   stopProductionAppServer();
   if (remoteControlServer) {
@@ -3857,7 +3844,7 @@ autoUpdater.autoDownload = false;
 autoUpdater.autoInstallOnAppQuit = true;
 
 let autoUpdaterInitialized = false;
-let autoUpdaterState = { status: 'idle' };
+let autoUpdaterState = { status: "idle" };
 
 function setAutoUpdaterState(status, payload = {}) {
   autoUpdaterState = {
@@ -3880,33 +3867,33 @@ function setupAutoUpdater() {
   if (autoUpdaterInitialized) return;
   autoUpdaterInitialized = true;
 
-  autoUpdater.on('update-available', (info) => {
-    console.log('Update available:', info.version);
-    setAutoUpdaterState('available', {
+  autoUpdater.on("update-available", (info) => {
+    console.log("Update available:", info.version);
+    setAutoUpdaterState("available", {
       version: info.version,
       releaseDate: info.releaseDate,
       releaseNotes: info.releaseNotes,
     });
-    sendAutoUpdaterEvent('update-available', {
+    sendAutoUpdaterEvent("update-available", {
       version: info.version,
       releaseDate: info.releaseDate,
       releaseNotes: info.releaseNotes,
     });
   });
 
-  autoUpdater.on('update-not-available', (info) => {
-    console.log('No update available. Current version is up-to-date.');
-    setAutoUpdaterState('not-available', { version: info.version });
-    sendAutoUpdaterEvent('update-not-available', {
+  autoUpdater.on("update-not-available", (info) => {
+    console.log("No update available. Current version is up-to-date.");
+    setAutoUpdaterState("not-available", { version: info.version });
+    sendAutoUpdaterEvent("update-not-available", {
       version: info.version,
     });
   });
 
-  autoUpdater.on('download-progress', (progress) => {
-    setAutoUpdaterState('downloading', {
+  autoUpdater.on("download-progress", (progress) => {
+    setAutoUpdaterState("downloading", {
       downloadPercent: Math.round(progress.percent),
     });
-    sendAutoUpdaterEvent('update-download-progress', {
+    sendAutoUpdaterEvent("update-download-progress", {
       percent: Math.round(progress.percent),
       bytesPerSecond: progress.bytesPerSecond,
       transferred: progress.transferred,
@@ -3914,61 +3901,61 @@ function setupAutoUpdater() {
     });
   });
 
-  autoUpdater.on('update-downloaded', (info) => {
-    console.log('Update downloaded:', info.version);
-    setAutoUpdaterState('ready', {
+  autoUpdater.on("update-downloaded", (info) => {
+    console.log("Update downloaded:", info.version);
+    setAutoUpdaterState("ready", {
       version: info.version,
       downloadPercent: 100,
     });
-    sendAutoUpdaterEvent('update-downloaded', {
+    sendAutoUpdaterEvent("update-downloaded", {
       version: info.version,
     });
   });
 
-  autoUpdater.on('error', (error) => {
-    console.error('Auto-updater error:', error.message);
-    setAutoUpdaterState('error', { error: error.message });
-    sendAutoUpdaterEvent('update-error', {
+  autoUpdater.on("error", (error) => {
+    console.error("Auto-updater error:", error.message);
+    setAutoUpdaterState("error", { error: error.message });
+    sendAutoUpdaterEvent("update-error", {
       message: error.message,
     });
   });
 
   // Verifica atualizações 5 segundos após iniciar
   setTimeout(() => {
-    if (autoUpdaterState.status !== 'idle') return;
-    setAutoUpdaterState('checking', { error: null });
+    if (autoUpdaterState.status !== "idle") return;
+    setAutoUpdaterState("checking", { error: null });
     autoUpdater.checkForUpdates().catch((err) => {
-      console.log('Check for updates failed:', err.message);
+      console.log("Check for updates failed:", err.message);
     });
   }, 5000);
 }
 
-ipcMain.handle('get-update-state', () => autoUpdaterState);
+ipcMain.handle("get-update-state", () => autoUpdaterState);
 
-ipcMain.handle('check-for-updates', async () => {
+ipcMain.handle("check-for-updates", async () => {
   try {
     setupAutoUpdater();
-    setAutoUpdaterState('checking', { error: null });
+    setAutoUpdaterState("checking", { error: null });
     const result = await autoUpdater.checkForUpdates();
     return result;
   } catch (error) {
-    console.error('Check for updates error:', error.message);
+    console.error("Check for updates error:", error.message);
     return null;
   }
 });
 
-ipcMain.handle('download-update', async () => {
+ipcMain.handle("download-update", async () => {
   try {
-    setAutoUpdaterState('downloading', { downloadPercent: 0, error: null });
+    setAutoUpdaterState("downloading", { downloadPercent: 0, error: null });
     await autoUpdater.downloadUpdate();
     return true;
   } catch (error) {
-    console.error('Download update error:', error.message);
+    console.error("Download update error:", error.message);
     return false;
   }
 });
 
-ipcMain.handle('quit-and-install', () => {
+ipcMain.handle("quit-and-install", () => {
   global.isQuitting = true;
   autoUpdater.quitAndInstall(true, true);
 });

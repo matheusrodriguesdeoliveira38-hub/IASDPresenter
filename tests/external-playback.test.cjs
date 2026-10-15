@@ -9,6 +9,29 @@ function component(name, globals = {}) {
   }, globals).default;
 }
 
+test('YouTube embeds disable captions even when the original link requests them', () => {
+  const { getYouTubeEmbedUrl } = loadTs('src/helpers/YouTube.ts', {}, { URL, URLSearchParams });
+  const url = getYouTubeEmbedUrl('https://www.youtube.com/watch?v=dQw4w9WgXcQ&cc_load_policy=1');
+  assert.equal(new URL(url).searchParams.get('cc_load_policy'), '0');
+});
+
+for (const name of ['Index', 'Popup']) {
+  test(name + ' disables captions when the YouTube captions module loads later', () => {
+    const frame = {};
+    const calls = [];
+    const context = { isYouTube: true, isClosing: false,
+      $refs: { youtubeFrame: { contentWindow: frame }, popupYouTube: { contentWindow: frame } },
+      sendYouTubeCommand: (...args) => calls.push(args) };
+    const handle = component(name).methods.handleYouTubeMessage;
+    const event = { origin: 'https://www.youtube.com', source: frame, data: { event: 'onApiChange' } };
+    handle.call(context, { ...event, source: {} });
+    assert.equal(calls.length, 0);
+    handle.call(context, event);
+    assert.equal(calls[0][0], 'unloadModule');
+    assert.deepEqual(Array.from(calls[0][1]), ['captions']);
+  });
+}
+
 test('new playback starts at maximum volume even after a muted or quieter item', () => {
   const { openExternalMedia } = loadTs('src/helpers/ExternalMedia.ts');
   for (const previousVolume of [0, 25, 73]) {
@@ -79,6 +102,29 @@ test('forced projection seek is immediate even inside the usual drift correction
   assert.deepEqual(JSON.parse(JSON.stringify(calls)), [['pauseVideo'], ['seekTo', [0, true]]]);
 });
 
+test('YouTube projection waits for a time sample and tolerates loading drift', () => {
+  const calls = [];
+  const context = { isYouTube: true, youtubeReady: true, isPaused: false, isBuffering: false,
+    popupYouTubeCurrentTime: 0, youtubeSampleAt: 0, lastYouTubeSyncAt: 0,
+    getSynchronizedTargetTime: () => 20, sendYouTubeCommand: (...args) => calls.push(args) };
+  const sync = component('Popup').methods.syncPlaybackPosition;
+  sync.call(context);
+  assert.equal(calls.some(([command]) => command === 'seekTo'), false);
+  context.youtubeSampleAt = Date.now();
+  context.isBuffering = true;
+  sync.call(context);
+  assert.equal(calls.some(([command]) => command === 'seekTo'), false);
+  context.isBuffering = false;
+  context.popupYouTubeCurrentTime = 19.5;
+  sync.call(context);
+  assert.equal(calls.some(([command]) => command === 'seekTo'), false);
+  context.popupYouTubeCurrentTime = 10;
+  sync.call(context);
+  assert.equal(calls.filter(([command]) => command === 'seekTo').length, 1);
+  sync.call(context);
+  assert.equal(calls.filter(([command]) => command === 'seekTo').length, 1);
+});
+
 for (const name of ['Index', 'Popup']) {
   test(name + ' initializes YouTube once after readiness and assigns audio ownership', () => {
     const timers = new Set();
@@ -106,10 +152,11 @@ for (const name of ['Index', 'Popup']) {
     assert.equal(context.youtubeReady, false);
     definition.methods.handleYouTubeMessage.call(context, ready);
     const expected = name === 'Index'
-      ? ['addEventListener', 'unMute', 'setVolume', 'seekTo', 'playVideo']
-      : ['addEventListener', 'mute', 'seekTo', 'playVideo'];
+      ? ['addEventListener', 'addEventListener', 'unloadModule', 'unMute', 'setVolume', 'seekTo', 'playVideo']
+      : ['addEventListener', 'addEventListener', 'unloadModule', 'mute', 'seekTo', 'playVideo'];
     assert.deepEqual(messages.filter(message => message.event === 'command').map(message => message.func), expected);
     assert.deepEqual(messages.find(message => message.func === 'seekTo').args, [0, true]);
+    assert.deepEqual(messages.find(message => message.func === 'unloadModule').args, ['captions']);
     if (name === 'Index') assert.deepEqual(messages.find(message => message.func === 'setVolume').args, [73]);
     assert.equal(timers.size, 0);
     const count = messages.length;

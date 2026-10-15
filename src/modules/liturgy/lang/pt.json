@@ -24,7 +24,7 @@
     "music": "Música",
     "verse": "Versículo",
     "media": "Mídia",
-    "presentation": "Apresenta\u00e7\u00e3o",
+    "presentation": "Apresentação",
     "link": "Link"
   },
   "type_descriptions": {
@@ -94,5 +94,32 @@
     "new": "Nova Liturgia Avulsa",
     "imported_name": "Liturgia Importada",
     "name_placeholder": "Nome da liturgia (ex: Culto Jovem 12/07)"
+  },
+  "timing": {
+    "title": "Tempo por etapa",
+    "total": "Total das durações",
+    "unplanned": "{count} sem limite definido",
+    "stage": "Etapa",
+    "start": "Iniciar etapa",
+    "pause": "Pausar",
+    "resume": "Continuar",
+    "finish": "Encerrar etapa",
+    "dismiss": "Limpar",
+    "finished": "Encerrada",
+    "paused": "Pausado",
+    "overdue": "Tempo excedido",
+    "remaining": "Restante",
+    "elapsed": "Decorrido",
+    "hint": "Início manual. Encerre a etapa atual antes de iniciar outra. O tempo aparece no retorno.",
+    "duration": "Duração prevista (minutos)",
+    "duration_hint": "Opcional. Use 0 para acompanhar apenas o tempo decorrido.",
+    "invalid_duration": "Informe um valor entre 0 e 1440 minutos.",
+    "mode": "Limite da etapa",
+    "by_duration": "Duração em minutos",
+    "by_deadline": "Horário de encerramento",
+    "end_time": "Encerrar às",
+    "end_time_hint": "Horário local do dia em que iniciar a etapa. Pausar não adia esse horário. Se já passou, o tempo aparece excedido.",
+    "invalid_end_time": "Informe um horário válido.",
+    "until": "Até"
   }
 }

@@ -1,17 +1,22 @@
-const { readRecoverableFile, writeRecoverableJson } = require('./FileRecovery');
+const { readRecoverableFile, writeRecoverableJson } = require("./FileRecovery");
 
 function isUserData(value) {
-  return value !== null && typeof value === 'object' && !Array.isArray(value);
+  return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
 function readUserData(filePath) {
-  const data = readRecoverableFile(filePath);
-  return isUserData(data) ? data : null;
+  return readRecoverableFile(filePath, {
+    parse(content) {
+      const data = JSON.parse(content);
+      if (!isUserData(data)) throw new TypeError("Os dados do usuario devem ser um objeto.");
+      return data;
+    },
+  });
 }
 
 function writeUserData(filePath, data) {
   if (!isUserData(data)) {
-    throw new TypeError('Os dados do usuario devem ser um objeto.');
+    throw new TypeError("Os dados do usuario devem ser um objeto.");
   }
 
   return writeRecoverableJson(filePath, data);

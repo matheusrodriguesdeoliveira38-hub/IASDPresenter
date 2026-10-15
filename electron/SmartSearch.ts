@@ -1,16 +1,16 @@
 function normalizeSmartSearchText(value) {
-  return String(value || '')
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
+  return String(value || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
     .toLowerCase()
-    .replace(/[^a-z0-9\s]/g, ' ')
-    .replace(/\s+/g, ' ')
+    .replace(/[^a-z0-9\s]/g, " ")
+    .replace(/\s+/g, " ")
     .trim();
 }
 
 function smartEditDistance(left, right) {
-  const a = String(left || '');
-  const b = String(right || '');
+  const a = String(left || "");
+  const b = String(right || "");
   if (!a.length) return b.length;
   if (!b.length) return a.length;
 
@@ -37,8 +37,8 @@ function smartTokenScore(query, target) {
   if (cleanTarget.startsWith(cleanQuery)) return 82;
   if (cleanTarget.includes(cleanQuery)) return 68;
 
-  const queryTerms = cleanQuery.split(' ').filter(Boolean);
-  const targetTerms = cleanTarget.split(' ').filter(Boolean);
+  const queryTerms = cleanQuery.split(" ").filter(Boolean);
+  const targetTerms = cleanTarget.split(" ").filter(Boolean);
   if (!queryTerms.length || !targetTerms.length) return 0;
 
   let total = 0;

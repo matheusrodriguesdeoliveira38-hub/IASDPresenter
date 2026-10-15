@@ -5,7 +5,9 @@
       <span class="opening-heading-copy">{{ hymnal ? "HINÁRIO ADVENTISTA DO SÉTIMO DIA" : album }}</span>
     </div>
     <span v-if="hymnal" class="opening-logo opening-logo-large" aria-hidden="true" />
-    <div v-if="hymnal && number" class="opening-number">{{ number }}</div>
+    <div v-if="hymnal && number" class="opening-number">
+{{ number }}
+</div>
     <div class="opening-frame" aria-hidden="true">
       <svg viewBox="0 0 124 124">
         <path d="M123 19 V1 H1 V123 H123 V105" pathLength="402" />

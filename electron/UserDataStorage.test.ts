@@ -1,23 +1,23 @@
-const assert = require('node:assert/strict');
-const fs = require('node:fs');
-const os = require('node:os');
-const path = require('node:path');
-const test = require('node:test');
+const assert = require("node:assert/strict");
+const fs = require("node:fs");
+const os = require("node:os");
+const path = require("node:path");
+const test = require("node:test");
 
-const { readUserData, writeUserData } = require('./UserDataStorage');
+const { readUserData, writeUserData } = require("./UserDataStorage");
 
-test('persists liturgy data between application sessions', async (t) => {
-  const workspace = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'iasdpresenter-user-data-'));
+test("persists liturgy data between application sessions", async (t) => {
+  const workspace = await fs.promises.mkdtemp(path.join(os.tmpdir(), "iasdpresenter-user-data-"));
   t.after(() => fs.promises.rm(workspace, { recursive: true, force: true }));
 
-  const filePath = path.join(workspace, 'user-data.json');
+  const filePath = path.join(workspace, "user-data.json");
   const data = {
     modules: {
       liturgy: {
         liturgies: {
-          saturday: [{ id: 1, type: 'music', name: 'Hino inicial' }],
+          saturday: [{ id: 1, type: "music", name: "Hino inicial" }],
         },
-        dayNotes: { saturday: 'Culto divino' },
+        dayNotes: { saturday: "Culto divino" },
         customLiturgies: [],
       },
     },
@@ -27,11 +27,34 @@ test('persists liturgy data between application sessions', async (t) => {
   assert.deepEqual(readUserData(filePath), data);
 });
 
-test('rejects invalid root values', async (t) => {
-  const workspace = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'iasdpresenter-user-data-'));
+test("rejects invalid root values", async (t) => {
+  const workspace = await fs.promises.mkdtemp(path.join(os.tmpdir(), "iasdpresenter-user-data-"));
   t.after(() => fs.promises.rm(workspace, { recursive: true, force: true }));
 
-  const filePath = path.join(workspace, 'user-data.json');
+  const filePath = path.join(workspace, "user-data.json");
   assert.throws(() => writeUserData(filePath, []), /devem ser um objeto/);
   assert.equal(readUserData(filePath), null);
+});
+
+test("recovers valid user data when the primary JSON has an invalid root", async (t) => {
+  const workspace = await fs.promises.mkdtemp(path.join(os.tmpdir(), "iasdpresenter-user-data-"));
+  t.after(() => fs.promises.rm(workspace, { recursive: true, force: true }));
+  const filePath = path.join(workspace, "user-data.json");
+  const data = { modules: { liturgy: { saved: true } } };
+  for (const invalid of [[], null, "text", 42, true]) {
+    writeUserData(filePath, data);
+    fs.writeFileSync(filePath, JSON.stringify(invalid));
+    assert.deepEqual(readUserData(filePath), data);
+    assert.deepEqual(JSON.parse(fs.readFileSync(filePath, "utf8")), data);
+  }
+});
+
+test("repairs an invalid backup from valid user data", async (t) => {
+  const workspace = await fs.promises.mkdtemp(path.join(os.tmpdir(), "iasdpresenter-user-data-"));
+  t.after(() => fs.promises.rm(workspace, { recursive: true, force: true }));
+  const filePath = path.join(workspace, "user-data.json");
+  writeUserData(filePath, { saved: true });
+  fs.writeFileSync(`${filePath}.bak`, "[]");
+  assert.deepEqual(readUserData(filePath), { saved: true });
+  assert.deepEqual(JSON.parse(fs.readFileSync(`${filePath}.bak`, "utf8")), { saved: true });
 });

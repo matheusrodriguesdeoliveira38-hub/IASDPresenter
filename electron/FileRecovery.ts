@@ -1,12 +1,12 @@
-const fs = require('fs');
-const path = require('path');
+const fs = require("fs");
+const path = require("path");
 
 function defaultParse(content) {
   return JSON.parse(content);
 }
 
 function readAndParse(filePath, parse) {
-  const content = fs.readFileSync(filePath, 'utf8');
+  const content = fs.readFileSync(filePath, "utf8");
   return { content, data: parse(content) };
 }
 
@@ -15,7 +15,7 @@ function replaceFile(filePath, content) {
   const tempPath = `${filePath}.${process.pid}.${Date.now()}.tmp`;
 
   try {
-    fs.writeFileSync(tempPath, content, 'utf8');
+    fs.writeFileSync(tempPath, content, "utf8");
     fs.rmSync(filePath, { force: true });
     fs.renameSync(tempPath, filePath);
   } finally {
@@ -23,7 +23,16 @@ function replaceFile(filePath, content) {
   }
 }
 
-function writeRecoverableFile(filePath, content, options = {}) {
+type RecoveryOptions = {
+  parse?: (content: string) => unknown;
+  backupPath?: string;
+  validate?: boolean;
+  backup?: boolean;
+  logger?: Pick<Console, "warn">;
+  spacing?: number;
+};
+
+function writeRecoverableFile(filePath, content, options: RecoveryOptions = {}) {
   const parse = options.parse || defaultParse;
   const backupPath = options.backupPath || `${filePath}.bak`;
 
@@ -34,7 +43,7 @@ function writeRecoverableFile(filePath, content, options = {}) {
   return true;
 }
 
-function readRecoverableFile(filePath, options = {}) {
+function readRecoverableFile(filePath, options: RecoveryOptions = {}) {
   const parse = options.parse || defaultParse;
   const backupPath = options.backupPath || `${filePath}.bak`;
   const logger = options.logger || console;
@@ -45,25 +54,33 @@ function readRecoverableFile(filePath, options = {}) {
     // Upgrade files created before recovery support and repair a bad backup.
     try {
       readAndParse(backupPath, parse);
-    } catch (error) {
-      replaceFile(backupPath, primary.content);
+    } catch {
+      try {
+        replaceFile(backupPath, primary.content);
+      } catch (writeError) {
+        logger.warn(`[Recovery] Nao foi possivel atualizar o backup: ${path.basename(filePath)}`, writeError);
+      }
     }
 
     return primary.data;
-  } catch (primaryError) {
+  } catch {
     try {
       const backup = readAndParse(backupPath, parse);
-      replaceFile(filePath, backup.content);
-      logger.warn(`[Recovery] Arquivo restaurado automaticamente: ${path.basename(filePath)}`);
+      try {
+        replaceFile(filePath, backup.content);
+        logger.warn(`[Recovery] Arquivo restaurado automaticamente: ${path.basename(filePath)}`);
+      } catch (writeError) {
+        logger.warn(`[Recovery] Dados lidos do backup; nao foi possivel restaurar o arquivo: ${path.basename(filePath)}`, writeError);
+      }
       return backup.data;
-    } catch (backupError) {
+    } catch {
       return null;
     }
   }
 }
 
-function writeRecoverableJson(filePath, data, options = {}) {
-  const spacing = Object.prototype.hasOwnProperty.call(options, 'spacing') ? options.spacing : 2;
+function writeRecoverableJson(filePath, data, options: RecoveryOptions = {}) {
+  const spacing = Object.prototype.hasOwnProperty.call(options, "spacing") ? options.spacing : 2;
   return writeRecoverableFile(filePath, JSON.stringify(data, null, spacing), options);
 }
 

@@ -11,6 +11,8 @@ const { default: component } = loadTs('src/modules/liturgy/interface/Index.vue',
   '@/helpers/HymnalPreference': {},
   '../manifest.json': {},
   '@/components/MenuToggleButton.vue': {},
+  '@/components/LiturgyTimingPanel.vue': {},
+  '@/helpers/LiturgyTiming': loadTs('src/helpers/LiturgyTiming.ts'),
   vuedraggable: {},
   './RichTextEditor.vue': {},
   '@/helpers/ExternalMedia': {},
@@ -119,4 +121,36 @@ test('collapsed categories survive the saved liturgy payload', () => {
   component.methods.saveLiturgy.call(ctx);
   assert.equal(saved['modules.liturgy.liturgies'].sunday[0].collapsed, true);
   assert.deepEqual(ids(saved['modules.liturgy.liturgies'].sunday), ['a', 'a1']);
+});
+
+test('stage duration survives edit, persistence, export and import of a legacy liturgy', async () => {
+  const ctx = context([{ id: 'prayer', type: 'annotation', name: 'Prayer' }]);
+  ctx.editItem(0);
+  assert.equal(ctx.addForm.plannedMinutes, 0);
+  ctx.addForm.plannedMinutes = '2.5';
+  await ctx.saveItem();
+  assert.equal(ctx.currentItems[0].plannedMinutes, 2.5);
+  const saved = {};
+  ctx.$userdata = { set: (key, value) => { saved[key] = value; } };
+  ctx.module_id = 'liturgy';
+  ctx.liturgies.sunday = ctx.currentItems;
+  component.methods.saveLiturgy.call(ctx);
+  assert.equal(saved['modules.liturgy.liturgies'].sunday[0].plannedMinutes, 2.5);
+  const payload = ctx.createExportPayload();
+  const imported = ctx.normalizeImportedLiturgies(payload);
+  assert.equal(imported.liturgies.sunday[0].plannedMinutes, 2.5);
+  ctx.editItem(0);
+  ctx.addForm.plannedMinutes = -1;
+  await ctx.saveItem();
+  assert.equal(ctx.currentItems[0].plannedMinutes, 2.5);
+  ctx.addForm.timingMode = 'deadline';
+  ctx.addForm.endTime = '11:30';
+  await ctx.saveItem();
+  ctx.editItem(0);
+  assert.equal(ctx.addForm.timingMode, 'deadline');
+  assert.equal(ctx.addForm.endTime, '11:30');
+  assert.equal(ctx.normalizeImportedLiturgies(ctx.createExportPayload()).liturgies.sunday[0].endTime, '11:30');
+  ctx.addForm.endTime = '25:00';
+  await ctx.saveItem();
+  assert.equal(ctx.currentItems[0].endTime, '11:30');
 });

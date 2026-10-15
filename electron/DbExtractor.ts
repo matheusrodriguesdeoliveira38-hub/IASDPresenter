@@ -1,34 +1,45 @@
-const path = require('path');
-const fs = require('fs-extra');
-const crypto = require('crypto');
+const path = require("path");
+const fs = require("fs-extra");
+const crypto = require("crypto");
 
-const ENCRYPTION_KEY = Buffer.from('v389s8dkj238910s8a7d3h2j1k9s8d7f', 'utf8');
+const ENCRYPTION_KEY = Buffer.from("v389s8dkj238910s8a7d3h2j1k9s8d7f", "utf8");
 const IV_LENGTH = 16;
 
 function encryptData(text) {
   try {
     const iv = crypto.randomBytes(IV_LENGTH);
-    const cipher = crypto.createCipheriv('aes-256-cbc', ENCRYPTION_KEY, iv);
-    let encrypted = cipher.update(text, 'utf8', 'hex');
-    encrypted += cipher.final('hex');
-    return iv.toString('hex') + ':' + encrypted;
+    const cipher = crypto.createCipheriv("aes-256-cbc", ENCRYPTION_KEY, iv);
+    let encrypted = cipher.update(text, "utf8", "hex");
+    encrypted += cipher.final("hex");
+    return `${iv.toString("hex")  }:${  encrypted}`;
   } catch (e) {
-    console.error('Erro ao ofuscar dados', e);
+    console.error("Erro ao ofuscar dados", e);
     return null;
   }
 }
 
 class DbExtractor {
-  constructor(dbPath, language = 'pt', sourceLanguage = language, options = {}) {
+  dbPath: string;
+  language: string;
+  sourceLanguage: string;
+  sysdataDir: string;
+  openDatabase: (file: string) => any;
+  writeJson?: (filename: string, data: unknown) => void;
+
+  constructor(dbPath, language = "pt", sourceLanguage = language, options: {
+    directory?: string;
+    openDatabase?: (file: string) => any;
+    writeJson?: (filename: string, data: unknown) => void;
+  } = {}) {
     this.dbPath = dbPath;
-    this.language = ['pt', 'en', 'es'].includes(language) ? language : 'pt';
-    this.sourceLanguage = ['pt', 'en', 'es'].includes(sourceLanguage) ? sourceLanguage : this.language;
-    this.sysdataDir = options.directory || path.join(require('electron').app.getPath('userData'), '.sysdata');
-    this.openDatabase = options.openDatabase || (file => new (require('better-sqlite3'))(file, { readonly: true }));
+    this.language = ["pt", "en", "es"].includes(language) ? language : "pt";
+    this.sourceLanguage = ["pt", "en", "es"].includes(sourceLanguage) ? sourceLanguage : this.language;
+    this.sysdataDir = options.directory || path.join(require("electron").app.getPath("userData"), ".sysdata");
+    this.openDatabase = options.openDatabase || (file => new (require("better-sqlite3"))(file, { readonly: true }));
     this.writeJson = options.writeJson;
   }
 
-  async extract(progressCallback = () => {}) {
+  async extract(progressCallback: (progress: { text: string; progress: number }) => void = () => {}) {
     if (!fs.existsSync(this.dbPath)) {
       throw new Error(`Database file not found at ${this.dbPath}`);
     }
@@ -39,31 +50,31 @@ class DbExtractor {
     try {
       this.validateLanguage(db);
 
-      progressCallback({ text: 'Extraindo categorias...', progress: 10 });
+      progressCallback({ text: "Extraindo categorias...", progress: 10 });
       this.extractCategories(db);
 
-      progressCallback({ text: 'Extraindo álbuns...', progress: 20 });
+      progressCallback({ text: "Extraindo álbuns...", progress: 20 });
       this.extractAlbumsAndMusics(db, progressCallback);
 
-      progressCallback({ text: 'Criando indice de musicas...', progress: 55 });
+      progressCallback({ text: "Criando indice de musicas...", progress: 55 });
       this.extractMusicIndex(db);
 
-      progressCallback({ text: 'Extraindo hinários...', progress: 60 });
+      progressCallback({ text: "Extraindo hinários...", progress: 60 });
       this.extractHymnals(db);
 
-      progressCallback({ text: 'Extraindo Bíblias...', progress: 70 });
+      progressCallback({ text: "Extraindo Bíblias...", progress: 70 });
       this.extractBibles(db, progressCallback);
 
-      progressCallback({ text: 'Extração concluída', progress: 100 });
+      progressCallback({ text: "Extração concluída", progress: 100 });
     } finally {
       db.close();
     }
   }
 
   validateLanguage(db) {
-    const albums = db.prepare('SELECT COUNT(*) AS total FROM albums WHERE id_language = ?').get(this.sourceLanguage);
-    const books = db.prepare('SELECT COUNT(*) AS total FROM bible_book WHERE id_language = ?').get(this.sourceLanguage);
-    const versions = db.prepare('SELECT COUNT(*) AS total FROM bible_version WHERE id_language = ?').get(this.sourceLanguage);
+    const albums = db.prepare("SELECT COUNT(*) AS total FROM albums WHERE id_language = ?").get(this.sourceLanguage);
+    const books = db.prepare("SELECT COUNT(*) AS total FROM bible_book WHERE id_language = ?").get(this.sourceLanguage);
+    const versions = db.prepare("SELECT COUNT(*) AS total FROM bible_version WHERE id_language = ?").get(this.sourceLanguage);
 
     if (!albums?.total || !books?.total || !versions?.total) {
       throw new Error(`Database does not contain the required data for language "${this.sourceLanguage}".`);
@@ -72,7 +83,7 @@ class DbExtractor {
 
   saveJson(filename, data) {
     if (this.writeJson) return this.writeJson(filename, data);
-    const { writeRecoverableFile } = require('./FileRecovery');
+    const { writeRecoverableFile } = require("./FileRecovery");
     const filePath = path.join(this.sysdataDir, `${filename}.bin`);
     const jsonString = JSON.stringify(data);
     const encryptedContent = encryptData(jsonString);
@@ -84,13 +95,13 @@ class DbExtractor {
         validate: false,
         backup: false,
         parse: (content) => {
-          const parts = content.split(':');
-          if (parts.length !== 2) throw new Error('Conteudo criptografado invalido.');
-          const iv = Buffer.from(parts[0], 'hex');
-          const encrypted = Buffer.from(parts[1], 'hex');
-          const decipher = crypto.createDecipheriv('aes-256-cbc', ENCRYPTION_KEY, iv);
-          let decrypted = decipher.update(encrypted, 'hex', 'utf8');
-          decrypted += decipher.final('utf8');
+          const parts = content.split(":");
+          if (parts.length !== 2) throw new Error("Conteudo criptografado invalido.");
+          const iv = Buffer.from(parts[0], "hex");
+          const encrypted = Buffer.from(parts[1], "hex");
+          const decipher = crypto.createDecipheriv("aes-256-cbc", ENCRYPTION_KEY, iv);
+          let decrypted = decipher.update(encrypted, "hex", "utf8");
+          decrypted += decipher.final("utf8");
           return JSON.parse(decrypted);
         },
       });
@@ -98,7 +109,7 @@ class DbExtractor {
   }
 
   extractCategories(db) {
-    const categoriesRows = db.prepare(`SELECT * FROM categories WHERE id_language = ? ORDER BY \`order\` ASC`).all(this.sourceLanguage);
+    const categoriesRows = db.prepare("SELECT * FROM categories WHERE id_language = ? ORDER BY `order` ASC").all(this.sourceLanguage);
     const albumRows = db.prepare(`
       SELECT ca.id_category, ca.id_album, a.name, a.color, f.dir, f.file_name,
              ca.name as subtitle, ca.\`order\`
@@ -117,8 +128,8 @@ class DbExtractor {
         name: row.name,
         color: row.color,
         url_image: (row.dir && row.file_name) ? `${row.dir}/${row.file_name}` : null,
-        subtitle: row.subtitle || '',
-        order: row.order
+        subtitle: row.subtitle || "",
+        order: row.order,
       });
     }
 
@@ -129,7 +140,7 @@ class DbExtractor {
         name: cat.name,
         slug: cat.slug,
         order: cat.order,
-        albums: albums.length > 0 ? albums : undefined
+        albums: albums.length > 0 ? albums : undefined,
       };
     });
 
@@ -199,10 +210,10 @@ class DbExtractor {
       }
       return grouped;
     };
-    const categoriesByAlbum = groupBy(categoriesRows, 'id_album');
-    const musicsByAlbum = groupBy(musicsRows, 'id_album');
-    const lyricsByMusic = groupBy(lyricsRows, 'id_music');
-    const albumsByMusic = groupBy(musicAlbumsRows, 'id_music');
+    const categoriesByAlbum = groupBy(categoriesRows, "id_album");
+    const musicsByAlbum = groupBy(musicsRows, "id_album");
+    const lyricsByMusic = groupBy(lyricsRows, "id_music");
+    const albumsByMusic = groupBy(musicAlbumsRows, "id_music");
     const savedMusics = new Set();
     const totalAlbums = albums.length;
 
@@ -212,7 +223,7 @@ class DbExtractor {
       const albumJson = {
         id_album: album.id_album,
         name: album.name,
-        color: album.color || '',
+        color: album.color || "",
         url_image: (album.dir && album.file_name) ? `${album.dir}/${album.file_name}` : null,
         categories: categories.length > 0 ? categories : undefined,
         musics: albumMusics.map(music => ({
@@ -220,8 +231,8 @@ class DbExtractor {
           name: music.name,
           has_instrumental_music: music.im_file ? 1 : 0,
           duration: music.duration,
-          track: music.track
-        }))
+          track: music.track,
+        })),
       };
 
       for (const music of albumMusics) {
@@ -237,14 +248,14 @@ class DbExtractor {
           time: item.time,
           instrumental_time: item.instrumental_time,
           show_slide: item.show_slide,
-          order: item.order
+          order: item.order,
         }));
         const musicAlbums = (albumsByMusic.get(music.id_music) || []).map(item => ({
           id_album: item.id_album,
           name: item.name,
           track: item.track,
           url_image: (item.dir && item.file_name) ? `${item.dir}/${item.file_name}` : null,
-          order: item.order || 0
+          order: item.order || 0,
         }));
 
         this.saveJson(`music_${music.id_music}`, {
@@ -257,7 +268,7 @@ class DbExtractor {
           url_music: (music.m_dir && music.m_file) ? `${music.m_dir}/${music.m_file}` : null,
           url_instrumental_music: (music.im_dir && music.im_file) ? `${music.im_dir}/${music.im_file}` : null,
           lyric,
-          albums: musicAlbums
+          albums: musicAlbums,
         });
       }
 
@@ -265,7 +276,7 @@ class DbExtractor {
       const processedAlbums = albumIndex + 1;
       if (processedAlbums % 10 === 0 || processedAlbums === totalAlbums) {
         const fraction = totalAlbums ? processedAlbums / totalAlbums : 1;
-        progressCallback({ text: 'Extraindo albuns...', progress: 20 + Math.floor(fraction * 35) });
+        progressCallback({ text: "Extraindo albuns...", progress: 20 + Math.floor(fraction * 35) });
       }
     });
   }
@@ -321,14 +332,14 @@ class DbExtractor {
         name: album.name,
         type: album.type,
         pivot: {
-          track: album.track
-        }
+          track: album.track,
+        },
       });
     }
 
     const lyricsByMusic = new Map();
     for (const lyric of lyricsRows) {
-      const text = [lyric.lyric, lyric.aux_lyric].filter(Boolean).join(' ');
+      const text = [lyric.lyric, lyric.aux_lyric].filter(Boolean).join(" ");
       if (!lyricsByMusic.has(lyric.id_music)) lyricsByMusic.set(lyric.id_music, []);
       if (text.trim()) lyricsByMusic.get(lyric.id_music).push(text);
     }
@@ -342,8 +353,8 @@ class DbExtractor {
         has_music: row.music_file ? 1 : 0,
         has_instrumental_music: row.instrumental_file ? 1 : 0,
         albums,
-        albums_names: albums.map(album => album.name).join(' '),
-        lyric: (lyricsByMusic.get(row.id_music) || []).join(' ')
+        albums_names: albums.map(album => album.name).join(" "),
+        lyric: (lyricsByMusic.get(row.id_music) || []).join(" "),
       };
     });
 
@@ -351,7 +362,7 @@ class DbExtractor {
   }
 
   extractHymnals(db) {
-    if (this.language !== 'pt' || this.sourceLanguage !== 'pt') return;
+    if (this.language !== "pt" || this.sourceLanguage !== "pt") return;
 
     const rows = db.prepare(`
       SELECT am.id_album, am.track, m.id_music, m.name,
@@ -387,22 +398,22 @@ class DbExtractor {
           track: row.track,
           has_instrumental_music: row.im_file ? 1 : 0,
           duration: row.duration,
-          lyric: lyrics.length ? `${lyrics.join(' ')} ` : ''
+          lyric: lyrics.length ? `${lyrics.join(" ")} ` : "",
         };
       });
 
     try {
-      this.saveJson('pt_hymnal', getHymnalData(712));
-      this.saveJson('pt_hymnal_1996', getHymnalData(629));
+      this.saveJson("pt_hymnal", getHymnalData(712));
+      this.saveJson("pt_hymnal_1996", getHymnalData(629));
     } catch (error) {
-      console.log('Hinarios ignorados caso nao existam:', error.message);
+      console.log("Hinarios ignorados caso nao existam:", error.message);
     }
   }
   extractBibles(db, progressCallback) {
-    const books = db.prepare(`SELECT * FROM bible_book WHERE id_language = ? ORDER BY book_number ASC`).all(this.sourceLanguage);
+    const books = db.prepare("SELECT * FROM bible_book WHERE id_language = ? ORDER BY book_number ASC").all(this.sourceLanguage);
     this.saveJson(`${this.language}_bible_book`, books);
 
-    const versions = db.prepare(`SELECT * FROM bible_version WHERE id_language = ?`).all(this.sourceLanguage);
+    const versions = db.prepare("SELECT * FROM bible_version WHERE id_language = ?").all(this.sourceLanguage);
     this.saveJson(`${this.language}_bible_version`, versions);
 
     let processedChapters = 0;
@@ -429,7 +440,7 @@ class DbExtractor {
           processedChapters++;
           if (processedChapters % 100 === 0 || processedChapters === totalChapters) {
             const fraction = totalChapters ? processedChapters / totalChapters : 1;
-            progressCallback({ text: 'Extraindo Biblias...', progress: 70 + Math.floor(fraction * 30) });
+            progressCallback({ text: "Extraindo Biblias...", progress: 70 + Math.floor(fraction * 30) });
           }
         }
       }

@@ -1,5 +1,5 @@
-const fs = require('fs');
-const path = require('path');
+const fs = require("fs");
+const path = require("path");
 
 const MIGRATION_VERSION = 1;
 const MARKER_FILENAME = `.music-library-migration-v${MIGRATION_VERSION}.json`;
@@ -8,7 +8,7 @@ function isUsableFile(filePath) {
   try {
     const stats = fs.statSync(filePath);
     return stats.isFile() && stats.size > 0;
-  } catch (error) {
+  } catch {
     return false;
   }
 }
@@ -26,9 +26,9 @@ function uniquePaths(paths) {
 function getLegacyUserDataPaths(appDataPath, currentUserDataPath) {
   const current = path.resolve(currentUserDataPath).toLowerCase();
   return uniquePaths([
-    path.join(appDataPath, 'Louvor JA'),
-    path.join(appDataPath, 'LouvorJA'),
-    path.join(appDataPath, 'louvorja'),
+    path.join(appDataPath, "Louvor JA"),
+    path.join(appDataPath, "LouvorJA"),
+    path.join(appDataPath, "louvorja"),
   ]).filter(candidate => path.resolve(candidate).toLowerCase() !== current);
 }
 
@@ -65,7 +65,7 @@ async function copyDirectoryContents(sourceDir, destinationDir, summary) {
   try {
     entries = await fs.promises.readdir(sourceDir, { withFileTypes: true });
   } catch (error) {
-    if (error.code === 'ENOENT') return;
+    if (error.code === "ENOENT") return;
     throw error;
   }
 
@@ -84,11 +84,11 @@ async function copyDirectoryContents(sourceDir, destinationDir, summary) {
 async function migrateLocalMusicLibrary({ appDataPath, currentUserDataPath, logger = console }) {
   const markerPath = path.join(currentUserDataPath, MARKER_FILENAME);
   try {
-    const marker = JSON.parse(fs.readFileSync(markerPath, 'utf8'));
+    const marker = JSON.parse(fs.readFileSync(markerPath, "utf8"));
     if (marker.version === MIGRATION_VERSION && marker.completedAt) {
       return { migrated: false, alreadyCompleted: true };
     }
-  } catch (error) {
+  } catch {
     // Missing or invalid markers are retried and replaced after a successful migration.
     fs.rmSync(markerPath, { recursive: true, force: true });
   }
@@ -107,17 +107,17 @@ async function migrateLocalMusicLibrary({ appDataPath, currentUserDataPath, logg
     const legacyUserDataPaths = getLegacyUserDataPaths(appDataPath, currentUserDataPath);
     for (const legacyUserDataPath of legacyUserDataPaths) {
       for (const legacyMusicPath of [
-        path.join(legacyUserDataPath, 'Media', 'music'),
-        path.join(legacyUserDataPath, 'Media', 'musics'),
-        path.join(legacyUserDataPath, 'musics'),
+        path.join(legacyUserDataPath, "Media", "music"),
+        path.join(legacyUserDataPath, "Media", "musics"),
+        path.join(legacyUserDataPath, "musics"),
       ]) {
-        await copyDirectoryContents(legacyMusicPath, path.join(currentUserDataPath, 'Media', 'music'), summary);
+        await copyDirectoryContents(legacyMusicPath, path.join(currentUserDataPath, "Media", "music"), summary);
       }
 
-      for (const manifestName of ['downloaded_albums.bin', 'downloaded_albums']) {
+      for (const manifestName of ["downloaded_albums.bin", "downloaded_albums"]) {
         await copyFileIfNeeded(
-          path.join(legacyUserDataPath, '.sysdata', manifestName),
-          path.join(currentUserDataPath, '.sysdata', manifestName),
+          path.join(legacyUserDataPath, ".sysdata", manifestName),
+          path.join(currentUserDataPath, ".sysdata", manifestName),
           summary,
         );
       }
@@ -126,14 +126,14 @@ async function migrateLocalMusicLibrary({ appDataPath, currentUserDataPath, logg
     summary.migrated = summary.copiedFiles > 0;
     summary.completedAt = new Date().toISOString();
     await fs.promises.mkdir(currentUserDataPath, { recursive: true });
-    await fs.promises.writeFile(markerPath, JSON.stringify(summary, null, 2), 'utf8');
+    await fs.promises.writeFile(markerPath, JSON.stringify(summary, null, 2), "utf8");
 
     if (summary.migrated) {
       logger.info(`[LibraryMigration] ${summary.copiedFiles} arquivo(s) da biblioteca anterior foram recuperados.`);
     }
     return summary;
   } catch (error) {
-    logger.warn('[LibraryMigration] A migracao sera tentada novamente:', error.message);
+    logger.warn("[LibraryMigration] A migracao sera tentada novamente:", error.message);
     return { ...summary, error: error.message };
   }
 }

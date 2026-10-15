@@ -104,7 +104,7 @@ const helper: Record<string, any> = {
           }),
         ),
       };
-    } catch (e) {
+    } catch {
       return {};
     }
   },

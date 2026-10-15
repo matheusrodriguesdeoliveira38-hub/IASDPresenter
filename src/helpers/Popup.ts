@@ -49,7 +49,7 @@ const helper: Record<string, any> = {
   },
   async openClock(monitorId) {
     if (monitorId == null) return;
-    if (monitorId === 'virtual-monitor' && !this.virtualMonitorAvailable()) return;
+    if (monitorId === "virtual-monitor" && !this.virtualMonitorAvailable()) return;
     let popups = ($appdata.get("popups") || []).filter(p => p && !p.closed);
     const existing = popups.find(p => p.popupRole === this.clockRole && String(p.monitorId) === String(monitorId));
     if (existing) return;
@@ -85,7 +85,7 @@ const helper: Record<string, any> = {
       params = { module: params };
     }
     if (params.module === "clock") return this.openClock(params.monitorId);
-    if (params.monitorId === 'virtual-monitor' && !this.virtualMonitorAvailable()) return;
+    if (params.monitorId === "virtual-monitor" && !this.virtualMonitorAvailable()) return;
 
     let popups = $appdata.get("popups") || [];
 
@@ -208,7 +208,7 @@ const helper: Record<string, any> = {
   },
   async syncMonitors(monitors, moduleName = "media", forceOpen = false, fullscreen = true) {
     if (moduleName === "clock") return this.openClock(monitors?.[0]);
-    monitors = (monitors || []).filter(id => id !== 'virtual-monitor' || this.virtualMonitorAvailable());
+    monitors = (monitors || []).filter(id => id !== "virtual-monitor" || this.virtualMonitorAvailable());
     let popups = $appdata.get("popups") || [];
     popups = popups.filter(p => !p.closed);
     const targetMonitors = $performance.limitProjectionWindows()
@@ -257,7 +257,7 @@ const helper: Record<string, any> = {
   },
 
   async syncReturnMonitor(monitorId, forceOpen = false, moduleName = "media") {
-    if (monitorId === 'virtual-monitor' && !this.virtualMonitorAvailable()) monitorId = null;
+    if (monitorId === "virtual-monitor" && !this.virtualMonitorAvailable()) monitorId = null;
     if ($performance.limitProjectionWindows()) {
       this.closeReturnMonitor();
       return;
@@ -303,7 +303,7 @@ const helper: Record<string, any> = {
   },
 
   virtualMonitorAvailable() {
-    return ($appdata.get('system_displays') || []).some(display => display.id === 'virtual-monitor');
+    return ($appdata.get("system_displays") || []).some(display => display.id === "virtual-monitor");
   },
   closeReturnMonitor() {
     let popups = $appdata.get("popups") || [];

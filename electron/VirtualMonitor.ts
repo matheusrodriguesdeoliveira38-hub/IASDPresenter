@@ -1,11 +1,11 @@
-import type { IncomingMessage, ServerResponse } from 'node:http';
+import type { IncomingMessage, ServerResponse } from "node:http";
 
-export const VIRTUAL_MONITOR_ID = 'virtual-monitor';
+export const VIRTUAL_MONITOR_ID = "virtual-monitor";
 
 export function virtualMonitorDisplay() {
   return {
     id: VIRTUAL_MONITOR_ID,
-    label: 'Monitor virtual',
+    label: "Monitor virtual",
     isVirtual: true,
     isPrimary: false,
     scaleFactor: 1,
@@ -71,7 +71,7 @@ export function createVirtualMonitorHandler({ enabled, getWindow }) {
         if (currentWindow() !== win || image.isEmpty()) return;
         const size = image.getSize();
         const output = size.width === 1920 && size.height === 1080
-          ? image : image.resize({ width: 1920, height: 1080, quality: 'good' });
+          ? image : image.resize({ width: 1920, height: 1080, quality: "good" });
         lastFrame = output.toJPEG(78);
       })().finally(() => { pending = null; });
     }
@@ -95,7 +95,7 @@ export function createVirtualMonitorHandler({ enabled, getWindow }) {
         if (frame) {
           const packet = Buffer.concat([
             Buffer.from(`--iasdvirtual\r\nContent-Type: image/jpeg\r\nContent-Length: ${frame.length}\r\n\r\n`),
-            frame, Buffer.from('\r\n'),
+            frame, Buffer.from("\r\n"),
           ]);
           for (const client of clients) {
             if (!client.blocked && !client.response.destroyed) client.blocked = !client.response.write(packet);
@@ -112,35 +112,35 @@ export function createVirtualMonitorHandler({ enabled, getWindow }) {
     }
   }
   return async (request: IncomingMessage, response: ServerResponse, pathname: string) => {
-    if (!['/virtual-monitor', '/virtual-monitor/', '/virtual-monitor/frame.jpg', '/virtual-monitor/stream.mjpg', '/virtual-monitor/state'].includes(pathname)) return false;
-    response.setHeader('Cache-Control', 'no-store');
+    if (!["/virtual-monitor", "/virtual-monitor/", "/virtual-monitor/frame.jpg", "/virtual-monitor/stream.mjpg", "/virtual-monitor/state"].includes(pathname)) return false;
+    response.setHeader("Cache-Control", "no-store");
     if (!enabled()) {
-      response.writeHead(404); response.end('Monitor virtual desativado.'); return true;
+      response.writeHead(404); response.end("Monitor virtual desativado."); return true;
     }
-    if (request.method !== 'GET') {
-      response.writeHead(405, { Allow: 'GET' }); response.end(); return true;
+    if (request.method !== "GET") {
+      response.writeHead(405, { Allow: "GET" }); response.end(); return true;
     }
-    if (pathname === '/virtual-monitor/state') {
+    if (pathname === "/virtual-monitor/state") {
       const win = currentWindow();
-      response.writeHead(200, { 'Content-Type': 'application/json' });
+      response.writeHead(200, { "Content-Type": "application/json" });
       response.end(JSON.stringify({ active: Boolean(win), session })); return true;
     }
-    if (pathname === '/virtual-monitor/stream.mjpg') {
+    if (pathname === "/virtual-monitor/stream.mjpg") {
       if (!currentWindow()) { response.writeHead(204); response.end(); return true; }
-      response.writeHead(200, { 'Content-Type': 'multipart/x-mixed-replace; boundary=iasdvirtual', 'X-Accel-Buffering': 'no' });
+      response.writeHead(200, { "Content-Type": "multipart/x-mixed-replace; boundary=iasdvirtual", "X-Accel-Buffering": "no" });
       response.flushHeaders();
       const client = { response, blocked: false };
       clients.add(client);
-      response.on('drain', () => { client.blocked = false; });
-      response.on('close', () => {
+      response.on("drain", () => { client.blocked = false; });
+      response.on("close", () => {
         clients.delete(client);
         if (!clients.size && timer) { clearTimeout(timer); timer = null; }
       });
       if (!timer && !streaming) void stream();
       return true;
     }
-    if (pathname !== '/virtual-monitor/frame.jpg') {
-      response.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+    if (pathname !== "/virtual-monitor/frame.jpg") {
+      response.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
       response.end(viewerHtml); return true;
     }
     try {
@@ -148,7 +148,7 @@ export function createVirtualMonitorHandler({ enabled, getWindow }) {
       if (!frame) {
         response.writeHead(204); response.end(); return true;
       }
-      response.writeHead(200, { 'Content-Type': 'image/jpeg' }); response.end(frame);
+      response.writeHead(200, { "Content-Type": "image/jpeg" }); response.end(frame);
     } catch {
       lastFrame = null;
       response.writeHead(204); response.end();

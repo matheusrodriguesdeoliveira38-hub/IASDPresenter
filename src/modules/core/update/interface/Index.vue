@@ -7,20 +7,28 @@
             <span class="update-brand-icon"><v-icon icon="mdi-cloud-sync-outline" size="25" /></span>
             <div><span>IASDPresenter</span><strong>Central de atualizações</strong></div>
           </div>
-          <v-btn icon variant="text" aria-label="Fechar" @click="close"><v-icon>mdi-close</v-icon><v-tooltip activator="parent" location="bottom">Fechar</v-tooltip></v-btn>
+          <v-btn icon variant="text" aria-label="Fechar" @click="close">
+<v-icon>mdi-close</v-icon><v-tooltip activator="parent" location="bottom">
+Fechar
+</v-tooltip>
+</v-btn>
         </header>
 
         <div class="update-body">
           <div class="version-summary">
             <div>
               <span class="summary-kicker">STATUS DO APLICATIVO</span>
-              <h2 id="update-title">{{ statusTitle }}</h2>
+              <h2 id="update-title">
+{{ statusTitle }}
+</h2>
               <p>{{ statusDescription }}</p>
             </div>
             <div class="version-comparison">
               <div><span>Instalada</span><strong>v{{ currentVersion }}</strong></div>
               <v-icon icon="mdi-arrow-right" size="19" />
-              <div :class="{ highlighted: hasNewVersion }"><span>Disponível</span><strong>{{ updateVersion ? `v${updateVersion}` : '—' }}</strong></div>
+              <div :class="{ highlighted: hasNewVersion }">
+<span>Disponível</span><strong>{{ updateVersion ? `v${updateVersion}` : '—' }}</strong>
+</div>
             </div>
           </div>
 
@@ -40,14 +48,20 @@
           </div>
 
           <div v-else class="release-panel">
-            <div class="release-heading"><span><v-icon icon="mdi-sparkles" size="17" /> NOVIDADES</span><h3>O que há de novo?</h3></div>
+            <div class="release-heading">
+<span><v-icon icon="mdi-sparkles" size="17" /> NOVIDADES</span><h3>O que há de novo?</h3>
+</div>
             <div v-if="releaseNotes" class="release-notes-content" v-html="releaseNotes" />
-            <div v-else class="empty-release"><v-icon icon="mdi-text-box-outline" size="28" /><span>Esta versão não possui notas detalhadas de lançamento.</span></div>
+            <div v-else class="empty-release">
+<v-icon icon="mdi-text-box-outline" size="28" /><span>Esta versão não possui notas detalhadas de lançamento.</span>
+</div>
           </div>
 
           <div v-if="updateStatus === 'downloading'" class="download-panel">
             <div><span>Baixando atualização</span><strong>{{ downloadPercent }}%</strong></div>
-            <div class="download-track"><i :style="{ width: downloadPercent + '%' }" /></div>
+            <div class="download-track">
+<i :style="{ width: downloadPercent + '%' }" />
+</div>
             <small>Você pode continuar usando o aplicativo durante o download.</small>
           </div>
         </div>
@@ -55,12 +69,24 @@
         <footer class="update-footer">
           <span><v-icon icon="mdi-shield-check-outline" size="17" /> Atualização verificada e instalada com segurança.</span>
           <div>
-            <v-btn variant="text" @click="close">Agora não</v-btn>
-            <v-btn v-if="updateStatus === 'available'" color="primary" variant="flat" height="44" prepend-icon="mdi-download" @click="startDownload">Baixar atualização</v-btn>
-            <v-btn v-else-if="updateStatus === 'downloading'" color="primary" variant="tonal" height="44" disabled prepend-icon="mdi-loading mdi-spin">Baixando...</v-btn>
-            <v-btn v-else-if="updateStatus === 'ready'" color="success" variant="flat" height="44" prepend-icon="mdi-restart" @click="installUpdate">Reiniciar e instalar</v-btn>
-            <v-btn v-else-if="updateStatus === 'error'" color="error" variant="flat" height="44" prepend-icon="mdi-refresh" @click="retryUpdate">Tentar novamente</v-btn>
-            <v-btn v-else-if="updateStatus === 'not-available'" color="primary" variant="tonal" height="44" prepend-icon="mdi-check" @click="close">Concluir</v-btn>
+            <v-btn variant="text" @click="close">
+Agora não
+</v-btn>
+            <v-btn v-if="updateStatus === 'available'" color="primary" variant="flat" height="44" prepend-icon="mdi-download" @click="startDownload">
+Baixar atualização
+</v-btn>
+            <v-btn v-else-if="updateStatus === 'downloading'" color="primary" variant="tonal" height="44" disabled prepend-icon="mdi-loading mdi-spin">
+Baixando...
+</v-btn>
+            <v-btn v-else-if="updateStatus === 'ready'" color="success" variant="flat" height="44" prepend-icon="mdi-restart" @click="installUpdate">
+Reiniciar e instalar
+</v-btn>
+            <v-btn v-else-if="updateStatus === 'error'" color="error" variant="flat" height="44" prepend-icon="mdi-refresh" @click="retryUpdate">
+Tentar novamente
+</v-btn>
+            <v-btn v-else-if="updateStatus === 'not-available'" color="primary" variant="tonal" height="44" prepend-icon="mdi-check" @click="close">
+Concluir
+</v-btn>
           </div>
         </footer>
       </section>

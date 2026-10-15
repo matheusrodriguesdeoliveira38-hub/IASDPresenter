@@ -31,7 +31,7 @@ function runtime() {
   });
   const code = section('function sanitizeAutomationConfig', 'function loadAutomationConfig')
     + section('async function runMixerAction', 'function getRemoteControlPort')
-    + section('function queueAutomation', "ipcMain.handle('test-automation-trigger'");
+    + section('function queueAutomation', "ipcMain.handle(\"test-automation-trigger\"");
   vm.runInContext(ts.transpileModule(code, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText, context);
   return { app: context, calls };
 }

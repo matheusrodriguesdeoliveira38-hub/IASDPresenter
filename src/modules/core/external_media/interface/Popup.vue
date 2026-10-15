@@ -1,8 +1,8 @@
 <template>
   <div class="w-100 h-100 bg-black d-flex align-center justify-center">
     <iframe
-      :key="'iframe:' + playbackSession"
       v-if="isYouTube && youtubeEmbedUrl"
+      :key="'iframe:' + playbackSession"
       ref="popupYouTube"
       class="external-youtube-frame"
       :src="youtubeEmbedUrl"
@@ -13,8 +13,8 @@
       @load="onYouTubeLoad"
     />
     <webview
-      :key="'webview:' + playbackSession"
       v-else-if="isWebLink && isElectron"
+      :key="'webview:' + playbackSession"
       class="external-web-frame"
 
       :src="rawFilePath"
@@ -30,8 +30,8 @@
       referrerpolicy="strict-origin-when-cross-origin"
     />
     <video
-      :key="'video:' + playbackSession"
       v-else-if="isVideo && filePath"
+      :key="'video:' + playbackSession"
       ref="popupVideo"
       class="w-100 h-100"
       style="object-fit: contain;"
@@ -96,7 +96,7 @@ export default {
       return this.$modules.get(this.module_id);
     },
     playbackSession() {
-      return this.rawFilePath + ":" + (this.$appdata.get("modules.external_media.config.session_id") || "");
+      return `${this.rawFilePath  }:${  this.$appdata.get("modules.external_media.config.session_id") || ""}`;
     },
     rawFilePath() {
       return this.$appdata.get("modules.external_media.filePath") || "";
@@ -227,6 +227,8 @@ export default {
       this.youtubeReady = true;
       clearInterval(this.youtubeHandshakeTimer);
       this.sendYouTubeCommand("addEventListener", ["onStateChange"]);
+      this.sendYouTubeCommand("addEventListener", ["onApiChange"]);
+      this.sendYouTubeCommand("unloadModule", ["captions"]);
       this.sendYouTubeCommand("mute");
       this.sendYouTubeCommand("seekTo", [this.getSynchronizedTargetTime(), true]);
       this.sendYouTubeCommand(this.isPaused || this.isBuffering ? "pauseVideo" : "playVideo");
@@ -246,11 +248,12 @@ export default {
       if (typeof payload === "string") {
         try {
           payload = JSON.parse(payload);
-        } catch (_error) {
+        } catch {
           return;
         }
       }
       if (payload?.event === "onReady") { this.initializeYouTubePlayer(); return; }
+      if (payload?.event === "onApiChange") { this.sendYouTubeCommand("unloadModule", ["captions"]); return; }
       if (["initialDelivery", "infoDelivery"].includes(payload?.event) && payload.info) {
         this.initializeYouTubePlayer();
       }
@@ -288,7 +291,10 @@ export default {
         const elapsed = !this.isPaused && !this.isBuffering ? Math.min(500, Math.max(0, Date.now() - this.youtubeSampleAt)) / 1000 : 0;
         const drift = target - (Number(this.popupYouTubeCurrentTime || 0) + elapsed);
         const now = Date.now();
-        if (force || (Math.abs(drift) > 0.15 && now - this.lastYouTubeSyncAt > 300)) {
+        // A follower loads independently. Repeated seeks before its first time
+        // sample (or while buffering) can keep YouTube from rendering a frame.
+        if (force || (!this.isBuffering && this.youtubeSampleAt > 0
+          && Math.abs(drift) > 1.5 && now - this.lastYouTubeSyncAt > 2000)) {
           this.lastYouTubeSyncAt = now;
           this.sendYouTubeCommand("seekTo", [target, true]);
         }

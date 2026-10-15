@@ -129,11 +129,15 @@
         <div class="playlist-panel-header d-flex align-center px-4 pt-4" style="width: 340px;">
           <v-btn-toggle v-model="panelView" mandatory density="compact" variant="text" color="white">
             <v-btn value="queue" size="small" :disabled="queue.length === 0">
-              <v-icon start>mdi-playlist-music</v-icon>
+              <v-icon start>
+mdi-playlist-music
+</v-icon>
               Fila <span v-if="queue.length" class="ml-1">({{ queue.length }})</span>
             </v-btn>
             <v-btn value="slides" size="small">
-              <v-icon start>mdi-view-carousel-outline</v-icon>
+              <v-icon start>
+mdi-view-carousel-outline
+</v-icon>
               Slides
             </v-btn>
           </v-btn-toggle>
@@ -146,7 +150,9 @@
             color="white"
             @click="$media.clearQueue()"
           >
-            <v-tooltip activator="parent" location="top">Limpar fila</v-tooltip>
+            <v-tooltip activator="parent" location="top">
+Limpar fila
+</v-tooltip>
           </v-btn>
         </div>
 
@@ -161,10 +167,16 @@
             @click="$media.playQueueIndex(index)"
           >
             <template #prepend>
-              <v-icon v-if="queueIndex === index" color="white" size="small">mdi-volume-high</v-icon>
-              <div v-else class="slide-number-chip">{{ item.track || Number(index) + 1 }}</div>
+              <v-icon v-if="queueIndex === index" color="white" size="small">
+mdi-volume-high
+</v-icon>
+              <div v-else class="slide-number-chip">
+{{ item.track || Number(index) + 1 }}
+</div>
             </template>
-            <v-list-item-title class="slide-title">{{ item.name }}</v-list-item-title>
+            <v-list-item-title class="slide-title">
+{{ item.name }}
+</v-list-item-title>
             <v-list-item-subtitle>{{ item.mode === 'instrumental' ? 'Playback' : 'Cantado' }}</v-list-item-subtitle>
           </v-list-item>
         </v-list>

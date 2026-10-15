@@ -28,7 +28,7 @@ const requestHandler = (req, res) => {
 
   let filePath = path.join(
     DIRECTORY,
-    decodeURIComponent(req.url).split("?")[0]
+    decodeURIComponent(req.url).split("?")[0],
   );
   console.log("Diretório", filePath);
 
@@ -43,7 +43,7 @@ const requestHandler = (req, res) => {
   const dir = parts[parts.length - 2];
   if (dir == "database") {
     if (!filePath.endsWith(".json")) {
-      filePath = filePath + ".json";
+      filePath = `${filePath  }.json`;
     }
   }
 
@@ -67,8 +67,8 @@ const requestHandler = (req, res) => {
             (file) =>
               `<li><a href="${path.join(
                 req.url,
-                encodeURIComponent(file)
-              )}">${file}</a></li>`
+                encodeURIComponent(file),
+              )}">${file}</a></li>`,
           )
           .join("");
         const html = `

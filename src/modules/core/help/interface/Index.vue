@@ -8,8 +8,12 @@
             <v-icon :icon="manifest.icon || 'mdi-help-circle'" size="24" />
           </div>
           <div>
-            <h2 class="section-title">Ajuda e sobre</h2>
-            <p class="help-subtitle">Informações, suporte e guias do IASDPresenter</p>
+            <h2 class="section-title">
+Ajuda e sobre
+</h2>
+            <p class="help-subtitle">
+Informações, suporte e guias do IASDPresenter
+</p>
           </div>
         </div>
 
@@ -35,27 +39,37 @@
                 <section class="about-hero">
                   <div class="about-hero-copy">
                     <div class="product-mark">
-                      <div class="app-logo"><img src="/ico/favicon.png" alt="IASDPresenter" /></div>
+                      <div class="app-logo">
+<img src="/ico/favicon.png" alt="IASDPresenter" />
+</div>
                       <div><span>IASDPresenter</span><strong>Central de suporte</strong></div>
                     </div>
                     <span class="hero-kicker"><v-icon icon="mdi-sparkles" size="15" /> TUDO EM UM SÓ LUGAR</span>
-                    <h1>Apresente com confiança.<br><em>Encontre ajuda rapidamente.</em></h1>
+                    <h1>Apresente com confiança.<br /><em>Encontre ajuda rapidamente.</em></h1>
                     <p>Consulte instruções práticas, conheça os recursos do aplicativo e mantenha sua instalação atualizada.</p>
                     <div class="hero-actions">
-                      <v-btn color="primary" variant="flat" prepend-icon="mdi-book-open-page-variant" @click="openManual">Abrir manual</v-btn>
-                      <v-btn color="primary" variant="tonal" prepend-icon="mdi-update" @click="openUpdate">Buscar atualizações</v-btn>
+                      <v-btn color="primary" variant="flat" prepend-icon="mdi-book-open-page-variant" @click="openManual">
+Abrir manual
+</v-btn>
+                      <v-btn color="primary" variant="tonal" prepend-icon="mdi-update" @click="openUpdate">
+Buscar atualizações
+</v-btn>
                     </div>
                   </div>
                   <div class="about-hero-visual" aria-hidden="true">
                     <div class="visual-glow" />
                     <div class="visual-screen">
-                      <div class="visual-screen-top"><i /><i /><i /><span>IASDPresenter</span></div>
+                      <div class="visual-screen-top">
+<i /><i /><i /><span>IASDPresenter</span>
+</div>
                       <div class="visual-screen-content">
                         <span class="visual-play"><v-icon icon="mdi-play" size="30" /></span>
                         <div><strong>Pronto para apresentar</strong><small>Biblioteca e ferramentas integradas</small></div>
                       </div>
                     </div>
-                    <div class="floating-status"><v-icon icon="mdi-check-circle" size="20" /><span><strong>Versão {{ appVersion }}</strong><small>Beta</small></span></div>
+                    <div class="floating-status">
+<v-icon icon="mdi-check-circle" size="20" /><span><strong>Versão {{ appVersion }}</strong><small>Beta</small></span>
+</div>
                   </div>
                 </section>
 
@@ -68,12 +82,16 @@
                     <article class="help-action-card featured">
                       <span class="action-icon"><v-icon icon="mdi-book-open-variant" size="27" /></span>
                       <div><span>GUIA COMPLETO</span><h3>Manual de uso</h3><p>Passos claros para configurar telas, preparar músicas, usar a Bíblia e operar cada ferramenta.</p></div>
-                      <v-btn color="primary" variant="flat" append-icon="mdi-arrow-right" @click="openManual">Explorar manual</v-btn>
+                      <v-btn color="primary" variant="flat" append-icon="mdi-arrow-right" @click="openManual">
+Explorar manual
+</v-btn>
                     </article>
                     <article class="help-action-card">
                       <span class="action-icon orange"><v-icon icon="mdi-rocket-launch-outline" size="27" /></span>
                       <div><span>MANUTENÇÃO</span><h3>Atualizações</h3><p>Confira a versão instalada e procure melhorias disponíveis para o aplicativo.</p></div>
-                      <v-btn color="primary" variant="tonal" append-icon="mdi-arrow-right" @click="openUpdate">Verificar agora</v-btn>
+                      <v-btn color="primary" variant="tonal" append-icon="mdi-arrow-right" @click="openUpdate">
+Verificar agora
+</v-btn>
                     </article>
                   </div>
                 </section>
@@ -86,7 +104,9 @@
                 </section>
 
                 <section class="version-panel">
-                  <div class="version-icon"><v-icon icon="mdi-information-outline" size="24" /></div>
+                  <div class="version-icon">
+<v-icon icon="mdi-information-outline" size="24" />
+</div>
                   <div><span>SOBRE ESTA VERSÃO</span><h3>IASDPresenter {{ appVersion }} <small>Beta</small></h3><p>Aplicativo desktop para gerenciamento e apresentação de músicas, hinos, letras, Bíblia e recursos multimídia para igrejas.</p></div>
                 </section>
               </div>
@@ -97,15 +117,21 @@
             <div class="about-scroll h-100 overflow-auto">
               <div class="about-container">
                 <section class="team-hero">
-                  <div class="team-symbol"><v-icon icon="mdi-account-group-outline" size="38" /></div>
+                  <div class="team-symbol">
+<v-icon icon="mdi-account-group-outline" size="38" />
+</div>
                   <span>NOSSA MISSÃO</span>
                   <h1>Tecnologia criada para servir.</h1>
                   <p>O IASDPresenter é desenvolvido para apoiar equipes de mídia e louvor com uma operação simples, confiável e integrada.</p>
-                  <v-chip color="primary" variant="tonal" prepend-icon="mdi-heart-outline">Feito para servir</v-chip>
+                  <v-chip color="primary" variant="tonal" prepend-icon="mdi-heart-outline">
+Feito para servir
+</v-chip>
                 </section>
 
                 <section class="help-section credits-section">
-                  <div class="section-heading"><div><span>TECNOLOGIA</span><h2>Créditos técnicos</h2></div><p>Uma base moderna para uma experiência rápida e confiável.</p></div>
+                  <div class="section-heading">
+<div><span>TECNOLOGIA</span><h2>Créditos técnicos</h2></div><p>Uma base moderna para uma experiência rápida e confiável.</p>
+</div>
                   <div class="credit-grid">
                     <article><span><v-icon icon="mdi-vuejs" size="25" /></span><div><strong>Interface</strong><small>Vue 3 e Vuetify</small><p>Componentes responsivos e uma navegação fluida.</p></div></article>
                     <article><span><v-icon icon="mdi-desktop-classic" size="25" /></span><div><strong>Aplicativo desktop</strong><small>Electron</small><p>Integração nativa com telas, arquivos e mídia.</p></div></article>

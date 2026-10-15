@@ -67,7 +67,11 @@ test('projection animates opacity for the requested duration and acknowledges on
       return { finished: new Promise(resolve => { finishAnimation = resolve; }) };
     },
   };
-  const { default: popup } = loadTs('src/views/Popup.vue', { vue: {}, '@/components/PulpitMessageOverlay.vue': {} }, {
+  const { default: popup } = loadTs('src/views/Popup.vue', {
+    vue: {},
+    '@/components/PulpitMessageOverlay.vue': {},
+    '@/components/LiturgyStageClock.vue': {},
+  }, {
     window: { opener: { postMessage: message => messages.push(message) } },
     getComputedStyle: () => ({ opacity: '1' }),
   });

@@ -33,13 +33,13 @@ export class BaseModule {
   }
 
   // eslint-disable-next-line no-unused-vars
-  async install(app, context) {
+  async install(_app, _context) {
     // Abstract method to be implemented by specific Modules
     throw new Error("Module must implement install method");
   }
 
   // eslint-disable-next-line no-unused-vars
-  async uninstall(context) {
+  async uninstall(_context) {
     // Optional uninstall method
   }
 

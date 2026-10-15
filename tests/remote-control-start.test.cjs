@@ -124,7 +124,7 @@ test('saving the switch and manual controls stop and restart the shared server',
     releaseWebOutputFrameWaitersWithoutFrame() {},
     getWebOutputViewerCount: () => 0,
   });
-  const code = section("ipcMain.handle('save-remote-control-config'", 'const isDev =');
+  const code = section("ipcMain.handle(\"save-remote-control-config\"", 'const isDev =');
   vm.runInContext(ts.transpileModule(code, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText, app);
   app.remoteControlConfig.virtualMonitorEnabled = true;
   app.remoteControlServer = { listening: true };

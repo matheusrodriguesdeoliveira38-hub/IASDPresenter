@@ -16,7 +16,7 @@
                                           "node"
                                       ],
                             "moduleDetection":  "force",
-                            "noCheck":  true
+                            "noCheck":  false
                         },
     "include":  [
                     "electron/**/*.ts"

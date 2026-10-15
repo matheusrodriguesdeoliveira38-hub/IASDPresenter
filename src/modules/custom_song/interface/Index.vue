@@ -80,7 +80,9 @@ Titulo da musica"
                   hide-details="auto"
                   no-resize
                 />
-                <p class="field-help">Linhas iniciadas com // aparecem somente no retorno.</p>
+                <p class="field-help">
+Linhas iniciadas com // aparecem somente no retorno.
+</p>
               </template>
 
               <template v-else-if="selectedLyricSlide">
@@ -144,14 +146,18 @@ A Ele a gloria"
                 hide-details="auto"
               />
               <div class="audio-picker">
-                <v-icon color="primary" size="20">mdi-music-box-outline</v-icon>
+                <v-icon color="primary" size="20">
+mdi-music-box-outline
+</v-icon>
                 <div class="audio-file">
                   <strong>Arquivo MP3</strong>
                   <p>{{ form.audioPath ? fileName(form.audioPath) : "Nenhum arquivo selecionado" }}</p>
                 </div>
                 <v-btn variant="text" color="primary" icon size="small" @click="chooseAudio">
                   <v-icon>mdi-folder-music-outline</v-icon>
-                  <v-tooltip activator="parent" location="bottom">Selecionar MP3</v-tooltip>
+                  <v-tooltip activator="parent" location="bottom">
+Selecionar MP3
+</v-tooltip>
                 </v-btn>
                 <v-btn
                   v-if="form.audioPath"
@@ -162,7 +168,9 @@ A Ele a gloria"
                   @click="form.audioPath = ''"
                 >
                   <v-icon>mdi-close</v-icon>
-                  <v-tooltip activator="parent" location="bottom">Remover MP3</v-tooltip>
+                  <v-tooltip activator="parent" location="bottom">
+Remover MP3
+</v-tooltip>
                 </v-btn>
               </div>
               <v-btn
@@ -231,13 +239,19 @@ A Ele a gloria"
 
           <section v-if="workspaceMode !== 'file'" class="custom-song-panel slides-panel">
             <div class="panel-title">
-              <v-icon size="17">mdi-view-carousel-outline</v-icon>
+              <v-icon size="17">
+mdi-view-carousel-outline
+</v-icon>
               <span>Lista de slides</span>
               <v-spacer />
               <span class="slides-count">{{ projectionPreviewSlides.length }} slides</span>
               <v-btn icon size="x-small" variant="tonal" color="primary" @click="addSlide">
-                <v-icon size="16">mdi-plus</v-icon>
-                <v-tooltip activator="parent" location="bottom">Adicionar slide</v-tooltip>
+                <v-icon size="16">
+mdi-plus
+</v-icon>
+                <v-tooltip activator="parent" location="bottom">
+Adicionar slide
+</v-tooltip>
               </v-btn>
             </div>
 
@@ -276,20 +290,28 @@ A Ele a gloria"
             </div>
 
             <button type="button" class="add-slide-button" @click="addSlide">
-              <v-icon size="17">mdi-plus</v-icon>
+              <v-icon size="17">
+mdi-plus
+</v-icon>
               Adicionar slide
             </button>
           </section>
 
           <section v-else class="custom-song-panel saved-panel file-songs-panel">
             <div class="panel-title">
-              <v-icon size="17">mdi-playlist-music-outline</v-icon>
+              <v-icon size="17">
+mdi-playlist-music-outline
+</v-icon>
               <span>Musicas criadas</span>
               <v-spacer />
               <span class="slides-count">{{ customSongs.length }}</span>
               <v-btn icon size="x-small" variant="tonal" color="primary" :loading="loadingSongs" @click="loadCustomSongs">
-                <v-icon size="16">mdi-refresh</v-icon>
-                <v-tooltip activator="parent" location="bottom">Atualizar lista</v-tooltip>
+                <v-icon size="16">
+mdi-refresh
+</v-icon>
+                <v-tooltip activator="parent" location="bottom">
+Atualizar lista
+</v-tooltip>
               </v-btn>
             </div>
 
@@ -304,7 +326,9 @@ A Ele a gloria"
                 <template #prepend>
                   <span class="saved-song-icon"><v-icon size="16">mdi-music-note</v-icon></span>
                 </template>
-                <v-list-item-title class="text-truncate">{{ song.name }}</v-list-item-title>
+                <v-list-item-title class="text-truncate">
+{{ song.name }}
+</v-list-item-title>
                 <v-list-item-subtitle>
                   {{ song.duration || "00:00" }}
                 </v-list-item-subtitle>
@@ -318,8 +342,12 @@ A Ele a gloria"
                       aria-label="Editar musica"
                       @click.stop="editSong(song.id_music)"
                     >
-                      <v-icon size="17">mdi-pencil-outline</v-icon>
-                      <v-tooltip activator="parent" location="bottom">Editar música</v-tooltip>
+                      <v-icon size="17">
+mdi-pencil-outline
+</v-icon>
+                      <v-tooltip activator="parent" location="bottom">
+Editar música
+</v-tooltip>
                     </v-btn>
                     <v-btn
                       icon
@@ -331,8 +359,12 @@ A Ele a gloria"
                       :disabled="deletingMusicId !== null && deletingMusicId !== song.id_music"
                       @click.stop="confirmDeleteSong(song)"
                     >
-                      <v-icon size="17">mdi-delete-outline</v-icon>
-                      <v-tooltip activator="parent" location="bottom">Excluir música</v-tooltip>
+                      <v-icon size="17">
+mdi-delete-outline
+</v-icon>
+                      <v-tooltip activator="parent" location="bottom">
+Excluir música
+</v-tooltip>
                     </v-btn>
                   </div>
                 </template>
@@ -363,10 +395,14 @@ A Ele a gloria"
 
             <div class="preview-controls">
               <button type="button" :disabled="previewIndex === 0" @click="previewIndex = 0">
-                <v-icon size="17">mdi-skip-previous</v-icon>
+                <v-icon size="17">
+mdi-skip-previous
+</v-icon>
               </button>
               <button type="button" :disabled="previewIndex === 0" @click="previewIndex--">
-                <v-icon size="18">mdi-chevron-left</v-icon>
+                <v-icon size="18">
+mdi-chevron-left
+</v-icon>
               </button>
               <span><strong>{{ previewIndex + 1 }}</strong> / {{ projectionPreviewSlides.length }}</span>
               <button
@@ -374,17 +410,23 @@ A Ele a gloria"
                 :disabled="previewIndex === projectionPreviewSlides.length - 1"
                 @click="previewIndex++"
               >
-                <v-icon size="18">mdi-chevron-right</v-icon>
+                <v-icon size="18">
+mdi-chevron-right
+</v-icon>
               </button>
               <button
                 type="button"
                 :disabled="previewIndex === projectionPreviewSlides.length - 1"
                 @click="previewIndex = projectionPreviewSlides.length - 1"
               >
-                <v-icon size="17">mdi-skip-next</v-icon>
+                <v-icon size="17">
+mdi-skip-next
+</v-icon>
               </button>
               <button type="button" @click="togglePreviewFullscreen">
-                <v-icon size="17">mdi-fullscreen</v-icon>
+                <v-icon size="17">
+mdi-fullscreen
+</v-icon>
               </button>
             </div>
           </section>

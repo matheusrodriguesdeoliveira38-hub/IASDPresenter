@@ -15,7 +15,9 @@ const { default: component } = loadTs('src/modules/liturgy/interface/Index.vue',
   '@/helpers/BrowserFiles': api,
   '@/helpers/LiturgyGroups': loadTs('src/helpers/LiturgyGroups.ts'),
   '@/helpers/HymnalPreference': {}, '../manifest.json': {},
-  '@/components/MenuToggleButton.vue': {}, vuedraggable: {}, './RichTextEditor.vue': {},
+  '@/components/MenuToggleButton.vue': {},
+  '@/components/LiturgyTimingPanel.vue': {},
+  '@/helpers/LiturgyTiming': loadTs('src/helpers/LiturgyTiming.ts'), vuedraggable: {}, './RichTextEditor.vue': {},
   '@/helpers/ExternalMedia': { isAudioFile: () => true, openExternalMedia: (_, item) => opened.push(item) },
   '@/helpers/YouTube': {}, '@/helpers/ProjectionTransition': {},
 }, { crypto: { randomUUID }, window: { electronAPI: api }, Date: LocalDate });
@@ -178,7 +180,7 @@ test('deleting populated category requires affirmative confirmation', () => {
 test('desktop accessibility check accepts readable files and rejects missing files and directories', async () => {
   const fs = require('node:fs'); const path = require('node:path'); const vm = require('node:vm');
   const source = fs.readFileSync('electron/main.ts', 'utf8');
-  const handler = source.slice(source.indexOf("ipcMain.handle('is-file-readable'"), source.indexOf("ipcMain.handle('open-path'"));
+  const handler = source.slice(source.indexOf("ipcMain.handle(\"is-file-readable\""), source.indexOf("ipcMain.handle(\"open-path\""));
   let check;
   vm.runInNewContext(handler, { fs, path, ipcMain: { handle: (_, fn) => { check = fn; } } });
   assert.equal(await check(null, path.resolve('package.json')), true);

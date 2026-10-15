@@ -17,12 +17,16 @@
         <v-textarea v-model="draft" label="Mensagem" maxlength="200" counter rows="3" />
         <v-select v-model="duration" label="Desaparecer automaticamente" :items="durations" />
         <figure class="pulpit-preview mb-4">
-          <figcaption class="text-caption mb-2">Prévia do recado · {{ monitorLabel }} (16:9)</figcaption>
+          <figcaption class="text-caption mb-2">
+Prévia do recado · {{ monitorLabel }} (16:9)
+</figcaption>
           <div class="pulpit-preview-screen" :style="{ background: $userdata.get('modules.config.return_monitor_bg_color') || '#000000' }">
             <span class="pulpit-preview-hint">{{ draft.trim() ? monitorLabel : 'Digite uma mensagem para visualizar' }}</span>
             <PulpitMessageBanner v-if="draft.trim()" :text="draft.trim().slice(0, 200)" />
           </div>
-          <p class="text-caption mt-2">{{ duration ? `O recado desaparecerá ${duration} segundos após o envio.` : 'O recado ficará visível até ser removido.' }}</p>
+          <p class="text-caption mt-2">
+{{ duration ? `O recado desaparecerá ${duration} segundos após o envio.` : 'O recado ficará visível até ser removido.' }}
+</p>
         </figure>
         <v-alert v-if="error" type="warning" class="mb-3">
           {{ error }}
