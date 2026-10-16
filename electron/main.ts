@@ -132,7 +132,6 @@ function getDatabaseSourceLanguage(language = "pt") {
 function getRequiredLocalDbFiles(language = "pt") {
   const locale = normalizeDatabaseLanguage(language);
   return [
-    "config",
     `${locale}_categories`,
     `${locale}_musics`,
     `${locale}_bible_book`,
