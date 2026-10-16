@@ -200,11 +200,6 @@ export default {
   81.818%, 86.364% { opacity: 1; left: 18.01%; top: 52.95%; transform: translateY(-50%) scale(1.2380975, 1.285); }
   95.455%, 100% { opacity: 0; left: 18.01%; top: 52.95%; transform: translateY(-50%) scale(1.2380975, 1.285); }
 }
-@media (prefers-reduced-motion: reduce) {
-  .song-opening * { animation: none; }
-  .opening-logo-large { opacity: .25; }
-  .opening-frame { transform: translateY(-50%); }
-  .opening-title { transform: translateY(-50%) scaleX(.9635); }
-  .opening-frame path { stroke-dashoffset: 0; }
-}
+/* This opening is presentation content; playback is controlled by the player.
+   Keep its timeline independent of desktop interface motion preferences. */
 </style>

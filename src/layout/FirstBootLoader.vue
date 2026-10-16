@@ -46,7 +46,6 @@
 
 <script lang="ts">
 import CountryFlag from "vue-country-flag-next";
-import $path from "@/helpers/Path";
 
 const SUPPORTED_LANGUAGES = ["pt", "en", "es"];
 const DATABASE_SOURCE_LANGUAGES = { pt: "pt", en: "pt", es: "es" };
@@ -140,7 +139,6 @@ export default {
     requiredFiles() {
       const locale = this.selectedLanguage;
       return [
-        "config",
         `${locale}_categories`,
         `${locale}_musics`,
         `${locale}_bible_book`,
@@ -234,42 +232,6 @@ export default {
       this.progress = 100;
       this.isOpen = false;
     },
-    async fetchFromApi(file, retries = 5, delayMs = 1000) {
-      try {
-        const date = new Date().toISOString().slice(0, 10).replace(/-/g, "");
-        const response = await fetch(`${$path.db(`/${file}`)}?${date}`, {
-          headers: { "Api-Token": import.meta.env.VITE_API_TOKEN },
-        });
-        if (response.status === 429 && retries > 0) {
-          await new Promise(resolve => setTimeout(resolve, delayMs));
-          return this.fetchFromApi(file, retries - 1, delayMs * 1.5);
-        }
-        if (!response.ok) {
-          if (retries > 0 && response.status >= 500) {
-            await new Promise(resolve => setTimeout(resolve, delayMs));
-            return this.fetchFromApi(file, retries - 1, delayMs * 1.5);
-          }
-          throw new Error(`Server returned ${response.status}`);
-        }
-        const contentType = response.headers.get("content-type") || "";
-        const text = await response.text();
-        if (!contentType.includes("application/json") && text.trim().startsWith("<")) {
-          throw new Error(`Server returned HTML for ${file}.`);
-        }
-        return JSON.parse(text);
-      } catch (error) {
-        if (retries > 0 && /Failed to fetch|NetworkError/i.test(error.message)) {
-          await new Promise(resolve => setTimeout(resolve, delayMs));
-          return this.fetchFromApi(file, retries - 1, delayMs * 1.5);
-        }
-        throw error;
-      }
-    },
-    async fetchAndSave(file) {
-      const data = await this.fetchFromApi(file);
-      if (data && window.electronAPI) await window.electronAPI.saveLocalDb(file, data);
-      return data;
-    },
     async finishFirstBootSync() {
       const hasRequiredData = await window.electronAPI.hasLocalDbFiles(this.requiredFiles);
       if (!hasRequiredData) {
@@ -307,17 +269,9 @@ export default {
           );
         }
 
-        const hasConfig = await window.electronAPI.hasLocalDbFiles(["config"]);
-        const configPromise = hasConfig
-          ? Promise.resolve(true)
-          : this.fetchAndSave("config").then(() => true);
-
         // The bundled database is currently the Portuguese offline fallback.
         if (this.selectedLanguage === "pt" && window.electronAPI.extractBundledDatabase) {
-          const [bundledResult] = await Promise.all([
-            window.electronAPI.extractBundledDatabase(this.selectedLanguage),
-            configPromise,
-          ]);
+          const bundledResult = await window.electronAPI.extractBundledDatabase(this.selectedLanguage);
           if (bundledResult?.ok) {
             await this.finishFirstBootSync();
             return;
@@ -329,10 +283,7 @@ export default {
         }
         this.statusText = this.copy.downloading;
         this.progress = 0;
-        const [downloadResult] = await Promise.all([
-          window.electronAPI.downloadDatabase(this.selectedLanguage),
-          configPromise,
-        ]);
+        const downloadResult = await window.electronAPI.downloadDatabase(this.selectedLanguage);
         if (!downloadResult?.ok) {
           console.error("Database download failed:", downloadResult?.error);
           throw new Error(this.copy.downloadFailed);
@@ -342,7 +293,7 @@ export default {
 
         this.statusText = this.copy.extracting;
         this.progress = 0;
-        const extractResult = await window.electronAPI.extractLocalDb(
+        const extractResult = downloadResult.installed ? { ok: true } : await window.electronAPI.extractLocalDb(
           this.selectedLanguage,
           this.databaseSourceLanguage,
         );

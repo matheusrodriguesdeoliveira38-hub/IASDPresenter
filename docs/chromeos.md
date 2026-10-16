@@ -67,7 +67,7 @@ use a tecla de tela cheia. Valide a projeção no equipamento antes de uso real.
 
 ## Áudio, vídeo e capas
 
-O app usa por padrão `https://api.louvorja.com.br/file`, o mesmo serviço HTTPS
+O app usa por padrão `https://api.louvorja.workers.dev/file`, o mesmo serviço HTTPS
 usado pela versão desktop, para áudio, playback, capas e imagens de letras.
 Esses arquivos são carregados sob demanda; não fazem parte do download inicial.
 

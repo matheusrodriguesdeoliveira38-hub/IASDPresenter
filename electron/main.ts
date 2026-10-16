@@ -23,7 +23,7 @@ const {
   writeRecoverableFile,
   writeRecoverableJson,
 } = require("./FileRecovery");
-const ftp = require("basic-ftp");
+const { unzipSync, strFromU8 } = require("fflate");
 const { getYouTubeVideoId, getYouTubeEmbedUrl } = require("./YouTube");
 
 // Chave estática para ofuscação (não é segurança alta, apenas ofuscação)
@@ -132,7 +132,6 @@ function getDatabaseSourceLanguage(language = "pt") {
 function getRequiredLocalDbFiles(language = "pt") {
   const locale = normalizeDatabaseLanguage(language);
   return [
-    "config",
     `${locale}_categories`,
     `${locale}_musics`,
     `${locale}_bible_book`,
@@ -2600,243 +2599,49 @@ ipcMain.handle("extract-local-db", async (event, language = "pt", sourceLanguage
   }
 });
 
-let globalFtpParams = null;
-let globalFtpParamsPromise = null;
-
-async function getFtpParams() {
-  if (globalFtpParams) return globalFtpParams;
-  if (globalFtpParamsPromise) return globalFtpParamsPromise;
-
-  globalFtpParamsPromise = (async () => {
-    const response = await net.fetch("https://api.louvorja.com.br/params?type=env");
-    if (!response.ok) throw new Error("Falha ao buscar parâmetros");
-    const text = await response.text();
-
-    const params = {};
-    text.split("\n").forEach(line => {
-      const idx = line.indexOf("=");
-      if (idx > 0) {
-        params[line.slice(0, idx).trim()] = line.slice(idx + 1).trim();
-      }
-    });
-
-    const connFtp = params["conn_ftp"];
-    if (!connFtp) throw new Error("conn_ftp não encontrado");
-
-    // The authorization service uses the legacy PT tenant for shared FTP credentials.
-    // Content language is selected later through the database filename.
-    const payload = Buffer.from("pc_name=Electron&lang=PT").toString("base64");
-    const ftpUrl = `${connFtp + (connFtp.includes("?") ? "&" : "?")  }data=${  payload  }&lang=PT`;
-
-    const ftpResponse = await net.fetch(ftpUrl);
-    if (!ftpResponse.ok) throw new Error("Falha ao autorizar FTP");
-    const encodedFtpParams = await ftpResponse.text();
-
-    const decodedFtpText = Buffer.from(encodedFtpParams, "base64").toString("utf8");
-    const ftpParams = {};
-    decodedFtpText.split("\n").forEach(line => {
-      const idx = line.indexOf("=");
-      if (idx > 0) {
-        ftpParams[line.slice(0, idx).trim()] = line.slice(idx + 1).trim();
-      }
-    });
-
-    globalFtpParams = ftpParams;
-    return ftpParams;
-  })();
-
-  try {
-    return await globalFtpParamsPromise;
-  } finally {
-    globalFtpParamsPromise = null;
-  }
-}
-
 ipcMain.handle("download-database", async (event, language = "pt") => {
-  let client = null;
   try {
-    const ftpParams = await getFtpParams();
-
-    client = new ftp.Client();
-
-    await client.access({
-      host: ftpParams["host"],
-      user: ftpParams["username"],
-      password: ftpParams["password"],
-      port: parseInt(ftpParams["port"] || "21"),
-      secure: false,
-    });
-
-    const finalDbPath = path.join(app.getPath("userData"), "database.db");
     const selectedLanguage = normalizeDatabaseLanguage(language);
-    const langPrefix = getDatabaseSourceLanguage(selectedLanguage);
-    const remotePath = `${(ftpParams["root"] || "/") + (ftpParams["root"]?.endsWith("/") ? "" : "/")  }config/${langPrefix}_database.db`;
-
-    let size = 0;
-    try {
-      size = await client.size(remotePath);
-    } catch (e) {
-      console.warn("Não foi possível obter o tamanho do arquivo via FTP:", e.message);
-    }
-
-    client.trackProgress(info => {
-      if (size > 0) {
-        const percent = Math.floor((info.bytesOverall / size) * 100);
-        event.sender.send("download-db-progress", { progress: percent });
+    const sourceLanguage = getDatabaseSourceLanguage(selectedLanguage);
+    event.sender.send("download-db-progress", { progress: 0 });
+    const response = await net.fetch("https://api.louvorja.workers.dev/db/bundle");
+    if (!response.ok) throw new Error(`Falha ao baixar banco: HTTP ${response.status}`);
+    const entries = unzipSync(new Uint8Array(await response.arrayBuffer()));
+    const records = Object.entries(entries)
+      .filter(([name]) => /^[a-zA-Z0-9_-]+\.json$/.test(name) && !name.startsWith("_"))
+      .map(([name, bytes]) => [name.slice(0, -5), normalizeApiMediaPaths(JSON.parse(strFromU8(bytes))) ]);
+    for (const key of ["categories", "musics", "bible_book", "bible_version"]) {
+      if (!records.some(([name]) => name === sourceLanguage + "_" + key)) {
+        throw new Error("Pacote de banco incompleto: " + key);
       }
-    });
-
-    const tempDbPath = `${finalDbPath}.download`;
-    if (fs.existsSync(tempDbPath)) fs.unlinkSync(tempDbPath);
-    await client.downloadTo(tempDbPath, remotePath);
-
-    const stat = fs.statSync(tempDbPath);
-    if (!stat.size) {
-      throw new Error(`Banco baixado vazio de ${remotePath}`);
     }
-
-    fs.renameSync(tempDbPath, finalDbPath);
-
-    return { ok: true, language: selectedLanguage, sourceLanguage: langPrefix };
+    let completed = 0;
+    for (const [name, data] of records) {
+      // English uses the Portuguese content catalog, as in the bundled installer.
+      const localName = selectedLanguage !== sourceLanguage && name.startsWith(sourceLanguage + "_")
+        ? selectedLanguage + name.slice(sourceLanguage.length) : name;
+      await writeLocalDbFile(localName, data);
+      completed++;
+      if (completed % 100 === 0) event.sender.send("download-db-progress", { progress: Math.floor(completed / records.length * 100) });
+    }
+    event.sender.send("download-db-progress", { progress: 100 });
+    return { ok: true, installed: true, language: selectedLanguage, sourceLanguage };
   } catch (error) {
-    console.error("Erro no download do banco:", error);
     writeFirstBootErrorLog("download-database", error);
     return { ok: false, error: error.message || String(error) };
-  } finally {
-    if (client) {
-      try { client.close(); } catch { /* ignore */ }
-    }
   }
 });
 
-// ======================== SISTEMA DE DOWNLOAD FTP PERSISTENTE ========================
-
-let ftpClient = null;
-let ftpCloseTimer = null;
-let useFtpFallback = false;
-let ftpFallbackTimer = null;
-
-function resetFtpFallbackTimer() {
-  if (ftpFallbackTimer) clearTimeout(ftpFallbackTimer);
-  // Se não houver requisições de mídia por 2 minutos, voltamos a tentar HTTP
-  ftpFallbackTimer = setTimeout(() => {
-    console.log("[FTP] Timeout de inatividade HTTP atingido. Voltando a tentar HTTP...");
-    useFtpFallback = false;
-  }, 120000);
-}
-
-function scheduleFtpClose() {
-  if (ftpCloseTimer) clearTimeout(ftpCloseTimer);
-  // Fecha a conexão FTP se ficar 30s sem uso
-  ftpCloseTimer = setTimeout(() => {
-    if (ftpClient) {
-      console.log("[FTP] Fechando conexão FTP por inatividade...");
-      try { ftpClient.close(); } catch { /* ignore */ }
-      ftpClient = null;
-    }
-  }, 30000);
-}
-
-async function getOrCreateFtpClient() {
-  if (ftpClient && !ftpClient.closed) {
-    scheduleFtpClose();
-    return ftpClient;
+// Keep relative media paths so local downloads and offline playback use the same keys.
+function normalizeApiMediaPaths(value) {
+  if (Array.isArray(value)) return value.map(normalizeApiMediaPaths);
+  if (value && typeof value === "object") {
+    return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, normalizeApiMediaPaths(item)]));
   }
-
-  const ftpParams = await getFtpParams();
-  const client = new ftp.Client();
-  client.ftp.verbose = false;
-
-  const host = ftpParams["host"];
-  const user = ftpParams["username"];
-  const port = parseInt(ftpParams["port"] || "21");
-
-  await client.access({
-    host,
-    user,
-    password: ftpParams["password"],
-    port,
-    secure: false,
-  });
-
-  ftpClient = client;
-  scheduleFtpClose();
-  return client;
-}
-
-class Mutex {
-  queue: Array<() => void>;
-  locked: boolean;
-  constructor() {
-    this.queue = [];
-    this.locked = false;
+  if (typeof value === "string") {
+    return value.replace(/^https?:\/\/(?:files\.louvorja\.com\.br|api\.louvorja\.workers\.dev\/file)(?=\/)/i, "");
   }
-
-  async lock() {
-    if (!this.locked) {
-      this.locked = true;
-      return;
-    }
-    return new Promise<void>(resolve => this.queue.push(resolve));
-  }
-
-  unlock() {
-    if (this.queue.length > 0) {
-      const resolve = this.queue.shift();
-      resolve();
-    } else {
-      this.locked = false;
-    }
-  }
-}
-
-const ftpMutex = new Mutex();
-
-async function downloadMediaViaFtp(destFolderType, filename, filePath, retries = 2) {
-  const ftpParams = await getFtpParams();
-
-  let ftpFolder = "config/capas";
-  if (destFolderType === "music") ftpFolder = "config/musicas";
-  else if (destFolderType === "slides") ftpFolder = "config/imagens";
-
-  let cleanFilename = filename;
-  // O servidor FTP não possui as subpastas pt/ ou es/ sob config/musicas
-  if (cleanFilename.startsWith("pt/") || cleanFilename.startsWith("es/")) {
-    cleanFilename = cleanFilename.substring(3);
-  }
-
-  // Construir o caminho remoto exatamente como o Delphi faz:
-  // ftp_dir + arquivo_ftp (onde ftp_dir = root, e arquivo_ftp = config/musicas/...)
-  const root = ftpParams["root"] || "/";
-  const remotePath = `${root + (root.endsWith("/") ? "" : "/")  }${ftpFolder}/${cleanFilename}`;
-
-  await ftpMutex.lock();
-  try {
-    for (let attempt = 0; attempt <= retries; attempt++) {
-      try {
-        const client = await getOrCreateFtpClient();
-        await client.downloadTo(filePath, remotePath);
-        return; // sucesso
-      } catch (err) {
-        console.error(`[FTP] ERRO ao baixar ${remotePath}: ${err.message}`);
-        // Se deu erro, fecha a conexão atual para forçar reconexão no próximo attempt
-        if (ftpClient) {
-          try { ftpClient.close(); } catch { /* ignore */ }
-          ftpClient = null;
-        }
-
-        if (attempt < retries) {
-          const waitTime = 2000 * (attempt + 1); // 2s, 4s
-          console.warn(`[FTP] Tentativa ${attempt + 1} falhou para ${cleanFilename}, retentando em ${waitTime/1000}s...`);
-          await new Promise(r => setTimeout(r, waitTime));
-        } else {
-          throw err; // esgotou retries
-        }
-      }
-    }
-  } finally {
-    ftpMutex.unlock();
-  }
+  return value;
 }
 
 function buildApiUrl(destFolderType, filename) {
@@ -2847,7 +2652,7 @@ function buildApiUrl(destFolderType, filename) {
   else if (destFolderType === "slides") urlFolder = "images";
 
   const cleanFilename = filename.replace(/\\/g, "/");
-  return `https://api.louvorja.com.br/file/${urlFolder}/${encodeURIComponent(cleanFilename).replace(/%2F/g, "/")}`;
+  return `https://api.louvorja.workers.dev/file/${urlFolder}/${encodeURIComponent(cleanFilename).replace(/%2F/g, "/")}`;
 }
 
 const activeMediaDownloads = new Map();
@@ -2883,45 +2688,23 @@ async function performMediaDownload(destFolderType, decodedFilename, filePath) {
   const tempPath = `${filePath}.download`;
 
   try {
-    // Busca credenciais antes de um eventual fallback para FTP.
-    await getFtpParams().catch(e => console.warn("Não foi possível fazer pre-fetch das credenciais FTP:", e.message));
-
     if (isUsableMediaFile(filePath)) return true;
     await fs.promises.mkdir(fileDir, { recursive: true });
     await fs.promises.rm(tempPath, { force: true });
 
-    if (useFtpFallback) {
-      resetFtpFallbackTimer();
-      try {
-        await downloadMediaViaFtp(destFolderType, decodedFilename, tempPath);
-        if (!isUsableMediaFile(tempPath)) throw new Error("Arquivo baixado está vazio");
-        await replaceDownloadedMedia(tempPath, filePath);
-        return true;
-      } catch (ftpError) {
-        console.error("[FTP] Erro no fallback FTP (direto):", ftpError.message);
-        return false;
-      }
-    }
-
     const apiUrl = buildApiUrl(destFolderType, decodedFilename);
-    const response = await net.fetch(apiUrl);
-
-    if (response.status === 429) {
-      console.warn("[HTTP] Rate limit 429 atingido. Trocando para FTP para todos os downloads...");
-      useFtpFallback = true;
-      resetFtpFallbackTimer();
-      try {
-        await downloadMediaViaFtp(destFolderType, decodedFilename, tempPath);
-        if (!isUsableMediaFile(tempPath)) throw new Error("Arquivo baixado está vazio");
-        await replaceDownloadedMedia(tempPath, filePath);
-        return true;
-      } catch (ftpError) {
-        console.error("[FTP] Erro no fallback FTP após 429:", ftpError.message);
-        return false;
-      }
+    let response = await net.fetch(apiUrl);
+    // Offline catalogs may still reference the original archive formats.
+    const alternateUrl = apiUrl.replace(/\.mp3$/i, ".opus").replace(/\.bmp$/i, ".jpg");
+    if (response.status === 404 && alternateUrl !== apiUrl) {
+      await response.body?.cancel();
+      response = await net.fetch(alternateUrl);
     }
-
-    if (!response.ok) return false;
+    if (!response.ok || response.status === 206) {
+      console.error("[Download] HTTP", response.status, apiUrl);
+      await response.body?.cancel();
+      return false;
+    }
 
     const buffer = Buffer.from(await response.arrayBuffer());
     if (buffer.length === 0) return false;
@@ -3744,7 +3527,7 @@ app.whenReady().then(async () => {
 
     if (!fs.existsSync(filePath)) {
       // Proxy transparente: baixa da API e salva localmente antes de servir
-      const apiUrl = `https://api.louvorja.com.br/file${fallbackPath.replace(/\\/g, "/")}`;
+      const apiUrl = `https://api.louvorja.workers.dev/file${fallbackPath.replace(/\\/g, "/")}`;
       net.fetch(apiUrl).then(res => {
         if (res.ok) {
           return res.arrayBuffer();

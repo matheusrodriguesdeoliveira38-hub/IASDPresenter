@@ -1,6 +1,6 @@
 const helper: Record<string, any> = {
   db(path) {
-    const url = import.meta.env.VITE_URL_DATABASE;
+    const url = (import.meta.env.VITE_URL_DATABASE || "https://api.louvorja.workers.dev/json_db").replace(/\/$/, "");
     return url + (path.startsWith("/") ? path : `/${  path}`);
   },
   file(path) {
@@ -13,7 +13,7 @@ const helper: Record<string, any> = {
       }
       return `local://media/${cleanPath}`;
     }
-    const url = import.meta.env.VITE_URL_FILES || (__PWA_ENABLED__ ? "https://api.louvorja.com.br/file" : "");
+    const url = import.meta.env.VITE_URL_FILES || "https://api.louvorja.workers.dev/file";
     if (!url) return "";
     return url.replace(/\/$/, "") + (path.startsWith("/") ? path : `/${path}`).split("/").map(part => encodeURIComponent(part)).join("/");
   },

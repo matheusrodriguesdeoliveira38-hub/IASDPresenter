@@ -163,7 +163,6 @@ Itens Agendados
             </div>
           </div>
 
-          <LiturgyTimingPanel v-if="currentItems.length || $appdata.get('liturgy_stage_timer')" :items="currentItems" />
 
           <!-- Drag & Drop List -->
           <div class="flex-grow-1 px-2 py-2" style="overflow-y: auto; min-height: 0;">
@@ -310,12 +309,6 @@ Itens Agendados
                       {{ element.subtitle }}
                     </div>
                   </div>
-                  <v-chip v-if="element.timingMode === 'deadline' && element.endTime" size="small" variant="tonal" class="mr-2" prepend-icon="mdi-clock-end">
-                    {{ t('timing.until') }} {{ element.endTime }}
-                  </v-chip>
-                  <v-chip v-else-if="element.plannedMinutes > 0" size="small" variant="tonal" class="mr-2" prepend-icon="mdi-timer-outline">
-                    {{ element.plannedMinutes }} min
-                  </v-chip>
                   <div class="d-flex align-center" style="gap: 2px; flex-shrink: 0;">
                     <v-btn
                       v-if="isExecutable(element)"
@@ -611,28 +604,6 @@ Itens Agendados
                     Gerenciar Itens Agendados
                   </v-btn>
                 </div>
-                <v-select
-                  v-if="addForm.type !== 'category'"
-                  v-model="addForm.timingMode"
-                  :items="[{ title: t('timing.by_duration'), value: 'duration' }, { title: t('timing.by_deadline'), value: 'deadline' }]"
-                  :label="t('timing.mode')" variant="outlined" rounded="lg" density="comfortable" hide-details class="mb-4"
-                />
-                <v-text-field
-                  v-if="addForm.type !== 'category' && addForm.timingMode === 'deadline'"
-                  v-model="addForm.endTime" type="time"
-                  :label="t('timing.end_time')" :hint="t('timing.end_time_hint')" persistent-hint
-                  :rules="[value => validEndTime(value) || t('timing.invalid_end_time')]"
-                  variant="outlined" rounded="lg" density="comfortable" class="mb-4"
-                />
-                <v-text-field
-                  v-if="addForm.type !== 'category' && addForm.timingMode !== 'deadline'"
-                  v-model="addForm.plannedMinutes"
-                  type="number" min="0" max="1440" step="0.5"
-                  :label="t('timing.duration')"
-                  :hint="t('timing.duration_hint')" persistent-hint
-                  :rules="[value => validStageMinutes(value) || t('timing.invalid_duration')]"
-                  variant="outlined" rounded="lg" density="comfortable" class="mb-4"
-                />
                 <!-- Description (annotation only) -->
                 <v-textarea
                   v-if="addForm.type === 'annotation'"
@@ -1101,8 +1072,6 @@ import manifest from "../manifest.json";
 import MenuToggleButton from "@/components/MenuToggleButton.vue";
 import draggable from "vuedraggable";
 import RichTextEditor from "./RichTextEditor.vue";
-import LiturgyTimingPanel from "@/components/LiturgyTimingPanel.vue";
-import { validEndTime } from "@/helpers/LiturgyTiming";
 import { isAudioFile, isWebUrl, openExternalMedia } from "@/helpers/ExternalMedia";
 import { isYouTubeUrl } from "@/helpers/YouTube";
 import { transitionProjection } from "@/helpers/ProjectionTransition";
@@ -1113,9 +1082,7 @@ export default {
   components: {
     MenuToggleButton,
     draggable,
-    RichTextEditor,
-    LiturgyTimingPanel,
-  },
+    RichTextEditor,  },
   data: () => ({
     showScheduledManager: false,
     scheduledCategories: [],
@@ -1159,11 +1126,7 @@ export default {
     addCategoryId: null,
     dragItemsBefore: [],
     dragSelectedId: null,
-    addForm: {
-      plannedMinutes: 0,
-      timingMode: "duration",
-      endTime: "",
-      scheduledCategoryId: null,
+    addForm: {      scheduledCategoryId: null,
       categoryId: null,
       type: "annotation",
       name: "",
@@ -1313,9 +1276,6 @@ export default {
       ];
     },
     isFormValid() {
-      if (this.addForm.type !== "category") {
-        if (this.addForm.timingMode === "deadline" ? !validEndTime(this.addForm.endTime) : !this.validStageMinutes(this.addForm.plannedMinutes)) return false;
-      }
       if (this.addForm.type === "scheduled_item") return this.scheduledCategories.some(category => category.id === this.addForm.scheduledCategoryId);
       if (!this.addForm.name.trim()) return false;
       if (this.addForm.type === "verse" && (!this.addForm.verseBookId || !this.addForm.verseChapter)) return false;
@@ -1358,11 +1318,6 @@ export default {
     }
   },
   methods: {
-    validEndTime,
-    validStageMinutes(value) {
-      const minutes = Number(value);
-      return Number.isFinite(minutes) && minutes >= 0 && minutes <= 1440;
-    },
     supportsAutomationTrigger(type) {
       return ["music", "media", "link", "scheduled_item"].includes(type);
     },
@@ -1644,8 +1599,7 @@ export default {
         if (useInternal) return this.t("actions.play");
       }
       
-      const map = {
-        music: "actions.play",
+      const map = {        music: "actions.play",
         verse: "actions.project",
         link: "actions.open",
         media: "actions.open",
@@ -1688,11 +1642,7 @@ export default {
     },
     openAddForm(type) {
       this.editingIndex = null;
-      this.addForm = {
-        plannedMinutes: 0,
-        timingMode: "duration",
-        endTime: "",
-        scheduledCategoryId: null,
+      this.addForm = {        scheduledCategoryId: null,
         categoryId: type === "category" ? null : this.addCategoryId,
         type,
         name: "",
@@ -1755,11 +1705,7 @@ export default {
       const item: Record<string, any> & { id: number; type: string } = {
         ...(this.editingIndex !== null ? this.currentItems[this.editingIndex] : {}),
         id: Date.now() + Math.random(),
-        type: this.addForm.type,
-        plannedMinutes: this.addForm.type === "category" ? 0 : Number(this.addForm.plannedMinutes) || 0,
-        timingMode: this.addForm.type === "category" ? "duration" : this.addForm.timingMode,
-        endTime: this.addForm.type !== "category" && this.addForm.timingMode === "deadline" ? this.addForm.endTime : "",
-        name: this.addForm.name.trim(),
+        type: this.addForm.type,        name: this.addForm.name.trim(),
         subtitle: this.addForm.subtitle?.trim() || "",
       };
 
@@ -1861,11 +1807,7 @@ export default {
     editItem(index) {
       const item = this.currentItems[index];
       this.editingIndex = index;
-      this.addForm = {
-        plannedMinutes: item.plannedMinutes || 0,
-        timingMode: item.timingMode === "deadline" ? "deadline" : "duration",
-        endTime: item.endTime || "",
-        scheduledCategoryId: item.categoryId || null,
+      this.addForm = {        scheduledCategoryId: item.categoryId || null,
         categoryId: item.type === "category" ? null : (this.itemCategory(index)?.id ?? null),
         type: item.type,
         name: item.name,
@@ -2180,7 +2122,6 @@ export default {
           window.electronAPI.setPresentationShortcutsEnabled(true);
         }
       }
-
         const returnModule = targetModule || (
           item.type === "media" && this.$userdata.get("modules.config.media_use_internal_player")
             ? "external_media" : null

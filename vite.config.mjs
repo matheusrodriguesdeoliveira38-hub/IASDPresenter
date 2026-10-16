@@ -12,7 +12,7 @@ export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
   const enablePwa = mode === "chromeos" || env.VITE_ENABLE_PWA === "true";
   const base = env.VITE_BASE_URL ?? "/";
-  const mediaBase = (env.VITE_URL_FILES || "https://api.louvorja.com.br/file").replace(/\/$/, "");
+  const mediaBase = (env.VITE_URL_FILES || "https://api.louvorja.workers.dev/file").replace(/\/$/, "");
   const libraryDir = path.resolve("tmp/chromeos-library");
   const library = mode === "chromeos" ? JSON.parse(fs.readFileSync(path.join(libraryDir, "manifest.json"), "utf8")) : null;
 

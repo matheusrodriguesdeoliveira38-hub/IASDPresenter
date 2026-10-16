@@ -296,6 +296,18 @@ git push origin vX.Y.Z
 
 Ao enviar uma tag `v*`, o workflow do GitHub Actions gera a release e publica os arquivos usados pelo atualizador.
 
+## API de conteúdo
+
+O programa usa a [LouvorJA API Workers](https://github.com/louvorja/api-workers),
+com base em `https://api.louvorja.workers.dev`, sem autenticação.
+Os dados individuais vêm de `/json_db/{tabela}` e as mídias de `/file/{caminho}`.
+Na instalação online, o desktop baixa `/db/bundle` e salva os JSONs localmente
+para uso offline. A biblioteca incluída no instalador continua disponível.
+O download de conteúdo usa HTTPS; não depende de FTP.
+
+Para usar um servidor alternativo no frontend, configure `VITE_URL_DATABASE`
+(incluindo `/json_db`) e `VITE_URL_FILES` (incluindo `/file`) antes do build.
+
 ## Licenca
 
 Projeto privado - IASDPresenter.

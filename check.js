@@ -6,7 +6,7 @@ const API_TOKEN = process.env.VITE_API_TOKEN;
 const date = new Date().toISOString().slice(0, 10).replace(/-/g, "");
 
 async function fetchApi(endpoint) {
-    const url = `https://api.louvorja.com.br/json_db/${endpoint}?${date}`;
+    const url = `https://api.louvorja.workers.dev/json_db/${endpoint}?${date}`;
     const res = await fetch(url, { headers: { 'Api-Token': API_TOKEN } });
     if (!res.ok) {
         return null;

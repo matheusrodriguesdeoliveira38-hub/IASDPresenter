@@ -45,7 +45,9 @@ async function parseJsonResponse(response, file) {
   }
 
   try {
-    return JSON.parse(text);
+    return JSON.parse(text, (_key, value) => typeof value === "string"
+      ? value.replace(/^https?:\/\/(?:files\.louvorja\.com\.br|api\.louvorja\.workers\.dev\/file)(?=\/)/i, "")
+      : value);
   } catch (error) {
     throw new Error(`Resposta invalida ao buscar ${file}: ${error.message}`);
   }

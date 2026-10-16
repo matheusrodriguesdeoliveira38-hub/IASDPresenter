@@ -11,20 +11,18 @@
       <img src="/ico/logo-horizontal.png" alt="IASDPresenter" />
     </div>
     <PulpitMessageOverlay v-if="$route.query.webOutput !== '1'" />
-    <LiturgyStageClock v-if="$route.query.module === 'return_monitor' && $route.query.webOutput !== '1'" class="return-stage-clock" />
   </div>
 </template>
 
 <script lang="ts">
 import { defineAsyncComponent } from "vue";
 import PulpitMessageOverlay from "@/components/PulpitMessageOverlay.vue";
-import LiturgyStageClock from "@/components/LiturgyStageClock.vue";
 
 const moduleComponents = new Map();
 
 export default {
   name: "PopupPage",
-  components: { PulpitMessageOverlay, LiturgyStageClock },
+  components: { PulpitMessageOverlay },
   data: () => ({
     message: null,
     frozen: false,
@@ -176,12 +174,5 @@ export default {
   width: min(54vw, 680px);
   max-height: 45vh;
   object-fit: contain;
-}
-.return-stage-clock {
-  position: absolute;
-  bottom: 16px;
-  left: 16px;
-  right: 16px;
-  z-index: 10001;
 }
 </style>

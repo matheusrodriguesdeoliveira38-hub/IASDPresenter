@@ -70,7 +70,6 @@ test('projection animates opacity for the requested duration and acknowledges on
   const { default: popup } = loadTs('src/views/Popup.vue', {
     vue: {},
     '@/components/PulpitMessageOverlay.vue': {},
-    '@/components/LiturgyStageClock.vue': {},
   }, {
     window: { opener: { postMessage: message => messages.push(message) } },
     getComputedStyle: () => ({ opacity: '1' }),
