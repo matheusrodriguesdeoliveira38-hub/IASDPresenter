@@ -13,7 +13,7 @@ function runtime(port = 0) {
     QRCode: require('qrcode'),
     remoteControlConfig: { enabled: true, host: '192.168.1.8', port, webOutputEnabled: true },
     remoteControlServer: null, remoteControlStartPromise: null, remoteControlError: '', remoteControlHost: '0.0.0.0',
-    remoteAccessTunnel: null, remoteAccessTunnelUrl: '', remoteAccessTunnelError: '',
+    remoteAccessTunnel: null, remoteAccessTunnelUrl: '', remoteAccessTunnelError: '', remoteAccessTunnelStatus: '',
     handleRemoteControlRequest: async (_, response) => response.end('remote ready'),
   });
   const code = section('function getRemoteControlPort()', 'function isRemoteControlPasswordValid')

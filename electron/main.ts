@@ -7,9 +7,10 @@ const { VIRTUAL_MONITOR_ID, virtualMonitorDisplay, createVirtualMonitorHandler }
 
 const crypto = require("crypto");
 const http = require("http");
+const https = require("https");
 const os: typeof import("node:os") = require("os");
 const QRCode = require("qrcode");
-const { spawn } = require("child_process");
+const { spawn, spawnSync } = require("child_process");
 const { autoUpdater } = require("electron-updater");
 const { findSofficeExecutable } = require("./LibreOffice");
 const DbExtractor = require("./DbExtractor");
@@ -85,6 +86,7 @@ let remoteControlError = "";
 let remoteAccessTunnel = null;
 let remoteAccessTunnelUrl = "";
 let remoteAccessTunnelError = "";
+let remoteAccessTunnelStatus = "";
 let remoteControlHost = "0.0.0.0";
 type WebOutputClient = { kind: string; response: import("node:http").ServerResponse; closed: boolean; blocked?: boolean; keepAlive?: ReturnType<typeof setInterval> };
 type WebOutputWaiter = { response: import("node:http").ServerResponse; timer: ReturnType<typeof setTimeout> };
@@ -2162,6 +2164,7 @@ async function stopRemoteControlServer() {
 
 function stopRemoteAccessTunnel() {
   remoteAccessTunnelError = "";
+  remoteAccessTunnelStatus = "";
   if (!remoteAccessTunnel) {
     remoteAccessTunnelUrl = "";
     return Promise.resolve(true);
@@ -2185,6 +2188,165 @@ function stopRemoteAccessTunnel() {
   });
 }
 
+function requestCloudflaredReleaseJson(url, redirects = 0) {
+  return new Promise<Buffer>((resolve, reject) => {
+    if (redirects > 5) return reject(new Error("Muitos redirecionamentos ao consultar a release oficial do cloudflared."));
+    const parsedUrl = new URL(url);
+    if (parsedUrl.protocol !== "https:" || !(parsedUrl.hostname === "api.github.com" || parsedUrl.hostname === "github.com")) {
+      return reject(new Error("O download do cloudflared precisa vir do GitHub oficial."));
+    }
+    const request = https.get(parsedUrl, {
+      headers: { "User-Agent": "IASDPresenter", Accept: "application/vnd.github+json" },
+    }, (response) => {
+      if ([301, 302, 303, 307, 308].includes(response.statusCode) && response.headers.location) {
+        response.resume();
+        return requestCloudflaredReleaseJson(new URL(response.headers.location, parsedUrl).toString(), redirects + 1).then(resolve, reject);
+      }
+      if (response.statusCode !== 200) {
+        response.resume();
+        return reject(new Error(`O GitHub respondeu com HTTP ${response.statusCode} ao buscar cloudflared.`));
+      }
+      const chunks = [];
+      let size = 0;
+      response.on("data", (chunk) => {
+        size += chunk.length;
+        if (size > 2 * 1024 * 1024) {
+          request.destroy(new Error("A resposta da release do cloudflared excedeu o limite esperado."));
+          return;
+        }
+        chunks.push(chunk);
+      });
+      response.on("end", () => resolve(Buffer.concat(chunks)));
+      response.on("error", reject);
+    });
+    request.setTimeout(20000, () => request.destroy(new Error("Tempo esgotado ao consultar o GitHub.")));
+    request.on("error", reject);
+  });
+}
+
+function downloadCloudflaredAsset(url, destination, expectedDigest, redirects = 0) {
+  return new Promise<void>((resolve, reject) => {
+    if (redirects > 5) return reject(new Error("Muitos redirecionamentos ao baixar cloudflared."));
+    const parsedUrl = new URL(url);
+    const allowedHost = parsedUrl.hostname === "github.com"
+      || parsedUrl.hostname === "release-assets.githubusercontent.com"
+      || parsedUrl.hostname === "objects.githubusercontent.com"
+      || parsedUrl.hostname.endsWith(".githubusercontent.com");
+    if (parsedUrl.protocol !== "https:" || !allowedHost) {
+      return reject(new Error("O arquivo do cloudflared foi redirecionado para um host não confiável."));
+    }
+    const temporaryPath = `${destination}.${process.pid}.download`;
+    const request = https.get(parsedUrl, { headers: { "User-Agent": "IASDPresenter" } }, (response) => {
+      if ([301, 302, 303, 307, 308].includes(response.statusCode) && response.headers.location) {
+        response.resume();
+        return downloadCloudflaredAsset(new URL(response.headers.location, parsedUrl).toString(), destination, expectedDigest, redirects + 1).then(resolve, reject);
+      }
+      if (response.statusCode !== 200) {
+        response.resume();
+        return reject(new Error(`O GitHub respondeu com HTTP ${response.statusCode} ao baixar cloudflared.`));
+      }
+      const contentLength = Number(response.headers["content-length"] || 0);
+      if (contentLength > 150 * 1024 * 1024) {
+        response.destroy(new Error("O arquivo do cloudflared excedeu o limite de tamanho."));
+        return reject(new Error("O arquivo do cloudflared excedeu o limite de tamanho."));
+      }
+      const hash = crypto.createHash("sha256");
+      let size = 0;
+      const output = fs.createWriteStream(temporaryPath);
+      response.on("data", (chunk) => {
+        size += chunk.length;
+        if (size > 150 * 1024 * 1024) response.destroy(new Error("O arquivo do cloudflared excedeu o limite de tamanho."));
+        hash.update(chunk);
+      });
+      response.pipe(output);
+      response.on("error", (error) => {
+        output.destroy();
+        try { fs.unlinkSync(temporaryPath); } catch { /* no temporary file */ }
+        reject(error);
+      });
+      output.on("error", (error) => {
+        response.destroy();
+        try { fs.unlinkSync(temporaryPath); } catch { /* no temporary file */ }
+        reject(error);
+      });
+      output.on("close", () => {
+        const actualDigest = hash.digest("hex");
+        if (actualDigest !== expectedDigest) {
+          try { fs.unlinkSync(temporaryPath); } catch { /* no temporary file */ }
+          reject(new Error("A verificação SHA-256 do cloudflared falhou. O arquivo baixado foi descartado."));
+          return;
+        }
+        try {
+          fs.renameSync(temporaryPath, destination);
+          resolve();
+        } catch (error) {
+          try { fs.unlinkSync(temporaryPath); } catch { /* no temporary file */ }
+          reject(error);
+        }
+      });
+    });
+    request.setTimeout(120000, () => request.destroy(new Error("Tempo esgotado ao baixar cloudflared.")));
+    request.on("error", (error) => {
+      try { fs.unlinkSync(temporaryPath); } catch { /* no temporary file */ }
+      reject(error);
+    });
+  });
+}
+
+function findCloudflaredExecutable() {
+  const executableName = process.platform === "win32" ? "cloudflared.exe" : "cloudflared";
+  const candidates = [process.env.CLOUDFLARED_PATH].filter(Boolean);
+  if (process.platform === "win32") {
+    const localAppData = process.env.LOCALAPPDATA || "";
+    const programFiles = process.env.ProgramFiles || "C:\\Program Files";
+    const programFilesX86 = process.env["ProgramFiles(x86)"] || "C:\\Program Files (x86)";
+    candidates.push(
+      path.join(userDataPath, "cloudflared", executableName),
+      path.join(programFiles, "cloudflared", executableName),
+      path.join(programFilesX86, "cloudflared", executableName),
+      path.join(process.env.ChocolateyInstall || "C:\\ProgramData\\chocolatey", "bin", executableName),
+      path.join(localAppData, "Microsoft", "WinGet", "Links", executableName),
+      path.join(process.env.USERPROFILE || "", "scoop", "apps", "cloudflared", "current", executableName),
+    );
+  }
+  for (const candidate of candidates) {
+    if (!candidate) continue;
+    const resolved = fs.existsSync(candidate) && fs.statSync(candidate).isDirectory()
+      ? path.join(candidate, executableName) : candidate;
+    if (fs.existsSync(resolved) && fs.statSync(resolved).isFile()) return resolved;
+  }
+  const lookup = process.platform === "win32" ? "where.exe" : "which";
+  const result = spawnSync(lookup, [executableName], { encoding: "utf8", windowsHide: true });
+  const located = String(result.stdout || "").split(/\r?\n/).find(candidate => candidate && fs.existsSync(candidate.trim()));
+  return located ? located.trim() : "";
+}
+
+async function ensureCloudflaredExecutable() {
+  const installed = findCloudflaredExecutable();
+  if (installed) return installed;
+  if (process.platform !== "win32" || process.arch !== "x64") {
+    throw new Error("O Cloudflare One Client é o app VPN e não inclui o cloudflared. Instale o executável cloudflared compatível com este sistema pelo site oficial da Cloudflare.");
+  }
+
+  remoteAccessTunnelStatus = "Baixando o cloudflared oficial da Cloudflare e verificando o arquivo...";
+  const release = JSON.parse((await requestCloudflaredReleaseJson("https://api.github.com/repos/cloudflare/cloudflared/releases/latest")).toString("utf8"));
+  const asset = release.assets?.find(item => item.name === "cloudflared-windows-amd64.exe");
+  const digest = typeof asset?.digest === "string" && asset.digest.match(/^sha256:([a-f0-9]{64})$/i)?.[1];
+  if (!asset?.browser_download_url || !digest) {
+    throw new Error("A release oficial não forneceu o executável Windows x64 e seu SHA-256.");
+  }
+  const directory = path.join(userDataPath, "cloudflared");
+  fs.mkdirSync(directory, { recursive: true });
+  const destination = path.join(directory, "cloudflared.exe");
+  if (fs.existsSync(destination)) {
+    const cachedDigest = crypto.createHash("sha256").update(fs.readFileSync(destination)).digest("hex");
+    if (cachedDigest === digest) return destination;
+    fs.unlinkSync(destination);
+  }
+  await downloadCloudflaredAsset(asset.browser_download_url, destination, digest);
+  return destination;
+}
+
 async function startRemoteAccessTunnel() {
   if (remoteAccessTunnel && !remoteAccessTunnel.killed && remoteAccessTunnelUrl) return true;
   remoteControlConfig.enabled = true;
@@ -2200,8 +2362,17 @@ async function startRemoteAccessTunnel() {
   }
 
   remoteAccessTunnelError = "";
+  remoteAccessTunnelStatus = "";
   remoteAccessTunnelUrl = "";
-  const executable = process.platform === "win32" ? "cloudflared.exe" : "cloudflared";
+  let executable;
+  try {
+    executable = await ensureCloudflaredExecutable();
+  } catch (error) {
+    remoteAccessTunnelError = error.message || "Não foi possível preparar o cloudflared.";
+    remoteAccessTunnelStatus = "";
+    return false;
+  }
+  remoteAccessTunnelStatus = "Conectando ao Cloudflare para criar o endereço público...";
   const tunnelOriginHost = remoteControlHost === "0.0.0.0" ? "127.0.0.1" : remoteControlHost;
   const tunnel = spawn(executable, [
     "--no-autoupdate", "tunnel", "--url", `http://${tunnelOriginHost}:${getRemoteControlPort()}`,
@@ -2212,6 +2383,7 @@ async function startRemoteAccessTunnel() {
     if (match) {
       remoteAccessTunnelUrl = match[0];
       remoteAccessTunnelError = "";
+      remoteAccessTunnelStatus = "";
     }
   };
   tunnel.stdout?.on("data", parseTunnelOutput);
@@ -2228,6 +2400,7 @@ async function startRemoteAccessTunnel() {
     if (remoteAccessTunnel === tunnel) {
       remoteAccessTunnel = null;
       remoteAccessTunnelUrl = "";
+      remoteAccessTunnelStatus = "";
       if (code !== 0) remoteAccessTunnelError = `O túnel foi encerrado (código ${code ?? "desconhecido"}).`;
     }
   });
@@ -2272,6 +2445,7 @@ async function getRemoteControlStatus() {
     tunnelRunning: Boolean(remoteAccessTunnel && !remoteAccessTunnel.killed),
     tunnelUrl: remoteAccessTunnelUrl,
     tunnelError: remoteAccessTunnelError,
+    tunnelStatus: remoteAccessTunnelStatus,
     effectiveHost: remoteControlHost,
     config: { ...remoteControlConfig, password: remoteControlConfig.password ? "********" : "" },
     addresses: remoteAccessTunnelUrl ? [remoteAccessTunnelUrl] : addresses,

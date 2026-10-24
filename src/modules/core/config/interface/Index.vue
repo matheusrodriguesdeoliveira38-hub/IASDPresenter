@@ -1551,7 +1551,7 @@ O monitor virtual aceita conexões em todas as interfaces de rede do computador,
                       <div class="font-weight-bold mb-1">Acesso pela internet</div>
                       <div class="mb-3">
                         Crie um endereço temporário para abrir o controle mesmo fora da rede local. O QR Code passa a usar esse endereço enquanto o túnel estiver ativo.
-                        O link é público e temporário, muda quando o túnel é encerrado e é fornecido pelo Cloudflare para testes e demonstrações. Uma senha é obrigatória.
+                        O link é público e temporário, muda quando o túnel é encerrado e é fornecido pelo Cloudflare para testes e demonstrações. Uma senha é obrigatória. Se o executável cloudflared não estiver no sistema, o app baixa a versão oficial e confere o SHA-256 antes de usá-la.
                       </div>
                       <div class="d-flex align-center flex-wrap" style="gap: 10px;">
                         <v-btn
@@ -1563,7 +1563,7 @@ O monitor virtual aceita conexões em todas as interfaces de rede do computador,
                           @click="startRemoteAccessTunnel"
                         >
                           <v-icon start>mdi-earth</v-icon>
-                          Liberar acesso pela internet
+                          {{ remote_control_tunnel_loading ? 'Preparando acesso remoto…' : 'Liberar acesso pela internet' }}
                         </v-btn>
                         <v-btn
                           v-else
@@ -1585,6 +1585,9 @@ O monitor virtual aceita conexões em todas as interfaces de rede do computador,
                           Instalar cloudflared
                           <v-icon end>mdi-open-in-new</v-icon>
                         </v-btn>
+                      </div>
+                      <div v-if="remote_control_tunnel_status || remote_control_tunnel_loading" class="mt-3 text-body-2">
+                        {{ remote_control_tunnel_status || "Preparando cloudflared e conectando ao Cloudflare…" }}
                       </div>
                       <div v-if="remote_control_tunnel_error" class="mt-3 text-body-2">{{ remote_control_tunnel_error }}</div>
                       <div v-if="remote_control_tunnel_url" class="mt-3 text-body-2">Endereço público: {{ remote_control_tunnel_url }}</div>
@@ -2308,6 +2311,7 @@ export default {
     remote_control_tunnel_running: false,
     remote_control_tunnel_url: "",
     remote_control_tunnel_error: "",
+    remote_control_tunnel_status: "",
     remote_control_running: false,
       remote_control_error: "",
     remote_control_addresses: [],
@@ -2802,6 +2806,7 @@ export default {
       this.remote_control_tunnel_running = status.tunnelRunning === true;
       this.remote_control_tunnel_url = status.tunnelUrl || "";
       this.remote_control_tunnel_error = status.tunnelError || "";
+      this.remote_control_tunnel_status = status.tunnelStatus || "";
       this.remote_control_network_options = status.networkOptions || [];
       this.remote_control_config = {
         ...this.remote_control_config,
