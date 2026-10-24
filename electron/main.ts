@@ -82,6 +82,9 @@ let mainAppWindow = null;
 let remoteControlServer = null;
 let remoteControlStartPromise = null;
 let remoteControlError = "";
+let remoteAccessTunnel = null;
+let remoteAccessTunnelUrl = "";
+let remoteAccessTunnelError = "";
 let remoteControlHost = "0.0.0.0";
 type WebOutputClient = { kind: string; response: import("node:http").ServerResponse; closed: boolean; blocked?: boolean; keepAlive?: ReturnType<typeof setInterval> };
 type WebOutputWaiter = { response: import("node:http").ServerResponse; timer: ReturnType<typeof setTimeout> };
@@ -1752,6 +1755,15 @@ const handleVirtualMonitorRequest = createVirtualMonitorHandler({
 
 async function handleRemoteControlRequest(request, response) {
   const url = new URL(request.url, `http://${request.headers.host || "localhost"}`);
+  const isPublicTunnelRequest = /\.trycloudflare\.com(?::\d+)?$/i.test(request.headers.host || "");
+  if (isPublicTunnelRequest && (!remoteControlConfig.requirePassword || !remoteControlConfig.password)) {
+    sendJson(response, 403, { ok: false, error: "Configure uma senha para usar o acesso pela internet." });
+    return;
+  }
+  if (isPublicTunnelRequest && (url.pathname === "/output" || url.pathname.startsWith("/output/") || url.pathname === "/virtual-monitor" || url.pathname.startsWith("/virtual-monitor/"))) {
+    sendJson(response, 403, { ok: false, error: "A saída web e o monitor virtual não são publicados pelo acesso remoto." });
+    return;
+  }
   if (await handleVirtualMonitorRequest(request, response, url.pathname)) return;
 
   if (url.pathname === "/output" || url.pathname === "/output/" || url.pathname === "/output/stream.mjpg" || url.pathname === "/output/live" || url.pathname === "/output/frame.jpg" || url.pathname === "/output/media") {
@@ -2148,14 +2160,103 @@ async function stopRemoteControlServer() {
   });
 }
 
+function stopRemoteAccessTunnel() {
+  remoteAccessTunnelError = "";
+  if (!remoteAccessTunnel) {
+    remoteAccessTunnelUrl = "";
+    return Promise.resolve(true);
+  }
+  const tunnel = remoteAccessTunnel;
+  remoteAccessTunnel = null;
+  remoteAccessTunnelUrl = "";
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => {
+      try { tunnel.kill(); } catch { /* process already stopped */ }
+      resolve(true);
+    }, 3000);
+    tunnel.once("exit", () => {
+      clearTimeout(timer);
+      resolve(true);
+    });
+    try { tunnel.kill(); } catch {
+      clearTimeout(timer);
+      resolve(true);
+    }
+  });
+}
+
+async function startRemoteAccessTunnel() {
+  if (remoteAccessTunnel && !remoteAccessTunnel.killed && remoteAccessTunnelUrl) return true;
+  remoteControlConfig.enabled = true;
+  saveRemoteControlConfig(remoteControlConfig);
+  await startRemoteControlServer();
+  if (!remoteControlServer?.listening) {
+    remoteAccessTunnelError = remoteControlError || "Inicie o servidor do controle remoto primeiro.";
+    return false;
+  }
+  if (!remoteControlConfig.requirePassword || !remoteControlConfig.password) {
+    remoteAccessTunnelError = "Configure e ative uma senha na seção Segurança de acesso antes de liberar o acesso pela internet.";
+    return false;
+  }
+
+  remoteAccessTunnelError = "";
+  remoteAccessTunnelUrl = "";
+  const executable = process.platform === "win32" ? "cloudflared.exe" : "cloudflared";
+  const tunnelOriginHost = remoteControlHost === "0.0.0.0" ? "127.0.0.1" : remoteControlHost;
+  const tunnel = spawn(executable, [
+    "--no-autoupdate", "tunnel", "--url", `http://${tunnelOriginHost}:${getRemoteControlPort()}`,
+  ], { windowsHide: true, stdio: ["ignore", "pipe", "pipe"] });
+  remoteAccessTunnel = tunnel;
+  const parseTunnelOutput = (chunk) => {
+    const match = String(chunk).match(/https:\/\/[a-z0-9-]+\.trycloudflare\.com/i);
+    if (match) {
+      remoteAccessTunnelUrl = match[0];
+      remoteAccessTunnelError = "";
+    }
+  };
+  tunnel.stdout?.on("data", parseTunnelOutput);
+  tunnel.stderr?.on("data", parseTunnelOutput);
+  tunnel.once("error", (error) => {
+    if (remoteAccessTunnel === tunnel) {
+      remoteAccessTunnel = null;
+      remoteAccessTunnelError = error.code === "ENOENT"
+        ? "O cloudflared não está instalado ou não está no PATH. Instale-o pelo site oficial da Cloudflare e tente novamente."
+        : `Não foi possível iniciar o túnel: ${error.message}`;
+    }
+  });
+  tunnel.once("exit", (code) => {
+    if (remoteAccessTunnel === tunnel) {
+      remoteAccessTunnel = null;
+      remoteAccessTunnelUrl = "";
+      if (code !== 0) remoteAccessTunnelError = `O túnel foi encerrado (código ${code ?? "desconhecido"}).`;
+    }
+  });
+
+  const started = await new Promise((resolve) => {
+    const deadline = Date.now() + 45000;
+    const check = () => {
+      if (remoteAccessTunnelUrl) return resolve(true);
+      if (!remoteAccessTunnel || Date.now() >= deadline) return resolve(false);
+      setTimeout(check, 200);
+    };
+    check();
+  });
+  if (!started && remoteAccessTunnel === tunnel) {
+    remoteAccessTunnelError = "Não foi possível obter um endereço público. Verifique a conexão com a internet e o cloudflared.";
+    await stopRemoteAccessTunnel();
+  }
+  return started;
+}
+
 async function getRemoteControlStatus() {
   await remoteControlStartPromise;
   const running = remoteControlServer?.listening === true;
   const addresses = running ? getRemoteControlAddresses() : [];
   let qrCode = "";
-  if (addresses[0]) {
+  const qrAddress = remoteAccessTunnelUrl || addresses[0];
+  if (qrAddress) {
     try {
-      qrCode = await QRCode.toDataURL(addresses[0], {
+      qrCode = await QRCode.toDataURL(qrAddress, {
         width: 320,
         margin: 2,
         color: { dark: "#081526", light: "#FFFFFF" },
@@ -2168,9 +2269,12 @@ async function getRemoteControlStatus() {
   return {
     running,
     error: remoteControlError,
+    tunnelRunning: Boolean(remoteAccessTunnel && !remoteAccessTunnel.killed),
+    tunnelUrl: remoteAccessTunnelUrl,
+    tunnelError: remoteAccessTunnelError,
     effectiveHost: remoteControlHost,
     config: { ...remoteControlConfig, password: remoteControlConfig.password ? "********" : "" },
-    addresses,
+    addresses: remoteAccessTunnelUrl ? [remoteAccessTunnelUrl] : addresses,
     outputAddresses: running ? getWebOutputAddresses() : [],
     virtualMonitorAddresses: running && remoteControlConfig.virtualMonitorEnabled
       ? addresses.map(address => `${address}/virtual-monitor`) : [],
@@ -2984,6 +3088,7 @@ ipcMain.handle("save-remote-control-config", async (event, config) => {
   const mustStopServer = wasListening && (!shouldRunNetworkServer() || bindingChanged);
 
   if (mustStopServer) {
+    await stopRemoteAccessTunnel();
     await stopRemoteControlServer();
   }
   if (shouldRunNetworkServer() && !remoteControlServer?.listening) {
@@ -3010,11 +3115,22 @@ ipcMain.handle("start-remote-control-server", () => {
 ipcMain.handle("stop-remote-control-server", async () => {
   remoteControlConfig.enabled = false;
   saveRemoteControlConfig(remoteControlConfig);
+  await stopRemoteAccessTunnel();
   if (shouldRunNetworkServer()) {
     startRemoteControlServer();
   } else {
     await stopRemoteControlServer();
   }
+  return getRemoteControlStatus();
+});
+
+ipcMain.handle("start-remote-access-tunnel", async () => {
+  await startRemoteAccessTunnel();
+  return getRemoteControlStatus();
+});
+
+ipcMain.handle("stop-remote-access-tunnel", async () => {
+  await stopRemoteAccessTunnel();
   return getRemoteControlStatus();
 });
 
@@ -3614,6 +3730,7 @@ app.on("window-all-closed", () => {
 app.on("will-quit", () => {
   globalShortcut.unregisterAll();
   stopProductionAppServer();
+  stopRemoteAccessTunnel();
   if (remoteControlServer) {
     remoteControlServer.close();
     remoteControlServer = null;

@@ -6,7 +6,6 @@
   />
 
   <AppAlert />
-  <PulpitMessageControl />
 
   <div
     class="main-container"
@@ -166,7 +165,6 @@
 
 <script lang="ts">
 import AppFooter from "@/layout/Footer.vue";
-import PulpitMessageControl from "@/components/PulpitMessageControl.vue";
 import AppSidebar from "@/layout/Sidebar.vue";
 import AppModules from "@/layout/Modules.vue";
 import AppAlert from "@/layout/Alert.vue";
@@ -180,7 +178,6 @@ import { defineAsyncComponent } from "vue";
 export default {
   name: "MainPage",
   components: {
-    PulpitMessageControl,
     ExternalMediaProjection: defineAsyncComponent(() => import("@/modules/core/external_media/interface/Popup.vue")),
     AppFooter,
     AppSidebar,

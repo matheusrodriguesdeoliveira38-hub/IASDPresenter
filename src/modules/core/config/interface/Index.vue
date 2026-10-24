@@ -1547,6 +1547,49 @@ O monitor virtual aceita conexões em todas as interfaces de rede do computador,
                       {{ remote_control_error || "Nenhum endereço disponível. Inicie o servidor e verifique se o computador está conectado à rede." }}
                     </v-alert>
 
+                    <v-alert type="info" variant="tonal" density="comfortable" class="rounded-lg mb-6">
+                      <div class="font-weight-bold mb-1">Acesso pela internet</div>
+                      <div class="mb-3">
+                        Crie um endereço temporário para abrir o controle mesmo fora da rede local. O QR Code passa a usar esse endereço enquanto o túnel estiver ativo.
+                        O link é público e temporário, muda quando o túnel é encerrado e é fornecido pelo Cloudflare para testes e demonstrações. Uma senha é obrigatória.
+                      </div>
+                      <div class="d-flex align-center flex-wrap" style="gap: 10px;">
+                        <v-btn
+                          v-if="!remote_control_tunnel_running"
+                          color="primary"
+                          variant="flat"
+                          class="text-none rounded-lg"
+                          :loading="remote_control_tunnel_loading"
+                          @click="startRemoteAccessTunnel"
+                        >
+                          <v-icon start>mdi-earth</v-icon>
+                          Liberar acesso pela internet
+                        </v-btn>
+                        <v-btn
+                          v-else
+                          color="error"
+                          variant="tonal"
+                          class="text-none rounded-lg"
+                          :loading="remote_control_tunnel_loading"
+                          @click="stopRemoteAccessTunnel"
+                        >
+                          Encerrar acesso pela internet
+                        </v-btn>
+                        <v-btn
+                          variant="text"
+                          class="text-none"
+                          href="https://developers.cloudflare.com/tunnel/downloads/"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                        >
+                          Instalar cloudflared
+                          <v-icon end>mdi-open-in-new</v-icon>
+                        </v-btn>
+                      </div>
+                      <div v-if="remote_control_tunnel_error" class="mt-3 text-body-2">{{ remote_control_tunnel_error }}</div>
+                      <div v-if="remote_control_tunnel_url" class="mt-3 text-body-2">Endereço público: {{ remote_control_tunnel_url }}</div>
+                    </v-alert>
+
                     <div
                       v-if="remote_control_running && remote_control_qr_code"
                       class="d-flex align-center mb-6 pa-4 rounded-xl"
@@ -1565,7 +1608,7 @@ O monitor virtual aceita conexões em todas as interfaces de rede do computador,
                           Conectar pelo celular
                         </div>
                         <div class="text-body-2 mb-3" style="color: var(--sidebar-text-secondary);">
-                          Abra a câmera do celular e leia o QR Code. O dispositivo precisa estar na mesma rede do computador.
+                          Abra a câmera do celular e leia o QR Code. Para acesso fora da rede, inicie o túnel acima.
                         </div>
                         <v-chip size="small" color="success" variant="tonal" prepend-icon="mdi-wifi">
                           Atualização e reconexão automáticas
@@ -1677,7 +1720,7 @@ O monitor virtual aceita conexões em todas as interfaces de rede do computador,
                           Segurança de acesso
                         </h3>
                         <div class="text-caption" style="color: var(--sidebar-text-secondary);">
-                          Proteja o controle remoto com senha na rede local.
+                          Proteja o controle remoto com senha, inclusive ao liberar acesso pela internet.
                         </div>
                       </div>
                     </div>
@@ -2261,6 +2304,10 @@ export default {
     return_monitor_show_counter: true,
     return_monitor_ratio: 75,
     remote_control_loading: false,
+    remote_control_tunnel_loading: false,
+    remote_control_tunnel_running: false,
+    remote_control_tunnel_url: "",
+    remote_control_tunnel_error: "",
     remote_control_running: false,
       remote_control_error: "",
     remote_control_addresses: [],
@@ -2752,6 +2799,9 @@ export default {
       this.web_output_addresses = status.outputAddresses || [];
       this.virtual_monitor_addresses = status.virtualMonitorAddresses || [];
       this.remote_control_qr_code = status.qrCode || "";
+      this.remote_control_tunnel_running = status.tunnelRunning === true;
+      this.remote_control_tunnel_url = status.tunnelUrl || "";
+      this.remote_control_tunnel_error = status.tunnelError || "";
       this.remote_control_network_options = status.networkOptions || [];
       this.remote_control_config = {
         ...this.remote_control_config,
@@ -2867,6 +2917,27 @@ export default {
         this.applyRemoteControlStatus(status);
       } finally {
         this.remote_control_loading = false;
+      }
+    },
+    async startRemoteAccessTunnel() {
+      if (!window.electronAPI?.startRemoteAccessTunnel) return;
+      this.remote_control_tunnel_loading = true;
+      try {
+        await this.saveRemoteControlConfig({ silent: true });
+        const status = await window.electronAPI.startRemoteAccessTunnel();
+        this.applyRemoteControlStatus(status);
+      } finally {
+        this.remote_control_tunnel_loading = false;
+      }
+    },
+    async stopRemoteAccessTunnel() {
+      if (!window.electronAPI?.stopRemoteAccessTunnel) return;
+      this.remote_control_tunnel_loading = true;
+      try {
+        const status = await window.electronAPI.stopRemoteAccessTunnel();
+        this.applyRemoteControlStatus(status);
+      } finally {
+        this.remote_control_tunnel_loading = false;
       }
     },
     newAutomationId(prefix) {

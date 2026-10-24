@@ -1,7 +1,4 @@
 <template>
-  <v-btn class="pulpit-trigger" color="primary" prepend-icon="mdi-message-alert" @click="open = true">
-    Mensagem ao púlpito
-  </v-btn>
   <v-dialog v-model="open" max-width="560">
     <v-card title="Mensagem ao púlpito">
       <v-card-text>
@@ -58,8 +55,12 @@ import PulpitMessageBanner from "@/components/PulpitMessageBanner.vue";
 
 export default {
   components: { PulpitMessageBanner },
+  props: {
+    modelValue: { type: Boolean, default: false },
+  },
+  emits: ["update:modelValue"],
   data: () => ({
-    open: false, draft: "", duration: 10, error: "", sending: false,
+    draft: "", duration: 10, error: "", sending: false,
     monitors: [], monitorId: null as string | number | null,
     activeMonitorId: null as string | number | null, activeMonitorLabel: "",
     message: null as PulpitMessage | null,
@@ -68,11 +69,18 @@ export default {
     durations: [{ title: "Não desaparecer", value: 0 }, ...[5, 10, 15, 30, 60].map(value => ({ title: `${value} segundos`, value }))],
   }),
   computed: {
+    open: {
+      get() { return this.modelValue; },
+      set(value: boolean) { this.$emit("update:modelValue", value); },
+    },
     active() { return activePulpitMessage(this.message, this.now); },
     monitorLabel() { return this.monitors.find(m => m.value === this.monitorId)?.title || "Selecione um monitor"; },
   },
   watch: {
-    open(value) { if (value) this.refreshMonitors(); },
+    open: {
+      immediate: true,
+      handler(value: boolean) { if (value) this.refreshMonitors(); },
+    },
     active(value) { if (!value) this.$popup.closePulpitMonitors(); },
   },
   mounted() {
@@ -144,7 +152,6 @@ export default {
 </script>
 
 <style scoped>
-.pulpit-trigger { position: fixed; right: 20px; bottom: 60px; z-index: 1005; }
 .pulpit-preview { margin: 0; }
 .pulpit-preview-screen { position: relative; width: 100%; aspect-ratio: 16 / 9; container-type: size; overflow: hidden; border-radius: 8px; }
 .pulpit-preview-hint { position: absolute; top: 22%; left: 5%; right: 5%; text-align: center; color: #999; font: 500 3cqw Arial, sans-serif; }

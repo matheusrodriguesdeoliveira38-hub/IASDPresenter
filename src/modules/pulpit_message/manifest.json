@@ -1,0 +1,9 @@
+{
+  "id": "pulpit_message",
+  "name": "Mensagem ao Púlpito",
+  "version": "1.0.0",
+  "description": "Envie recados ao monitor selecionado.",
+  "category": "utilities",
+  "icon": "mdi-message-alert",
+  "overlay": true
+}
