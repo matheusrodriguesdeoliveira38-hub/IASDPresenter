@@ -13,6 +13,7 @@ function runtime(port = 0) {
     QRCode: require('qrcode'),
     remoteControlConfig: { enabled: true, host: '192.168.1.8', port, webOutputEnabled: true },
     remoteControlServer: null, remoteControlStartPromise: null, remoteControlError: '', remoteControlHost: '0.0.0.0',
+    remoteAccessTunnel: null, remoteAccessTunnelUrl: '', remoteAccessTunnelError: '',
     handleRemoteControlRequest: async (_, response) => response.end('remote ready'),
   });
   const code = section('function getRemoteControlPort()', 'function isRemoteControlPasswordValid')
@@ -118,6 +119,7 @@ test('saving the switch and manual controls stop and restart the shared server',
   Object.assign(app, {
     ipcMain: { handle: (name, handler) => handlers.set(name, handler) },
     saveRemoteControlConfig: config => Object.assign(app.remoteControlConfig, config),
+    stopRemoteAccessTunnel: async () => { app.remoteAccessTunnelUrl = ''; },
     stopRemoteControlServer: async () => { app.remoteControlServer = null; },
     startRemoteControlServer: () => { app.remoteControlServer = { listening: true }; },
     sendWebOutputDemand() {},
