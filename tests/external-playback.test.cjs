@@ -125,6 +125,17 @@ test('YouTube projection waits for a time sample and tolerates loading drift', (
   assert.equal(calls.filter(([command]) => command === 'seekTo').length, 1);
 });
 
+test('buffering transitions do not force a seek while the follower loads', () => {
+  const calls = [];
+  const context = { isYouTube: true, syncPlaybackPosition: (...args) => calls.push(args) };
+  component('Popup').watch.isBuffering.call(context);
+  component('Popup').watch.isBuffering.call(context);
+  assert.deepEqual(calls, [[false], [false]]);
+  context.isYouTube = false;
+  component('Popup').watch.isBuffering.call(context);
+  assert.deepEqual(calls[2], [true]);
+});
+
 for (const name of ['Index', 'Popup']) {
   test(name + ' initializes YouTube once after readiness and assigns audio ownership', () => {
     const timers = new Set();

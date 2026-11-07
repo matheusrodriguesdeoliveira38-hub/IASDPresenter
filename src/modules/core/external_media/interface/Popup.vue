@@ -175,7 +175,9 @@ export default {
       this.youtubeSampleAt = 0;
 
     },
-    isBuffering() { this.syncPlaybackPosition(true); },
+    // Buffering changes often during YouTube startup. Seeking on each change
+    // restarts the follower's loading and can leave it on a black frame.
+    isBuffering() { this.syncPlaybackPosition(!this.isYouTube); },
     requestAction(req) {
       if (!req) return;
       if (req.action === "seek") {

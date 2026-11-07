@@ -86,6 +86,7 @@ function database(sessionStorage, data) {
     '@/helpers/Storage': { get: (key) => JSON.parse(sessionStorage.getItem(key)) },
     '@/helpers/Dev': { write() {} },
     '@/helpers/Alert': { error() { assert.fail('Valid local data must remain available'); } },
+    '../../electron/BibleCorrections': require('../electron/BibleCorrections.ts'),
   });
 }
 

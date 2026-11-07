@@ -5,6 +5,7 @@ import $storage from "@/helpers/Storage";
 import { readWebDatabase, saveWebDatabase } from "@/helpers/WebDatabase";
 import { readBundledLibrary } from "@/helpers/BundledLibrary";
 import { readUserRecord } from "@/helpers/BrowserFiles";
+import { correctBibleChapter } from "../../electron/BibleCorrections";
 
 const isDesktop = !!(window.electronAPI && window.electronAPI.isElectron);
 
@@ -177,5 +178,9 @@ const helper: Record<string, any> = {
     }
   },
 };
+
+// Also repair old extracted files and offline caches without re-extraction.
+const readDatabase = helper.get.bind(helper);
+helper.get = async (file, options = {}) => correctBibleChapter(file, await readDatabase(file, options));
 
 export default helper;

@@ -14,6 +14,7 @@ const { spawn, spawnSync } = require("child_process");
 const { autoUpdater } = require("electron-updater");
 const { findSofficeExecutable } = require("./LibreOffice");
 const DbExtractor = require("./DbExtractor");
+const { correctBibleChapter } = require("./BibleCorrections");
 const { migrateLocalMusicLibrary } = require("./LocalMusicMigration");
 const { readUserData, writeUserData } = require("./UserDataStorage");
 const { normalizeSmartSearchText, smartTokenScore } = require("./SmartSearch");
@@ -620,7 +621,7 @@ function writeLocalDbFile(filename, data) {
 function readLocalDbFile(filename) {
   const encryptedPath = getLocalDbFilePath(filename);
   const encryptedData = readRecoverableFile(encryptedPath, { parse: parseEncryptedDbContent });
-  if (encryptedData !== null) return encryptedData;
+  if (encryptedData !== null) return correctBibleChapter(filename, encryptedData);
 
   const plainPath = getPlainLocalDbFilePath(filename);
   const plainData = readRecoverableFile(plainPath);
@@ -629,7 +630,7 @@ function readLocalDbFile(filename) {
   writeLocalDbFile(filename, plainData);
   fs.rmSync(plainPath, { force: true });
   fs.rmSync((`${plainPath  }.bak`), { force: true });
-  return plainData;
+  return correctBibleChapter(filename, plainData);
 }
 
 function readRemoteDbFile(filename) {
